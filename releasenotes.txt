@@ -1,0 +1,126 @@
+=============================================================================
+=                                                                           =
+=             D E C A R A N G I N G   -   N o t e s                         =
+=                                                                           =
+=============================================================================
+= Release notes for decaranging application source code, 
+= the DecaWave Ranging Demo software
+=
+= Copyright 2014 (c) DecaWave Ltd, Dublin, Ireland.
+= All rights reserved.
+=============================================================================
+
+
+NOTES:  
+
+1) If antenna delay is too large the resulting RTD measurements are negative
+   (internally) and discarded as bad.  So, if it seems as if Time of Flight
+   is not working, first clear antenna delays to see if that is the issue.
+
+=============================================================================
+Source Release Version 3.11  ( 7th April 2017 )
+=============================================================================
+
+It is updated with the following changes (w.r.t. release 3.05):
+
+a) Code refactoring, for easier porting
+
+b) Add continuous frame function for power testing, this can be configured by setting
+   switch S1-8 to ON.
+
+c) Update DW1000 driver to version 4.0.4
+
+d) Removed unused example code (e.g. UART, DMA)
+
+e) Fix the instance_init_timings function, data/payload length was not 
+   calculated correctly. This affected long frames which were not used in the 
+   ranging application.
+
+f) Increase the delay between anchor's response transmission and turning of the 
+   receiver to receive the final message. 
+
+g) change version string to 3.11.
+
+
+=============================================================================
+Source Release Version 3.05  ( 22th September 2015 )
+=============================================================================
+
+It is updated with the following changes (w.r.t. release 3.04):
+
+a) Fixed tag range printing when tag is not sleeping.
+
+b) Fix re-configuration of instance over USB, (USB command 0x6 xx 0x6)
+
+c) change version string to 3.05.
+
+=============================================================================
+Source Release Version 3.04  ( 17th September 2015 )
+=============================================================================
+
+It is updated with the following changes (w.r.t. release 3.03):
+
+a) Fixed tx power setting on init.
+
+b) change version string to 3.04.
+
+=============================================================================
+Source Release Version 3.03  ( 11th September 2015 )
+=============================================================================
+
+It is updated with the following changes (w.r.t. release 3.02):
+
+a) Changed computation of response delays to be consistent with response
+delays definition in Decawave's documents.
+
+b) change version string to 3.03.
+
+NOTE: This version is not compatible with previous ones! 
+
+=============================================================================
+Source Release Version 3.02  ( 28th August 2015 )
+=============================================================================
+
+It is updated with the following changes (w.r.t. release 3.01):
+
+a) Fix use of non-immediate response mode.
+
+b) Deactivate tag's sleep when using long response delays.
+
+c) change version string to 3.02
+
+=============================================================================
+Source Release Version 3.01  ( 17th August 2015 )
+=============================================================================
+
+It is updated with the following changes (w.r.t. release 3.00):
+
+a) make the anchor define tag's reponse delay (between anchor's response and
+final transmission) by adding an extra field in ranging init message and
+recomputing internal timings upon reception of it.
+
+b) fix the computation of delay between blink transmission and range init
+reception.
+
+c) fix the computation of delay between poll transmission and final
+transmission.
+
+d) reduce margin on frame timeouts.
+
+e) fix smart power activation condition.
+
+f) formatting refactoring (indent, constant names, variable names, etc.)
+
+g) change version string to 3.01
+
+NOTE: This version is not compatible with previous ones! 
+
+=============================================================================
+Source Release Version 3.00  ( 31st July 2015 )
+=============================================================================
+
+a) this is the initial release or asymmetric TWR (DecaRanging application) 
+for EVK1000
+
+
+=============================================================================
