@@ -361,7 +361,7 @@ int dw_main(void)
         // Do nothing in foreground -- allow USB application to run, I guess on the basis of USB interrupts?
         while (1)       // loop forever
         {
-            usb_run();
+            //usb_run();
         }
 #endif
         return 1;
@@ -458,8 +458,9 @@ int dw_main(void)
     // main loop
     while(1)
     {
+        
 		instance_data_t* inst = instance_get_local_structure_ptr(0);
-		canSleep = instance_run();
+		canSleep = instance_run(); //run the state machine!!!
 
         //if delayed TX scheduled but did not happen after expected time then it has failed... (has to be < slot period)
         //if anchor just go into RX and wait for next message from tags/anchors
@@ -521,14 +522,40 @@ int dw_main(void)
                 //n = sprintf((char*)&dataseq[0], "ia%04x t%04x %04x %04x %04x %04x %04x %02x %02x a", aaddr, taddr, rng, rng_raw, l, txa, rxa, txl, rxl);
             	//n = sprintf((char*)&dataseq[0], "ia%04x t%04x %08x %08x %04x %04x %04x %2.2f a", aaddr, taddr, rng, rng_raw, l, txa, rxa, instance_data[0].clockOffset);
             	n = sprintf((char*)&dataseq[0], "ia%04x t%04x %08x %08x %04x %04x %04x a", aaddr, taddr, rng, rng_raw, l, txa, rxa);
+                //n = sprintf((char*)&dataseq[0], "TEST");
             }
+
+            
+//            ranging = 0;
+//            resetinstanceanchorwaiting();
+//            dataseq[0] = 0x2 ;  //return cursor home
+//            writetoLCD( 1, 0,  dataseq);
+//
+//            memcpy(&dataseq[0], (const uint8 *) "     RESET      ", 16);
+//           writetoLCD( 40, 1, dataseq); //send some data
+//            memcpy(&dataseq[0], (const uint8 *) "     RANGING    ", 16);
+//            writetoLCD( 16, 1, dataseq); //send some data
+
+
 #ifdef USB_SUPPORT //this is set in the port.h file
             send_usbmessage(&dataseq[0], n);
+            // n = sprintf((char*)&dataseq[0], "This is a test");
+            // send_usbmessage(&dataseq[0], n);
 #endif
         }
 
-        if(ranging == 0)
+
+        if(ranging == 0) //discovery/initialization mode for anchor and tag
         {
+            
+            // dataseq[0] = 0x2 ;  //return cursor home
+            // writetoLCD( 1, 0,  dataseq);
+            // memcpy(&dataseq[0], (const uint8 *) "     RANGING    ", 16);
+            // writetoLCD( 40, 1, dataseq); //send some data
+            // memcpy(&dataseq[0], (const uint8 *) "      == 0      ", 16);
+            // writetoLCD( 16, 1, dataseq); //send some data
+            //Sleep(1000);
+
             if(instance_mode != ANCHOR)
             {
                 if(instancesleeping())
@@ -567,8 +594,27 @@ int dw_main(void)
             }
             else //if(instance_mode == ANCHOR)
             {
+                // dataseq[0] = 0x2 ;  //return cursor home
+                // writetoLCD( 1, 0,  dataseq);
+                // memcpy(&dataseq[0], (const uint8 *) "   AM AN        ", 16);
+                // writetoLCD( 40, 1, dataseq); //send some data
+                // memcpy(&dataseq[0], (const uint8 *) "    ANCHOR      ", 16);
+                // writetoLCD( 16, 1, dataseq); //send some data
+                //Sleep(1000);
+
                 if(instanceanchorwaiting())
                 {
+
+                    // dataseq[0] = 0x2 ;  //return cursor home
+                    // writetoLCD( 1, 0,  dataseq);
+                    // memcpy(&dataseq[0], (const uint8 *) " ANCHOR WAITING ", 16);
+                    // writetoLCD( 40, 1, dataseq); //send some data
+                    // memcpy(&dataseq[0], (const uint8 *) "      == 1      ", 16);
+                    // writetoLCD( 16, 1, dataseq); //send some data
+                    //Sleep(1000);
+
+
+
                     toggle+=2;
 
                     if(toggle > 300000)
@@ -591,21 +637,33 @@ int dw_main(void)
                             sprintf((char*)&dataseq[0], "%llX", instance_get_addr());
                             writetoLCD( 16, 1, dataseq); //send some data
                         }
+                    // Sleep(1000);
                     }
 
                 }
                 else if(instanceanchorwaiting() == 2)
                 {
+                    // dataseq[0] = 0x2 ;  //return cursor home
+                    // writetoLCD( 1, 0,  dataseq);
+                    // memcpy(&dataseq[0], (const uint8 *) " ANCHOR WAITING ", 16);
+                    // writetoLCD( 40, 1, dataseq); //send some data
+                    // memcpy(&dataseq[0], (const uint8 *) "      == 2      ", 16);
+                    // writetoLCD( 16, 1, dataseq); //send some data
+                    //Sleep(1000);
+
                     dataseq[0] = 0x2 ;  //return cursor home
                     writetoLCD( 1, 0,  dataseq);
                     memcpy(&dataseq[0], (const uint8 *) "    RANGING WITH", 16);
                     writetoLCD( 40, 1, dataseq); //send some data
                     sprintf((char*)&dataseq[0], "%llX", instance_get_tagaddr());
                     writetoLCD( 16, 1, dataseq); //send some data
+                    //Sleep(1000);
                 }
             }
         }
 #ifdef USB_SUPPORT //this is set in the port.h file
+        // int n = sprintf((char*)&dataseq[0], "Main Loop");
+        // send_usbmessage(&dataseq[0], n);
         usb_run();
 #endif
 

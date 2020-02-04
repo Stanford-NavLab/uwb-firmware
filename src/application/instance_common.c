@@ -194,8 +194,9 @@ int reportTOF(instance_data_t *inst)
 // function to select the destination address (e.g. the address of the next anchor to poll)
 //
 // -------------------------------------------------------------------------------------------------------------------
-//
-int instaddtagtolist(instance_data_t *inst, uint8 *tagAddr)
+// return 1 if tag added to list or already in list but woke up from timeout status 
+// return 0 if tag not added list or woke up from timeout status
+int instaddwaketagilist(instance_data_t *inst, uint8 *tagAddr)
 {
     uint8 i;
     uint8 blank[8] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -209,16 +210,91 @@ int instaddtagtolist(instance_data_t *inst, uint8 *tagAddr)
             {
                 memcpy(&inst->tagList[i][0], &tagAddr[0], 8) ;
                 inst->tagListLen = i + 1 ;
-                break;
+				inst->tagToRangeWith = i;
+				inst->tagTimeout[i] = 0;
+				return 1;
+                // break;
             }
         }
         else
         {
-            break; //we already have this Tag in the list
+			if(inst->tagTimeout[i])
+			{
+				//tag has timed out, wake it up
+				inst->tagToRangeWith = i;
+				inst->tagTimeout[i] = 0;
+				return 1;
+			}
+			else
+			{
+				//we already have this Tag in the list and it has not timed out
+				break; 
+			}
         }
     }
 
     return 0;
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+//
+// function to check if a tag is already in our list and not in a timeout status
+//
+// -------------------------------------------------------------------------------------------------------------------
+// return index if tag in list and not timed out
+// return 255 if tag not in list or is but has timed out
+int instcheckawaketaginlist(instance_data_t *inst, uint8 *tagAddr)
+{
+    uint8 i;
+    uint8 blank[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+    //add the new Tag to the list, if not already there and there is space
+    for(i=0; i<TAG_LIST_SIZE; i++)
+    {
+        if(memcmp(&inst->tagList[i][0], &tagAddr[0], 8) == 0)
+        {
+			if(inst->tagTimeout[i])
+			{
+				//tag in list, but timed out 
+				break;	
+			}
+			else
+			{
+				return i; //we already have this Tag in the list
+			}
+        }
+        else
+        {
+			if(memcmp(&inst->tagList[i][0], &blank[0], 8) == 0) //blank entry
+            {
+                break;
+            }
+        }
+    }
+
+    return 255;
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+//
+// function to find the first tag in our list that is not in a timeout status, starting with the given index
+//
+// -------------------------------------------------------------------------------------------------------------------
+// return index for first tag in list that is not timed out
+// return 255 if all tags in list (from the starting index) are timed out
+int instfindfirstawaketaginlist(instance_data_t *inst, uint8 startindex)
+{
+    uint8 i;
+    
+    for(i=startindex; i<inst->tagListLen; i++)
+    {
+		if(!inst->tagTimeout[i])
+		{
+			return i;
+		}
+    }
+
+    return 255;
 }
 
 
@@ -233,7 +309,14 @@ void instcleartaglist(void)
     uint8 blank[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
     instance_data[instance].tagListLen = 0 ;
-    instance_data[instance].tagToRangeWith = 0;
+    instance_data[instance].tagToRangeWith = 255;
+	instance_data[instance].prevTagToRangeWith = 255;
+	for(int i=0; i<TAG_LIST_SIZE; i++)
+	{
+		instance_data[instance].lastCommTimeStamp[i] = 0;
+		instance_data[instance].tagTimeout[i] = 0;
+	}
+	
 
     memcpy(&instance_data[instance].tagList[0][0], &blank[0], 8);
 }
@@ -268,6 +351,12 @@ int instancenewrangetagadd(void)
 }
 
 int instanceanchorwaiting(void)
+{
+	return instance_data[0].canPrintInfo;
+}
+
+//NOTE quick hack by me
+void resetinstanceanchorwaiting(void)
 {
 	return instance_data[0].canPrintInfo;
 }
@@ -663,6 +752,12 @@ double instance_get_adist(void) //get average range
 
 void inst_processrxtimeout(instance_data_t *inst)
 {
+	send_statetousb(inst);
+	uint8 debug_msg[100];
+	int n = sprintf((char*)&debug_msg[0], "inst_processrxtimeout(), tagToRangeWith: %i, taglistlen: %i", inst->tagToRangeWith, inst->tagListLen);
+	send_usbmessage(&debug_msg[0], n);
+	usb_run();
+	
     if(inst->mode == ANCHOR) //we did not receive the final/ACK - wait for next poll
     {
 		//only enable receiver when not using double buffering
@@ -672,16 +767,38 @@ void inst_processrxtimeout(instance_data_t *inst)
 	else //if(inst->mode == TAG)
     {
 		// initiate the re-transmission of the poll that was not responded to
-		inst->testAppState = TA_TXE_WAIT ;
+		inst->testAppState = TA_TX_SELECT ;
+		if(inst->previousState == TA_TXBLINK_WAIT_SEND)
+		{
+			inst->tagToRangeWith = instfindfirstawaketaginlist(inst, 0);
+			// inst->tagToRangeWith = 0;
+		}
+		else if(inst->previousState == TA_TXPOLL_WAIT_SEND)
+		{
+			uint8 idx = inst->tagToRangeWith + 1;
+			inst->tagToRangeWith = instfindfirstawaketaginlist(inst, idx);
+			// inst->tagToRangeWith = inst->tagToRangeWith + 1;
+		}
 
-		if(inst->mode == TAG)
-		{
-			inst->nextState = TA_TXPOLL_WAIT_SEND ;
-		}
-		else //TAG_TDOA
-		{
-			inst->nextState = TA_TXBLINK_WAIT_SEND ;
-		}
+
+		// inst->testAppState = TA_TXE_WAIT ;
+
+		// if(inst->previousState == TA_TXBLINK_WAIT_SEND)
+		// {
+		// 	inst->nextState = TA_TXBLINK_WAIT_SEND ;
+		// }
+		// else
+		// {
+		// 	inst->nextState = TA_TXPOLL_WAIT_SEND ;
+		// }
+		// if(inst->mode == TAG)
+		// {
+		// 	inst->nextState = TA_TXPOLL_WAIT_SEND ;
+		// }
+		// else //TAG_TDOA
+		// {
+		// 	inst->nextState = TA_TXBLINK_WAIT_SEND ;
+		// }
 
     }
 
@@ -735,7 +852,8 @@ void instance_rxerrorcallback(const dwt_cb_data_t *rxd)
 	event_data_t dw_event;
 	//re-enable the receiver
 	//for ranging application rx error frame is same as TO - as we are not going to get the expected frame
-	if((instance_data[instance].mode == TAG) || (instance_data[instance].mode == TAG_TDOA))
+	// if((instance_data[instance].mode == TAG) || (instance_data[instance].mode == TAG_TDOA))
+	if(instance_data[instance].mode == TAG)
 	{
 		dw_event.type = DWT_SIG_RX_TIMEOUT;
 		dw_event.typeSave = 0x40 | DWT_SIG_RX_TIMEOUT;
@@ -752,6 +870,11 @@ void instance_rxerrorcallback(const dwt_cb_data_t *rxd)
 
 void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 {
+	uint8 debug_msg[100];
+    // int n = sprintf((char*)&debug_msg[0], "RX CALLBACK");
+    // send_usbmessage(&debug_msg[0], n);
+	// usb_run();
+
 	int instance = 0;
 	uint8 rxTimeStamp[5]  = {0, 0, 0, 0, 0};
 	uint8 srcAddr_index = 0;
@@ -773,6 +896,9 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 			if(rxd->datalength == 12)
 			{
 				rxd_event = DWT_SIG_RX_BLINK;
+				int n = sprintf((char*)&debug_msg[0], "RX CALLBACK: DWT_SIG_RX_BLINK");
+				send_usbmessage(&debug_msg[0], n);
+				usb_run();
 			}
 			else
 				rxd_event = SIG_RX_UNKNOWN;
@@ -842,16 +968,123 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 	//TWR - here we check if we need to respond to a TWR Poll or Response Messages
 	//----------------------------------------------------------------------------------------------
 
-	//Process good frames
-	if(rxd_event == DWT_SIG_RX_OKAY)
-	{
-		//check if this is a TWR message (and also which one)
-		if(instance_data[instance].tagListLen > 0)
-		{
-			switch(dw_event.msgu.frame[fcode_index])
-			{
+	
+	//TODO need some way to drop tags from list after a certain period of time
 
-				case RTLS_DEMO_MSG_TAG_POLL:
+	int tag_index = 255;
+	if(rxd_event == DWT_SIG_RX_BLINK)
+	{
+		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK RECEIVED: BLINK");
+		send_usbmessage(&debug_msg[0], n);
+		usb_run();
+
+		tag_index = instcheckawaketaginlist(&instance_data[instance], &dw_event.msgu.rxblinkmsg.tagID[0]);
+	}
+	else
+	{
+		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK RECEIVED: DWT_SIG_RX_OKAY-%s", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]));
+		send_usbmessage(&debug_msg[0], n);
+		usb_run();
+
+		tag_index = instcheckawaketaginlist(&instance_data[instance], &dw_event.msgu.frame[srcAddr_index]);
+	}
+	// instcheckawaketaginlist(&instance_data[instance], &dw_event.msgu.frame[srcAddr_index]);
+	// int n = sprintf((char*)&debug_msg[0], "RX callback: tag_index: %i, tagToRangeWith: %i", tag_index, instance_data[instance].tagToRangeWith);
+    // send_usbmessage(&debug_msg[0], n);
+	// usb_run();
+
+	// select a tag to range with if certain messages are received when not currently ranging with another tag
+	if (instance_data[instance].tagToRangeWith == 255)
+	{
+		// if(instance_data[instance].mode == ANCHOR)
+		// {
+		// 	if(rxd_event == DWT_SIG_RX_BLINK)
+		// 	{
+
+		// 	}
+		// 	else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL)
+		// 	{
+
+		// 	}
+		// }
+		// else if(instance_data[instance].mode == TAG)
+		// {
+		// 	if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT)
+		// 	{
+		// 		if(instaddwaketagilist(&instance_data[instance], &dw_event.msgu.frame[srcAddr_index]))
+		// 		{
+		// 			tag_index = instance_data[instance].tagToRangeWith;
+		// 		}
+		// 		else
+		// 		{
+		// 			tag_index = 255;
+		// 			instance_data[instance].tagToRangeWith == 255;
+		// 		}
+		// 	}
+		// }
+		
+
+		if(tag_index == 255) //tag not yet in list, or timed out
+		{
+			if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT && instance_data[instance].mode == TAG)
+			{	
+				//only process range init from anchors not already in our list, or those that have timed out
+				if(instaddwaketagilist(&instance_data[instance], &dw_event.msgu.frame[srcAddr_index]))
+				{
+					tag_index = instance_data[instance].tagToRangeWith;
+				}
+				else
+				{
+					tag_index = 255;
+					instance_data[instance].tagToRangeWith == 255;
+				}
+			}
+			else if(rxd_event == DWT_SIG_RX_BLINK && instance_data[instance].mode == ANCHOR)
+			{
+				//only process blinks from tags not already in our list, or those that have timed out
+				if(instaddwaketagilist(&instance_data[instance], &dw_event.msgu.rxblinkmsg.tagID[0]))
+				{
+					tag_index = instance_data[instance].tagToRangeWith;
+				}
+				else
+				{
+					tag_index = 255;
+					instance_data[instance].tagToRangeWith == 255;
+				}
+			}
+		}
+		else //tag_index != 255 tag already in list and not timed out
+		{
+			if (dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL && instance_data[instance].mode == ANCHOR) 
+			{
+				instance_data[instance].tagToRangeWith = tag_index; 
+			}	
+		}
+	}
+	
+	int n = sprintf((char*)&debug_msg[0], "RX callback: tag_index: %i, tagToRangeWith: %i", tag_index, instance_data[instance].tagToRangeWith);
+    send_usbmessage(&debug_msg[0], n);
+	usb_run();
+
+	
+	
+
+	int event_placed = 0; 
+	if(tag_index != 255 && instance_data[instance].tagToRangeWith == tag_index)
+	{
+		//update the timestamp for the most recent communication
+		instance_data[instance].lastCommTimeStamp[tag_index] = portGetTickCnt();
+		
+		if(rxd_event == DWT_SIG_RX_OKAY)
+		{
+			// int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: DWT_SIG_RX_OKAY-%s", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]));
+			// send_usbmessage(&debug_msg[0], n);
+			// usb_run();
+
+			if(instance_data[instance].tagListLen > 0) //NOTE shouldn't need this check if here.
+			{	
+				//process RTLS_DEMO_MSG_TAG_POLL immediately.
+				if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL)
 				{
 					uint16 frameLength = 0;
 
@@ -865,17 +1098,18 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 
 #if (USING_64BIT_ADDR == 1)
 					frameLength = ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC;
-					memcpy(&instance_data[instance].msg.destAddr[0], &dw_event.msgu.frame[srcAddr_index], ADDR_BYTE_SIZE_L); //remember who to send the reply to (set destination address)
+					memcpy(&instance_data[instance].msg[tag_index].destAddr[0], &dw_event.msgu.frame[srcAddr_index], ADDR_BYTE_SIZE_L); //remember who to send the reply to (set destination address)
 #else
 					frameLength = ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
-					memcpy(&instance_data[instance].msg.destAddr[0], &dw_event.msgu.frame[srcAddr_index], ADDR_BYTE_SIZE_S); //remember who to send the reply to (set destination address)
+					memcpy(&instance_data[instance].msg[tag_index].destAddr[0], &dw_event.msgu.frame[srcAddr_index], ADDR_BYTE_SIZE_S); //remember who to send the reply to (set destination address)
 #endif
 					// Write calculated TOF into response message
-					memcpy(&(instance_data[instance].msg.messageData[TOFR]), &instance_data[instance].tof, 5);
+					memcpy(&(instance_data[instance].msg[tag_index].messageData[TOFR]), &instance_data[instance].tof, 5);
 
 					instance_data[instance].tof = 0; //clear ToF ..
 
-					instance_data[instance].msg.seqNum = instance_data[instance].frameSN++;
+
+					instance_data[instance].msg[tag_index].seqNum = instance_data[instance].frameSN++;
 
 					//set the delayed rx on time (the final message will be sent after this delay)
 					dwt_setrxaftertxdelay((uint32)instance_data[instance].txToRxDelayAnc_sy);  //units are 1.0256us - wait for wait4respTIM before RX on (delay RX)
@@ -884,7 +1118,12 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 					instance_data[instance].wait4ack = DWT_RESPONSE_EXPECTED;
 
 					dwt_writetxfctrl(frameLength, 0, 1);
-					dwt_writetxdata(frameLength, (uint8 *)  &instance_data[instance].msg, 0) ;	// write the frame data
+					dwt_writetxdata(frameLength, (uint8 *)  &instance_data[instance].msg[tag_index], 0) ;	// write the frame data
+
+					//report out which message is being sent!
+					// send_rxmsgtousb("RX message: DWT_SIG_RX_OKAY-RTLS_DEMO_MSG_TAG_POLL ");
+					send_txmsgtousb(get_msg_fcode_string((int)instance_data[instance].msg[tag_index].messageData[FCODE]));
+					
 
 #if (IMMEDIATE_RESPONSE == 1)
 					dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
@@ -903,35 +1142,148 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 						dw_event.typePend = DWT_SIG_TX_PENDING ; // exit this interrupt and notify the application/instance that TX is in progress.
 					}
 				}
-				break;
-
-				case RTLS_DEMO_MSG_ANCH_RESP:
-				default: //process rx frame in the application state machine
-				break;
 			}
+
+			instance_putevent(dw_event);
+			event_placed = 1;
+
+#if (DEEP_SLEEP == 1)
+			if (instance_data[instance].sleepingEabled)
+				instance_data[instance].rxmsgcount++;
+#endif
 		}
-
-		instance_putevent(dw_event);
-
-#if (DEEP_SLEEP == 1)
-		if (instance_data[instance].sleepingEabled)
-			instance_data[instance].rxmsgcount++;
-#endif
-	}
-	else if (rxd_event == DWT_SIG_RX_BLINK)
-	{
-		instance_putevent(dw_event);
+		else if (rxd_event == DWT_SIG_RX_BLINK)
+		{
+			int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: BLINK");
+			send_usbmessage(&debug_msg[0], n);
+			usb_run();
+			instance_putevent(dw_event);
+			event_placed = 1;
 
 #if (DEEP_SLEEP == 1)
-		if (instance_data[instance].sleepingEabled)
-			instance_data[instance].rxmsgcount++;
+			if (instance_data[instance].sleepingEabled)
+				instance_data[instance].rxmsgcount++;
 #endif
+		}
 	}
-	else
-	//if (rxd_event == SIG_RX_UNKNOWN) //need to re-enable the rx
+
+	//NOTE maybe don't want to do this. maybe just process actual error signals... or dont process errors at all.
+	//treat as error
+	if(!event_placed)
 	{
-		instance_rxerrorcallback(rxd);
+		// instance_rxerrorcallback(rxd);
+		instancerxon(&instance_data[instance], 0, 0); //immediate enable 
 	}
+
+	
+// 	//Process good frames
+// 	// only process DWT_SIG_RX_OKAY events for the selected tag in our list
+// 	if(rxd_event == DWT_SIG_RX_OKAY & tag_index != 255 & instance_data[instance].tagToRangeWith == tag_index)
+// 	// if(rxd_event == DWT_SIG_RX_OKAY)
+// 	{
+// 		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK: DWT_SIG_RX_OKAY-%s", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]));
+// 		send_usbmessage(&debug_msg[0], n);
+// 		usb_run();
+
+// 		//check if this is a TWR message (and also which one)
+// 		if(instance_data[instance].tagListLen > 0)
+// 		{
+// 			switch(dw_event.msgu.frame[fcode_index])
+// 			{
+
+// 				case RTLS_DEMO_MSG_TAG_POLL:
+// 				{
+// 					// if(tag_index != 255 & tag_index == instance_data[instance].tagToRangeWith)
+// 					// {
+// 						uint16 frameLength = 0;
+
+// 						instance_data[instance].tagPollRxTime = dw_event.timeStamp ; //Poll's Rx time
+
+// #if (IMMEDIATE_RESPONSE == 0)
+// 						instance_data[instance].delayedReplyTime = (instance_data[instance].tagPollRxTime + instance_data[instance].responseReplyDelay) >> 8 ;  // time we should send the response
+// #else
+// 						instance_data[instance].delayedReplyTime = 0;
+// #endif
+
+// #if (USING_64BIT_ADDR == 1)
+// 						frameLength = ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC;
+// 						memcpy(&instance_data[instance].msg.destAddr[0], &dw_event.msgu.frame[srcAddr_index], ADDR_BYTE_SIZE_L); //remember who to send the reply to (set destination address)
+// #else
+// 						frameLength = ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
+// 						memcpy(&instance_data[instance].msg.destAddr[0], &dw_event.msgu.frame[srcAddr_index], ADDR_BYTE_SIZE_S); //remember who to send the reply to (set destination address)
+// #endif
+// 						// Write calculated TOF into response message
+// 						memcpy(&(instance_data[instance].msg.messageData[TOFR]), &instance_data[instance].tof, 5);
+
+// 						instance_data[instance].tof = 0; //clear ToF ..
+
+// 						instance_data[instance].msg.seqNum = instance_data[instance].frameSN++;
+
+// 						//set the delayed rx on time (the final message will be sent after this delay)
+// 						dwt_setrxaftertxdelay((uint32)instance_data[instance].txToRxDelayAnc_sy);  //units are 1.0256us - wait for wait4respTIM before RX on (delay RX)
+
+// 						//response is expected
+// 						instance_data[instance].wait4ack = DWT_RESPONSE_EXPECTED;
+
+// 						dwt_writetxfctrl(frameLength, 0, 1);
+// 						dwt_writetxdata(frameLength, (uint8 *)  &instance_data[instance].msg, 0) ;	// write the frame data
+
+// 						//report out which message is being sent!
+// 						send_rxmsgtousb("RX message: DWT_SIG_RX_OKAY-RTLS_DEMO_MSG_TAG_POLL ");
+// 						send_txmsgtousb(get_msg_fcode_string((int)instance_data[instance].msg.messageData[FCODE]));
+						
+
+
+// #if (IMMEDIATE_RESPONSE == 1)
+// 						dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
+// #else
+// 						if(instancesendpacket(frameLength, DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED, instance_data[instance].delayedReplyTime))
+// 						{
+// 							dw_event.typePend = DWT_SIG_TX_ERROR ;
+// 							dwt_setrxaftertxdelay(0);
+// 							instance_data[instance].wait4ack = 0; //clear the flag as the TX has failed the TRX is off
+// 							instance_data[instance].lateTX++;
+
+// 						}
+// 						else
+// #endif
+// 						{
+// 							dw_event.typePend = DWT_SIG_TX_PENDING ; // exit this interrupt and notify the application/instance that TX is in progress.
+// 						}
+// 					// }
+// 				}
+// 				break;
+
+// 				case RTLS_DEMO_MSG_ANCH_RESP:
+// 				default: //process rx frame in the application state machine
+// 				break;
+// 			}
+// 		}
+
+// 		instance_putevent(dw_event);
+
+// #if (DEEP_SLEEP == 1)
+// 		if (instance_data[instance].sleepingEabled)
+// 			instance_data[instance].rxmsgcount++;
+// #endif
+// 	}
+// 	else if (rxd_event == DWT_SIG_RX_BLINK)// & tag_index == 255) //only accept blinks from tags that aren't already in our taglist
+// 	{
+		
+// 		instance_putevent(dw_event);
+
+// #if (DEEP_SLEEP == 1)
+// 		if (instance_data[instance].sleepingEabled)
+// 			instance_data[instance].rxmsgcount++;
+// #endif
+// 	}
+// 	else
+// 	//if (rxd_event == SIG_RX_UNKNOWN) //need to re-enable the rx
+// 	{
+// 		instance_rxerrorcallback(rxd);
+// 	}
+
+
 
 }
 
@@ -1034,17 +1386,56 @@ int instance_run(void)
 		message = 0;
 	}
 
+	//check if lastCommTimeStamp has expired for any of the tags in our list
+	for(int i=0; i < instance_data[instance].tagListLen; i++)
+	{
+		if(instance_data[instance].lastCommTimeStamp[i] + TAG_COMM_TIMEOUT < portGetTickCnt())
+		{
+			if(instance_data[instance].tagTimeout[i] == 0)
+			{
+				instance_data[instance].tagTimeout[i] = 1;
+				
+				uint8 debug_msg[100];
+				int n = sprintf((char*)&debug_msg[0], "TIMEOUT: tag %i", i);
+				send_usbmessage(&debug_msg[0], n);
+				usb_run();	
+			}
+			if(instance_data[instance].tagToRangeWith == i)
+			{	
+				instance_data[instance].tagToRangeWith = 255;	
+				//NOTE this might need to be changed for TAG operations
+				if(instance_data[instance].mode == ANCHOR)
+				{
+					instance_data[instance].testAppState = TA_RXE_WAIT;
+					instance_data[instance].frameFilteringEnabled = 0;
+					dwt_enableframefilter(DWT_FF_NOTYPE_EN);
+				}
+				else
+				{
+					instance_data[instance].testAppState = TA_TX_SELECT;
+				}
+			}
+		}
+		
+	}
+
+	
+
+
     if(done == INST_DONE_WAIT_FOR_NEXT_EVENT_TO) //we are in RX and need to timeout (Tag needs to send another poll if no Rx frame)
     {
         if(instance_data[instance].mode == TAG) //Tag (is either in RX or sleeping)
         {
-            instance_data[instance].instanceTimerTime = instance_data[instance].instanceTimerTimeSaved + instance_data[instance].tagSleepTime_ms; //set timeout time
-            instance_data[instance].instanceTimerEnabled = 1; //start timer
-        }
-        if(instance_data[instance].mode == TAG_TDOA)
-        {
-            instance_data[instance].instanceTimerTime += instance_data[instance].tagBlinkSleepTime_ms; //set timeout time
-            instance_data[instance].instanceTimerEnabled = 1; //start timer
+			if(instance_data[instance].previousState == TA_TXBLINK_WAIT_SEND)
+			{
+				instance_data[instance].instanceTimerTime += instance_data[instance].tagBlinkSleepTime_ms; //set timeout time
+            	instance_data[instance].instanceTimerEnabled = 1; //start timer
+			}
+			else
+			{
+				instance_data[instance].instanceTimerTime = instance_data[instance].instanceTimerTimeSaved + instance_data[instance].tagSleepTime_ms; //set timeout time
+            	instance_data[instance].instanceTimerEnabled = 1; //start timer
+			}
         }
     }
 

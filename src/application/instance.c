@@ -16,10 +16,27 @@
 #include "deca_spi.h"
 #include "deca_regs.h"
 
-#include "lib.h"
 
+#include "lib.h"
 #include "instance.h"
 
+// #include "deca_usb.h"
+
+//NOTE: my added USB debug values/functions
+#define USB_DEBUG_BUFF_LEN (100)
+uint8 usbdebugdata[USB_DEBUG_BUFF_LEN]; //data to be sent over usb for debug purposes
+int usbdebugdata_size = 0;     
+uint8 usbdebugdataprev[USB_DEBUG_BUFF_LEN]; //previous message sent
+int usbdebugdataprev_size = 0;
+uint8 usbrxdebugdata[USB_DEBUG_BUFF_LEN];
+int usbrxdebugdata_size = 0;
+uint8 usbrxdebugdataprev[USB_DEBUG_BUFF_LEN];
+int usbrxdebugdataprev_size = 0;        
+uint8 usbtxdebugdata[USB_DEBUG_BUFF_LEN];
+int usbtxdebugdata_size = 0;
+uint8 usbtxdebugdataprev[USB_DEBUG_BUFF_LEN];
+int usbtxdebugdataprev_size = 0;        
+ 
 // -------------------------------------------------------------------------------------------------------------------
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -43,16 +60,16 @@
 //
 void instanceconfigframeheader(instance_data_t *inst)
 {
-    inst->msg.panID[0] = (inst->panID) & 0xff;
-    inst->msg.panID[1] = inst->panID >> 8;
+    inst->msg[inst->tagToRangeWith].panID[0] = (inst->panID) & 0xff;
+    inst->msg[inst->tagToRangeWith].panID[1] = inst->panID >> 8;
 
     //set frame type (0-2), SEC (3), Pending (4), ACK (5), PanIDcomp(6)
-    inst->msg.frameCtrl[0] = 0x1 /*frame type 0x1 == data*/ | 0x40 /*PID comp*/;
+    inst->msg[inst->tagToRangeWith].frameCtrl[0] = 0x1 /*frame type 0x1 == data*/ | 0x40 /*PID comp*/;
 #if (USING_64BIT_ADDR==1)
     //source/dest addressing modes and frame version
-    inst->msg.frameCtrl[1] = 0xC /*dest extended address (64bits)*/ | 0xC0 /*src extended address (64bits)*/;
+    inst->msg[inst->tagToRangeWith].frameCtrl[1] = 0xC /*dest extended address (64bits)*/ | 0xC0 /*src extended address (64bits)*/;
 #else
-    inst->msg.frameCtrl[1] = 0x8 /*dest short address (16bits)*/ | 0x80 /*src short address (16bits)*/;
+    inst->msg[inst->tagToRangeWith].frameCtrl[1] = 0x8 /*dest short address (16bits)*/ | 0x80 /*src short address (16bits)*/;
 #endif
 }
 
@@ -95,6 +112,126 @@ int instancesendpacket(uint16 length, uint8 txmode, uint32 dtime)
 
 }
 
+//debug helper function to print the testAppState
+const char* get_inst_states_string(enum inst_states state)
+{
+    switch (state)
+    {
+        case TA_INIT : return "TA_INIT";
+        case TA_TXE_WAIT : return "TA_TXE_WAIT";       
+        case TA_TXPOLL_WAIT_SEND : return "TA_TXPOLL_WAIT_SEND";       
+        case TA_TXFINAL_WAIT_SEND : return "TA_TXFINAL_WAIT_SEND";  
+        case TA_TXRESPONSE_WAIT_SEND : return "TA_TXRESPONSE_WAIT_SEND";
+        case TA_TX_WAIT_CONF : return "TA_TX_WAIT_CONF";
+        case TA_RXE_WAIT : return "TA_RXE_WAIT";
+        case TA_RX_WAIT_DATA : return "TA_RX_WAIT_DATA";
+        case TA_SLEEP_DONE : return "TA_SLEEP_DONE";
+        case TA_TXBLINK_WAIT_SEND : return "TA_TXBLINK_WAIT_SEND";
+        case TA_TXRANGINGINIT_WAIT_SEND : return "TA_TXRANGINGINIT_WAIT_SEND";
+        case TA_TX_SELECT : return "TA_TX_SELECT";
+        default: return "NONE";
+    }
+}
+
+//debug helper function to print the mode
+const char* get_instanceModes_string(enum instanceModes mode)
+{
+    switch (mode)
+    {
+        case LISTENER : return "LISTENER";
+        case TAG : return "TAG";       
+        case ANCHOR : return "ANCHOR";       
+        case TAG_TDOA : return "TAG_TDOA";  
+        case NUM_MODES : return "NUM_MODES";
+        default: return "NONE";
+    }
+}
+
+char* get_msg_fcode_string(int fcode)
+{
+    if (fcode == (int)RTLS_DEMO_MSG_RNG_INIT)
+    {
+        return "RTLS_DEMO_MSG_RNG_INIT";
+    }
+    else if(fcode == (int)RTLS_DEMO_MSG_TAG_POLL)
+    {
+        return "RTLS_DEMO_MSG_TAG_POLL";
+    }
+    else if(fcode == (int)RTLS_DEMO_MSG_ANCH_RESP)
+    {
+        return "RTLS_DEMO_MSG_ANCH_RESP";
+    }
+    else if(fcode == (int)RTLS_DEMO_MSG_TAG_FINAL)
+    {
+        return "RTLS_DEMO_MSG_TAG_FINAL";
+    }
+    else
+    {
+        return "NONE";
+    }
+}
+
+void send_statetousb(instance_data_t *inst)
+{
+    // usbrxdebugdata[0] = 0x2 ;  //return cursor home
+    int usbdebugdata_size = sprintf((char*)&usbdebugdata[0], "%s , %s , %s , %s", get_inst_states_string(inst->testAppState), get_inst_states_string(inst->previousState), get_inst_states_string(inst->nextState), get_instanceModes_string(inst->mode));
+     
+    memcpy(usbdebugdata, usbdebugdata, usbdebugdata_size);
+    if (strncmp(usbdebugdataprev, usbdebugdata, usbdebugdata_size) != 0 || usbdebugdata_size != usbdebugdataprev_size)
+    {
+        
+        // send_usbmessage("start", 5);
+        // usb_run();
+        send_usbmessage(&usbdebugdata[0], usbdebugdata_size);
+        usb_run();
+        // send_usbmessage(&usbdebugdataprev[0], usbdebugdataprev_size);
+        // usb_run();
+
+        // usbrxdebugdataprev[0] = 0x2 ;  //return cursor home
+        usbdebugdataprev_size = usbdebugdata_size;
+        memcpy(usbdebugdataprev, usbdebugdata, usbdebugdata_size);
+    }
+}
+
+void send_rxmsgtousb(char *data)
+{
+    // usbrxdebugdata[0] = 0x2 ;  //return cursor home
+    int usbrxdebugdata_size = sprintf((char*)&usbrxdebugdata[0], "%s", data);
+     
+    memcpy(usbrxdebugdata, usbrxdebugdata, usbrxdebugdata_size);
+    if (strncmp(usbrxdebugdataprev, usbrxdebugdata, usbrxdebugdata_size) != 0 || usbrxdebugdata_size != usbrxdebugdataprev_size)
+    {
+        // n = sprintf((char*)&usbtmpmsg[0], "prev: %s curr: %s", (char*)&usbrxdebugdata, (char*)&usbrxdebugdataprev);
+        // send_usbmessage(&usbtmpmsg[0], n);
+
+        // send_usbmessage("start", 5);
+        // usb_run();
+        send_usbmessage(&usbrxdebugdata[0], usbrxdebugdata_size);
+        usb_run();
+        // send_usbmessage(&usbrxdebugdataprev[0], usbrxdebugdataprev_size);
+        // usb_run();
+
+        // usbrxdebugdataprev[0] = 0x2 ;  //return cursor home
+        usbrxdebugdataprev_size = usbrxdebugdata_size;
+        memcpy(usbrxdebugdataprev, usbrxdebugdata, usbrxdebugdata_size);
+    }
+}
+
+void send_txmsgtousb(char *data)
+{
+    int usbtxdebugdata_size = sprintf((char*)&usbtxdebugdata[0], "TX message: %s", data);
+     
+    // memcpy(usbtxdebugdata, usbtxdebugdata, usbtxdebugdata_size);
+    // if (strncmp(usbtxdebugdataprev, usbtxdebugdata, usbtxdebugdata_size) != 0 || usbtxdebugdata_size != usbtxdebugdataprev_size)
+    // {
+        send_usbmessage(&usbtxdebugdata[0], usbtxdebugdata_size);
+        usb_run();
+
+    //     usbtxdebugdataprev_size = usbtxdebugdata_size;
+    //     memcpy(usbtxdebugdataprev, usbtxdebugdata, usbtxdebugdata_size);
+    // }
+}
+
 // -------------------------------------------------------------------------------------------------------------------
 //
 // the main instance state machine (all the instance modes Tag, Anchor or Listener use the same statemachine....)
@@ -105,14 +242,29 @@ int testapprun(instance_data_t *inst, int message)
 {
     int done = INST_NOT_DONE_YET;
 
+    // uint8 debug_msg[100];
+    // int n = sprintf((char*)&debug_msg[0], "Test app run");
+    // send_usbmessage(&debug_msg[0], n);
+    // usb_run();
+
+    // uint8 debug_msg2[100];
+    // int n = sprintf((char*)&debug_msg2[0], "TTRW %i", inst->tagToRangeWith);
+    // send_usbmessage(&debug_msg2[0], n);
+    // usb_run();
+
     switch (inst->testAppState)
     {
         case TA_INIT :
+            // if (inst->mode == ANCHOR)
+            // {
+                send_statetousb(inst);
+            // }
             // printf("TA_INIT") ;
             switch (inst->mode)
             {
                 case TAG:
                 {
+                    Sleep(5000);
                     int mode = 0;
 
                     dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN); //allow data, ACK frames;
@@ -123,11 +275,14 @@ int testapprun(instance_data_t *inst, int message)
                     //the short address is assigned by the anchor
 #else
                     //set source address into the message structure
-                    memcpy(&inst->msg.sourceAddr[0], inst->eui64, ADDR_BYTE_SIZE_L);
+                    for(int i=0; i<TAG_LIST_SIZE; i++)
+                    {
+                        memcpy(&inst->msg[i].sourceAddr[0], inst->eui64, ADDR_BYTE_SIZE_L);
+                    }
 #endif
 
                     //change to next state - send a Poll message to 1st anchor in the list
-                    inst->mode = TAG_TDOA ;
+                    //inst->mode = TAG_TDOA ;
                     inst->testAppState = TA_TXBLINK_WAIT_SEND;
                     memcpy(inst->blinkmsg.tagID, inst->eui64, ADDR_BYTE_SIZE_L);
 
@@ -158,13 +313,19 @@ int testapprun(instance_data_t *inst, int message)
                         uint16 addr = inst->eui64[0] + (inst->eui64[1] << 8);
                         dwt_setaddress16(addr);
                         //set source address into the message structure
-                        memcpy(&inst->msg.sourceAddr[0], inst->eui64, ADDR_BYTE_SIZE_S);
+                        for(int i=0; i<TAG_LIST_SIZE; i++)
+                        {
+                            memcpy(&inst->msg[i].sourceAddr[0], inst->eui64, ADDR_BYTE_SIZE_S);
+                        }
                         //set source address into the message structure
                         memcpy(&inst->rng_initmsg.sourceAddr[0], inst->eui64, ADDR_BYTE_SIZE_S);
                     }
 #else
                     //set source address into the message structure
-                    memcpy(&inst->msg.sourceAddr[0], inst->eui64, ADDR_BYTE_SIZE_L);
+                    for(int i=0; i<TAG_LIST_SIZE; i++)
+                    {
+                        memcpy(&inst->msg[i].sourceAddr[0], inst->eui64, ADDR_BYTE_SIZE_L);
+                    }
                     //set source address into the message structure
                     memcpy(&inst->rng_initmsg.sourceAddr[0], inst->eui64, ADDR_BYTE_SIZE_L);
 #endif
@@ -196,8 +357,47 @@ int testapprun(instance_data_t *inst, int message)
             }
             break; // end case TA_INIT
 
+        case TA_TX_SELECT:
+            {
+            // uint8 debug_msg[100];
+            // int n = sprintf((char*)&debug_msg[0], "TA_TX_SELECT");
+            // send_usbmessage(&debug_msg[0], n);
+            // usb_run();
+            uint8 debug_msg[100];
+            int n = sprintf((char*)&debug_msg[0], "TA_TX_SELECT: inst->tagListLen: %i, inst->tagToRangeWith: %i", inst->tagListLen, inst->tagToRangeWith);
+            send_usbmessage(&debug_msg[0], n);
+            usb_run();
+            // select whether to blink or send out a range poll message.
+            // select a tag from the list if sending out a range poll message
+            if(inst->tagListLen == 0) //no known anchors yet, send out blink
+            {
+                inst->testAppState = TA_TXBLINK_WAIT_SEND;
+                inst->tagToRangeWith = 255;
+            }
+            else
+            {
+                //for now, blink after attempting to poll each tag in the list
+                if((inst->tagToRangeWith >= inst->tagListLen) || (inst->tagTimeout[inst->tagToRangeWith] == 1))
+                {
+                    inst->testAppState = TA_TXBLINK_WAIT_SEND;
+                    inst->tagToRangeWith = 255;
+                }
+                else
+                {
+                    // inst->tagToRangeWith = inst->tagToRangeWith + 1;
+                    inst->testAppState = TA_TXPOLL_WAIT_SEND;
+                }
+            }
+
+            send_statetousb(inst);
+            break; // end case TA_TX_SELECT
+            }
         case TA_SLEEP_DONE :
         {
+            // if (inst->mode == ANCHOR)
+            // {
+                send_statetousb(inst);
+            // }
             event_data_t* dw_event = instance_getevent(10); //clear the event from the queue
             // waiting for timout from application to wakup IC
             if (dw_event->type != DWT_SIG_RX_TIMEOUT)
@@ -235,10 +435,14 @@ int testapprun(instance_data_t *inst, int message)
             break;
 
         case TA_TXE_WAIT : //either go to sleep or proceed to TX a message
+            // if (inst->mode == ANCHOR)
+            // {
+                send_statetousb(inst);
+            // }
             // printf("TA_TXE_WAIT") ;
             //if we are scheduled to go to sleep before next sending then sleep first.
             if(((inst->nextState == TA_TXPOLL_WAIT_SEND)
-                || (inst->nextState == TA_TXBLINK_WAIT_SEND))
+                || (inst->nextState == TA_TXBLINK_WAIT_SEND) || (inst->nextState == TA_TX_SELECT)) //add TA_TX_SELECT???
                     && (inst->goToSleep)  //go to sleep before sending the next poll
                     )
             {
@@ -247,10 +451,10 @@ int testapprun(instance_data_t *inst, int message)
                 done = INST_DONE_WAIT_FOR_NEXT_EVENT_TO; //don't sleep here but kick off the TagTimeoutTimer (instancetimer)
                 inst->testAppState = TA_SLEEP_DONE;
 
-                if(inst->mode == TAG_TDOA) //once we start ranging we want to display the new range
-                {
-                    inst->canPrintInfo = 1;
-                }
+                // if(inst->mode == TAG_TDOA) //once we start ranging we want to display the new range
+                // {
+                inst->canPrintInfo = 1;
+                // }
 
 #if (DEEP_SLEEP == 1)
                 if (inst->sleepingEabled)
@@ -279,6 +483,12 @@ int testapprun(instance_data_t *inst, int message)
 
         case TA_TXBLINK_WAIT_SEND :
             {
+                // if (inst->mode == ANCHOR)
+                // {
+                    send_statetousb(inst);
+                // }
+                //send_txmsgtousb("BLINK");
+
                 int flength = (BLINK_FRAME_CRTL_AND_ADDRESS + FRAME_CRC);
 
                 //blink frames with IEEE EUI-64 tag ID
@@ -287,8 +497,7 @@ int testapprun(instance_data_t *inst, int message)
 
                 dwt_writetxdata(flength, (uint8 *)  (&inst->blinkmsg), 0) ; // write the frame data
                 dwt_writetxfctrl(flength, 0, 1);
-
-
+                
                 //using wait for response to do delayed receive
                 inst->wait4ack = DWT_RESPONSE_EXPECTED;
 
@@ -308,6 +517,14 @@ int testapprun(instance_data_t *inst, int message)
 
         case TA_TXRANGINGINIT_WAIT_SEND :
                 {
+                if (inst->mode == ANCHOR)
+                {
+                    send_statetousb(inst);
+                }
+                send_txmsgtousb("RTLS_DEMO_MSG_RNG_INIT");
+
+                // TODO should only send RTLS_DEMO_MSG_RNG_INIT if handshake not already complete 
+                
                 uint16 resp_dly_us, resp_dly;
 
                 int psduLength = RANGINGINIT_MSG_LEN;
@@ -351,6 +568,8 @@ int testapprun(instance_data_t *inst, int message)
 
                 dwt_writetxdata(psduLength, (uint8 *)  &inst->rng_initmsg, 0) ; // write the frame data
 
+
+
                 //anchor - we don't use timeout, just wait for next frame
                 if(instancesendpacket(psduLength, DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED, inst->delayedReplyTime))
                 {
@@ -367,19 +586,20 @@ int testapprun(instance_data_t *inst, int message)
 
                     //CONFIGURE FIXED PARTS OF RESPONSE MESSAGE FRAME (these won't change)
                     //program option octet and parameters (not used currently)
-                    inst->msg.messageData[RES_R1] = 0x2; // "activity"
-                    inst->msg.messageData[RES_R2] = 0x0; //
-                    inst->msg.messageData[RES_R3] = 0x0;
+                    inst->msg[inst->tagToRangeWith].messageData[RES_R1] = 0x2; // "activity"
+                    inst->msg[inst->tagToRangeWith].messageData[RES_R2] = 0x0; //
+                    inst->msg[inst->tagToRangeWith].messageData[RES_R3] = 0x0;
                     //set the destination address in the TWR response message
 #if 0
 #if (USING_64BIT_ADDR == 1)
-                    memcpy(&inst->msg.destAddr[0], &inst->rng_initmsg.destAddr[0], ADDR_BYTE_SIZE_L); //remember who to send the reply to (set destination address)
+                    memcpy(&inst->msg[inst->tagToRangeWith].destAddr[0], &inst->rng_initmsg.destAddr[0], ADDR_BYTE_SIZE_L); //remember who to send the reply to (set destination address)
 #else
-                    memcpy(&inst->msg.destAddr[0], &inst->tagShortAdd, ADDR_BYTE_SIZE_S); //remember who to send the reply to (set destination address)
+                    memcpy(&inst->msg[inst->tagToRangeWith].destAddr[0], &inst->tagShortAdd, ADDR_BYTE_SIZE_S); //remember who to send the reply to (set destination address)
 #endif
 #endif
 
-                    inst->msg.messageData[FCODE] = RTLS_DEMO_MSG_ANCH_RESP; //message function code (specifies if message is a poll, response or other...)
+                   
+                    inst->msg[inst->tagToRangeWith].messageData[FCODE] = RTLS_DEMO_MSG_ANCH_RESP; //message function code (specifies if message is a poll, response or other...)
 
                     instanceconfigframeheader(inst);
                     //inst->timeofTx = portGetTickCnt();
@@ -391,12 +611,14 @@ int testapprun(instance_data_t *inst, int message)
 
         case TA_TXPOLL_WAIT_SEND :
             {
+                send_statetousb(inst);
+                // send_txmsgtousb("RTLS_DEMO_MSG_TAG_POLL");
                 int psduLength = 0;
                 //NOTE the anchor address is set after receiving the ranging initialisation message
                 inst->goToSleep = 1; //go to Sleep after this poll
 
-                inst->msg.seqNum = inst->frameSN++;
-                inst->msg.messageData[FCODE] = RTLS_DEMO_MSG_TAG_POLL; //message function code (specifies if message is a poll, response or other...)
+                inst->msg[inst->tagToRangeWith].seqNum = inst->frameSN++;
+                inst->msg[inst->tagToRangeWith].messageData[FCODE] = RTLS_DEMO_MSG_TAG_POLL; //message function code (specifies if message is a poll, response or other...)
 
                 instanceconfigframeheader(inst);
 #if (USING_64BIT_ADDR==1)
@@ -409,7 +631,7 @@ int testapprun(instance_data_t *inst, int message)
                 dwt_setrxaftertxdelay(inst->txToRxDelayTag_sy);
                 dwt_setrxtimeout((uint16)inst->fwtoTime_sy);
 
-                dwt_writetxdata(psduLength, (uint8 *)  &inst->msg, 0) ; // write the frame data
+                dwt_writetxdata(psduLength, (uint8 *)  &inst->msg[inst->tagToRangeWith], 0) ; // write the frame data
 
                 //response is expected
                 inst->wait4ack = DWT_RESPONSE_EXPECTED;
@@ -426,6 +648,7 @@ int testapprun(instance_data_t *inst, int message)
 
         case TA_TXRESPONSE_WAIT_SEND : //the frame is loaded and sent from the RX callback
             {
+                send_statetousb(inst);
                //printf("TA_TXRESPONSE\n") ;
                 inst->testAppState = TA_TX_WAIT_CONF;                                               // wait confirmation
                 inst->previousState = TA_TXRESPONSE_WAIT_SEND ;
@@ -434,12 +657,14 @@ int testapprun(instance_data_t *inst, int message)
 
         case TA_TXFINAL_WAIT_SEND :
             {
+                send_statetousb(inst);
+                // send_txmsgtousb("RTLS_DEMO_MSG_TAG_FINAL");
                 int psduLength = 0;
                 // Embbed into Final message:40-bit respRxTime
                 // Write Response RX time field of Final message
-                memcpy(&(inst->msg.messageData[RRXT]), (uint8 *)&inst->anchorRespRxTime, 5);
+                memcpy(&(inst->msg[inst->tagToRangeWith].messageData[RRXT]), (uint8 *)&inst->anchorRespRxTime, 5);
 
-                inst->msg.messageData[FCODE] = RTLS_DEMO_MSG_TAG_FINAL; //message function code (specifies if message is a poll, response or other...)
+                inst->msg[inst->tagToRangeWith].messageData[FCODE] = RTLS_DEMO_MSG_TAG_FINAL; //message function code (specifies if message is a poll, response or other...)
 
                 instanceconfigframeheader(inst);
 #if (USING_64BIT_ADDR==1)
@@ -448,14 +673,14 @@ int testapprun(instance_data_t *inst, int message)
                 psduLength = TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
 #endif
 
-                dwt_writetxdata(psduLength, (uint8 *)  &inst->msg, 0) ; // write the frame data
+                dwt_writetxdata(psduLength, (uint8 *)  &inst->msg[inst->tagToRangeWith], 0) ; // write the frame data
 
                 if(instancesendpacket(psduLength, DWT_START_TX_DELAYED, inst->delayedReplyTime))
                 {
                     // initiate the re-transmission
                     inst->testAppState = TA_TXE_WAIT ;
                     inst->nextState = TA_TXPOLL_WAIT_SEND ;
-
+                    
                     inst->wait4ack = 0; //clear the flag as the TX has failed the TRX is off
                     inst->lateTX++;
 
@@ -463,12 +688,14 @@ int testapprun(instance_data_t *inst, int message)
                 }
                 else
                 {
+                    
                     inst->testAppState = TA_TX_WAIT_CONF;                                               // wait confirmation
                     inst->previousState = TA_TXFINAL_WAIT_SEND;
                     done = INST_DONE_WAIT_FOR_NEXT_EVENT; //will use RX FWTO to time out  (set below)
-                    //inst->responseTimeouts = 0; //reset response timeout count
+                    // inst->responseTimeouts = 0; //reset response timeout count
                     inst->timeofTx = portGetTickCnt();
                     inst->monitor = 1;
+                    send_txmsgtousb("RTLS_DEMO_MSG_TAG_FINAL");
                 }
             }
             break;
@@ -476,7 +703,11 @@ int testapprun(instance_data_t *inst, int message)
         case TA_TX_WAIT_CONF :
            //printf("TA_TX_WAIT_CONF %d m%d states %08x %08x\n", inst->previousState, message, dwt_read32bitreg(0x19), dwt_read32bitreg(0x0f)) ;
 
-                {
+            {
+                // if (inst->mode == ANCHOR)
+                // {
+                    send_statetousb(inst);
+                // }
                 event_data_t* dw_event = instance_getevent(11); //get and clear this event
 
                 //NOTE: Can get the ACK before the TX confirm event for the frame requesting the ACK
@@ -486,37 +717,46 @@ int testapprun(instance_data_t *inst, int message)
                 {
                     if(dw_event->type == DWT_SIG_RX_TIMEOUT) //got RX timeout - i.e. did not get the response (e.g. ACK)
                     {
-                        //printf("RX timeout in TA_TX_WAIT_CONF (%d)\n", inst->previousState);
+                        // printf("RX timeout in TA_TX_WAIT_CONF (%d)\n", inst->previousState);
                         //we need to wait for SIG_TX_DONE and then process the timeout and re-send the frame if needed
                         inst->gotTO = 1;
                     }
 
                     done = INST_DONE_WAIT_FOR_NEXT_EVENT;
-                        break;
+                    send_rxmsgtousb("RX process: (1st) got TO in TA_TX_WAIT_CONF");
+                    break;
 
                 }
 
                 done = INST_NOT_DONE_YET;
 
-                if(inst->previousState == TA_TXFINAL_WAIT_SEND)
+
+
+                if(inst->previousState == TA_TXFINAL_WAIT_SEND) //TAG operations
                 {
                     inst->testAppState = TA_TXE_WAIT ;
-                    inst->nextState = TA_TXPOLL_WAIT_SEND ;
+                    //inst->nextState = TA_TXPOLL_WAIT_SEND ; 
+                    //inst->nextState = TA_TXBLINK_WAIT_SEND ;
+                    inst->nextState = TA_TX_SELECT;
+                    uint8 idx = inst->tagToRangeWith + 1;
+                    inst->tagToRangeWith = instfindfirstawaketaginlist(inst, idx);
+                    
                     break;
                 }
                 else if (inst->gotTO) //timeout
                 {
                     //printf("got TO in TA_TX_WAIT_CONF\n");
+                    send_rxmsgtousb("RX process: (2nd) got TO in TA_TX_WAIT_CONF");
                     inst_processrxtimeout(inst);
                     inst->gotTO = 0;
                     inst->wait4ack = 0 ; //clear this
                     break;
                 }
-                else
+                else 
                 {
                     inst->txu.txTimeStamp = dw_event->timeStamp;
 
-                    if(inst->previousState == TA_TXPOLL_WAIT_SEND)
+                    if(inst->previousState == TA_TXPOLL_WAIT_SEND) //TAG operations
                     {
                         uint64 tagCalculatedFinalTxTime ;
                         // Embed into Final message: 40-bit pollTXTime,  40-bit respRxTime,  40-bit finalTxTime
@@ -532,9 +772,9 @@ int testapprun(instance_data_t *inst, int message)
                         tagCalculatedFinalTxTime &= MASK_40BIT;
 
                         // Write Calculated TX time field of Final message
-                        memcpy(&(inst->msg.messageData[FTXT]), (uint8 *)&tagCalculatedFinalTxTime, 5);
+                        memcpy(&(inst->msg[inst->tagToRangeWith].messageData[FTXT]), (uint8 *)&tagCalculatedFinalTxTime, 5);
                         // Write Poll TX time field of Final message
-                        memcpy(&(inst->msg.messageData[PTXT]), (uint8 *)&inst->txu.tagPollTxTime, 5);
+                        memcpy(&(inst->msg[inst->tagToRangeWith].messageData[PTXT]), (uint8 *)&inst->txu.tagPollTxTime, 5);
                     }
 
                     inst->testAppState = TA_RXE_WAIT ;                      // After sending, tag expects response/report, anchor waits to receive a final/new poll
@@ -550,7 +790,11 @@ int testapprun(instance_data_t *inst, int message)
         case TA_RXE_WAIT :
         // printf("TA_RXE_WAIT") ;
         {
-
+            if (inst->mode == ANCHOR)
+            {
+                send_statetousb(inst);
+            }
+            
             if(inst->wait4ack == 0) //if this is set the RX will turn on automatically after TX
             {
                 //turn RX on
@@ -573,45 +817,75 @@ int testapprun(instance_data_t *inst, int message)
             if(message == 0) break;
         }
 
-        case TA_RX_WAIT_DATA :                                                                     // Wait RX data
+        case TA_RX_WAIT_DATA :     
+            if (inst->mode == ANCHOR)
+            {
+                send_statetousb(inst);
+            }
+            // Wait RX data
            //printf("TA_RX_WAIT_DATA %d", message) ;
 
             switch (message)
             {
                 case DWT_SIG_RX_BLINK :
                 {
+                    send_rxmsgtousb("RX process: DWT_SIG_RX_BLINK ");
                     event_data_t* dw_event = instance_getevent(12); //get and clear this event
                     //printf("we got blink message from %08X\n", ( tagaddr& 0xFFFF));
                     if((inst->mode == LISTENER) || (inst->mode == ANCHOR))
                     {
                         inst->canPrintInfo = 1;
 
-                        //add this Tag to the list of Tags we know about
-                        instaddtagtolist(inst, &(dw_event->msgu.rxblinkmsg.tagID[0]));
+                        // if(inst->tagToRangeWith == 255)
+                        // {
+                        //     instaddtagtolist(inst, &(dw_event->msgu.rxblinkmsg.tagID[0]));
+                        //     // int n = sprintf((char*)&debug_msg[0], "BLINK!!! tagToRangeWith after %i", inst->tagToRangeWith);
+                        //     // send_usbmessage(&debug_msg[0], n);
+                        //     // usb_run();
+                        //     //initiate ranging message this is a Blink from the Tag we would like to range to
+                        //     //NOTE not sure if this check is needed... but leave it for now
+                        //     if(memcmp(&inst->tagList[inst->tagToRangeWith][0],  &(dw_event->msgu.rxblinkmsg.tagID[0]), BLINK_FRAME_SOURCE_ADDRESS) == 0)
+                        //     {
+                        //         inst->tagShortAdd = (dwt_getpartid() & 0xFF);
+                        //         inst->tagShortAdd =  (inst->tagShortAdd << 8) + dw_event->msgu.rxblinkmsg.tagID[0] ; //TODO need to figure this out...
 
-                        //initiate ranging message
-                        if(inst->tagToRangeWith < TAG_LIST_SIZE)
+                        //         //if using longer reply delay time (e.g. if interworking with a PC application)
+                        //         inst->delayedReplyTime = (dw_event->timeStamp + inst->rnginitReplyDelay) >> 8 ;  // time we should send the blink response
+                                
+                        //         //set destination address
+                        //         memcpy(&inst->rng_initmsg.destAddr[0], &(dw_event->msgu.rxblinkmsg.tagID[0]), BLINK_FRAME_SOURCE_ADDRESS); //remember who to send the reply to
+
+                        //         inst->testAppState = TA_TXE_WAIT;
+                        //         inst->nextState = TA_TXRANGINGINIT_WAIT_SEND ;
+
+                        //         break;
+                        //     }
+
+                        //     //else stay in RX
+                        // }
+
+                        uint8 debug_msg[100];
+                        int n = sprintf((char*)&debug_msg[0], "memcmp tagList & tagID: %i   %i", inst->tagList[inst->tagToRangeWith][0], dw_event->msgu.rxblinkmsg.tagID[0]);
+                        send_usbmessage(&debug_msg[0], n);
+                        usb_run();
+                        
+                        if(memcmp(&inst->tagList[inst->tagToRangeWith][0],  &(dw_event->msgu.rxblinkmsg.tagID[0]), BLINK_FRAME_SOURCE_ADDRESS) == 0)
                         {
-                            //initiate ranging message this is a Blink from the Tag we would like to range to
-                            if(memcmp(&inst->tagList[inst->tagToRangeWith][0],  &(dw_event->msgu.rxblinkmsg.tagID[0]), BLINK_FRAME_SOURCE_ADDRESS) == 0)
-                            {
-                                inst->tagShortAdd = (dwt_getpartid() & 0xFF);
-                                inst->tagShortAdd =  (inst->tagShortAdd << 8) + dw_event->msgu.rxblinkmsg.tagID[0] ;
+                            inst->tagShortAdd = (dwt_getpartid() & 0xFF);
+                            inst->tagShortAdd =  (inst->tagShortAdd << 8) + dw_event->msgu.rxblinkmsg.tagID[0] ; //TODO need to figure this out...
 
-                                //if using longer reply delay time (e.g. if interworking with a PC application)
-                                inst->delayedReplyTime = (dw_event->timeStamp + inst->rnginitReplyDelay) >> 8 ;  // time we should send the blink response
+                            //if using longer reply delay time (e.g. if interworking with a PC application)
+                            inst->delayedReplyTime = (dw_event->timeStamp + inst->rnginitReplyDelay) >> 8 ;  // time we should send the blink response
+                            
+                            //set destination address
+                            memcpy(&inst->rng_initmsg.destAddr[0], &(dw_event->msgu.rxblinkmsg.tagID[0]), BLINK_FRAME_SOURCE_ADDRESS); //remember who to send the reply to
 
-                                //set destination address
-                                memcpy(&inst->rng_initmsg.destAddr[0], &(dw_event->msgu.rxblinkmsg.tagID[0]), BLINK_FRAME_SOURCE_ADDRESS); //remember who to send the reply to
+                            inst->testAppState = TA_TXE_WAIT;
+                            inst->nextState = TA_TXRANGINGINIT_WAIT_SEND ;
 
-                                inst->testAppState = TA_TXE_WAIT;
-                                inst->nextState = TA_TXRANGINGINIT_WAIT_SEND ;
-
-                                break;
-                            }
-
-                            //else stay in RX
+                            break;
                         }
+                        //else stay in RX
                     }
                     //else //not initiating ranging - continue to receive
                     {
@@ -625,6 +899,7 @@ int testapprun(instance_data_t *inst, int message)
                 //if we have received a DWT_SIG_RX_OKAY event - this means that the message is IEEE data type - need to check frame control to know which addressing mode is used
                 case DWT_SIG_RX_OKAY :
                 {
+
                     event_data_t* dw_event = instance_getevent(15); //get and clear this event
                     uint8  srcAddr[8] = {0,0,0,0,0,0,0,0};
                     int fcode = 0;
@@ -660,6 +935,7 @@ int testapprun(instance_data_t *inst, int message)
                         if(inst->mode == ANCHOR)
                         {
 #if (USING_64BIT_ADDR==1)
+                            
                             if(memcmp(&inst->tagList[inst->tagToRangeWith][0], &srcAddr[0], BLINK_FRAME_SOURCE_ADDRESS) == 0) //if the Tag's address does not match (ignore the message)
 #else
                             //if using 16-bit addresses the ranging messages from tag are using the short address tag was given in the ranging init message
@@ -669,6 +945,23 @@ int testapprun(instance_data_t *inst, int message)
                             {
                                 fcode = fn_code;
                             }
+// #if (USING_64BIT_ADDR==1)
+//                             if(instchecktaginlist(&inst, &srcAddr[0]) != 255) //if the Tag's address does not match (ignore the message)
+// #else
+//                             //if using 16-bit addresses the ranging messages from tag are using the short address tag was given in the ranging init message
+//                             if(inst->tagShortAdd == (srcAddr[0] + (srcAddr[1] << 8)))
+// #endif
+//                             //only process messages from an associated tag
+//                             {
+//                                 fcode = fn_code;
+//                             }
+//                             else
+//                             {
+//                                 uint8 debug_msg[100];
+//                                 int n = sprintf((char*)&debug_msg[0], "Tag not in list, RX message not processed");
+//                                 send_usbmessage(&debug_msg[0], n);
+//                                 usb_run();
+//                             }
                         }
                         else // LISTENER or TAG
                         {
@@ -677,64 +970,128 @@ int testapprun(instance_data_t *inst, int message)
 
                         switch(fcode)
                         {
-                            case RTLS_DEMO_MSG_RNG_INIT:
+                            case RTLS_DEMO_MSG_RNG_INIT: //TAG operations
                             {
-                                if(inst->mode == TAG_TDOA) //only start ranging with someone if not ranging already
+                                send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-RTLS_DEMO_MSG_RNG_INIT");
+                                // send_rxmsgtousb("RX message fcode: RTLS_DEMO_MSG_RNG_INIT");
+                                
+                                //shouldn't use different tag modes. should only accept if not in list already
+                                //NOTE this is the poll message sent by the tag to initiate the handshake
+
+                                uint32 final_reply_delay_us;
+                                uint32 resp_dly[RESP_DLY_NB];
+                                int i;
+
+                                inst->testAppState = TA_TXE_WAIT;
+                                inst->nextState = TA_TXPOLL_WAIT_SEND ; // send next poll
+
+                                inst->tagShortAdd = messageData[RNG_INIT_TAG_SHORT_ADDR_LO]
+                                                    + (messageData[RNG_INIT_TAG_SHORT_ADDR_HI] << 8) ;
+
+                                // Get response delays from message and update internal timings accordingly
+                                resp_dly[RESP_DLY_ANC] =  messageData[RNG_INIT_ANC_RESP_DLY_LO]
+                                                            + (messageData[RNG_INIT_ANC_RESP_DLY_HI] << 8);
+                                resp_dly[RESP_DLY_TAG] =  messageData[RNG_INIT_TAG_RESP_DLY_LO]
+                                                            + (messageData[RNG_INIT_TAG_RESP_DLY_HI] << 8);
+                                for (i = 0; i < RESP_DLY_NB; i++)
                                 {
-                                    uint32 final_reply_delay_us;
-                                    uint32 resp_dly[RESP_DLY_NB];
-                                    int i;
-
-                                    inst->testAppState = TA_TXE_WAIT;
-                                    inst->nextState = TA_TXPOLL_WAIT_SEND ; // send next poll
-
-                                    inst->tagShortAdd = messageData[RNG_INIT_TAG_SHORT_ADDR_LO]
-                                                        + (messageData[RNG_INIT_TAG_SHORT_ADDR_HI] << 8) ;
-
-                                    // Get response delays from message and update internal timings accordingly
-                                    resp_dly[RESP_DLY_ANC] =  messageData[RNG_INIT_ANC_RESP_DLY_LO]
-                                                              + (messageData[RNG_INIT_ANC_RESP_DLY_HI] << 8);
-                                    resp_dly[RESP_DLY_TAG] =  messageData[RNG_INIT_TAG_RESP_DLY_LO]
-                                                              + (messageData[RNG_INIT_TAG_RESP_DLY_HI] << 8);
-                                    for (i = 0; i < RESP_DLY_NB; i++)
+                                    if (((resp_dly[i] & RESP_DLY_UNIT_MASK) >> RESP_DLY_UNIT_SHIFT) == RESP_DLY_UNIT_MS)
                                     {
-                                        if (((resp_dly[i] & RESP_DLY_UNIT_MASK) >> RESP_DLY_UNIT_SHIFT) == RESP_DLY_UNIT_MS)
-                                        {
-                                            // Remove unit bit and convert to microseconds.
-                                            resp_dly[i] &= ~RESP_DLY_UNIT_MASK;
-                                            resp_dly[i] *= 1000;
-                                        }
+                                        // Remove unit bit and convert to microseconds.
+                                        resp_dly[i] &= ~RESP_DLY_UNIT_MASK;
+                                        resp_dly[i] *= 1000;
                                     }
-                                    // Update delay between poll transmission and response reception.
-                                    // Use uint64 for resp_dly here to avoid overflows if it is more than 400 ms.
-                                    inst->txToRxDelayTag_sy = US_TO_SY_INT((uint64)resp_dly[RESP_DLY_ANC] - inst->frameLengths_us[POLL]) - RX_START_UP_SY;
-                                    // Update delay between poll transmission and final transmission.
-                                    final_reply_delay_us = resp_dly[RESP_DLY_ANC] + resp_dly[RESP_DLY_TAG];
-                                    inst->finalReplyDelay = convertmicrosectodevicetimeu(final_reply_delay_us);
-                                    inst->finalReplyDelay_ms = CEIL_DIV(final_reply_delay_us, 1000);
-                                    // If we are using long response delays, deactivate sleep.
-                                    if (resp_dly[RESP_DLY_ANC] >= LONG_RESP_DLY_LIMIT_US
-                                        || resp_dly[RESP_DLY_TAG] >= LONG_RESP_DLY_LIMIT_US)
-                                    {
-                                        inst->sleepingEabled = 0;
-                                    }
+                                }
+                                // Update delay between poll transmission and response reception.
+                                // Use uint64 for resp_dly here to avoid overflows if it is more than 400 ms.
+                                inst->txToRxDelayTag_sy = US_TO_SY_INT((uint64)resp_dly[RESP_DLY_ANC] - inst->frameLengths_us[POLL]) - RX_START_UP_SY;
+                                // Update delay between poll transmission and final transmission.
+                                final_reply_delay_us = resp_dly[RESP_DLY_ANC] + resp_dly[RESP_DLY_TAG];
+                                inst->finalReplyDelay = convertmicrosectodevicetimeu(final_reply_delay_us);
+                                inst->finalReplyDelay_ms = CEIL_DIV(final_reply_delay_us, 1000);
+                                // If we are using long response delays, deactivate sleep.
+                                if (resp_dly[RESP_DLY_ANC] >= LONG_RESP_DLY_LIMIT_US
+                                    || resp_dly[RESP_DLY_TAG] >= LONG_RESP_DLY_LIMIT_US)
+                                {
+                                    inst->sleepingEabled = 0;
+                                }
 
 #if (USING_64BIT_ADDR == 1)
-                                    memcpy(&inst->msg.destAddr[0], &srcAddr[0], ADDR_BYTE_SIZE_L); //set the anchor address for the reply (set destination address)
+                                memcpy(&inst->msg[inst->tagToRangeWith].destAddr[0], &srcAddr[0], ADDR_BYTE_SIZE_L); //set the anchor address for the reply (set destination address)
 #else
-                                    memcpy(&inst->msg.destAddr[0], &srcAddr[0], ADDR_BYTE_SIZE_S); //set anchor address for the reply (set destination address)
-                                    inst->msg.sourceAddr[0] =  messageData[RES_R1]; //set tag short address
-                                    inst->msg.sourceAddr[1] =  messageData[RES_R2];
-                                    dwt_setaddress16(inst->tagShortAdd);
+                                memcpy(&inst->msg[inst->tagToRangeWith].destAddr[0], &srcAddr[0], ADDR_BYTE_SIZE_S); //set anchor address for the reply (set destination address)
+                                inst->msg[inst->tagToRangeWith].sourceAddr[0] =  messageData[RES_R1]; //set tag short address
+                                inst->msg[inst->tagToRangeWith].sourceAddr[1] =  messageData[RES_R2];
+                                dwt_setaddress16(inst->tagShortAdd); //NOTE tagShortAdd might need to be reworked for TAG...
 #endif
 
-                                    memcpy(&inst->relpyAddress[0], &srcAddr[0], ADDR_BYTE_SIZE_L); //remember who to send the reply to (set destination address)
+                                //NOTE this might be a problem...
+                                memcpy(&inst->relpyAddress[0], &srcAddr[0], ADDR_BYTE_SIZE_L); //remember who to send the reply to (set destination address)
 
-                                    inst->mode = TAG ;
-                                    //inst->responseTimeouts = 0; //reset timeout count
-                                    inst->goToSleep = 0; //don't go to sleep - start ranging instead and then sleep after 1 range is done or poll times out
-                                    inst->instanceTimerTimeSaved = inst->instanceTimerTime = portGetTickCnt(); //set timer base
-                                }
+                                inst->mode = TAG ;
+                                //inst->responseTimeouts = 0; //reset timeout count
+                                inst->goToSleep = 0; //don't go to sleep - start ranging instead and then sleep after 1 range is done or poll times out
+                                inst->instanceTimerTimeSaved = inst->instanceTimerTime = portGetTickCnt(); //set timer base
+
+
+
+//                                 //NOTE this is the poll message sent by the tag to initiate the handshake
+//                                 if(inst->mode == TAG_TDOA) //only start ranging with someone if not ranging already
+//                                 {
+//                                     uint32 final_reply_delay_us;
+//                                     uint32 resp_dly[RESP_DLY_NB];
+//                                     int i;
+
+//                                     inst->testAppState = TA_TXE_WAIT;
+//                                     inst->nextState = TA_TXPOLL_WAIT_SEND ; // send next poll
+
+//                                     inst->tagShortAdd = messageData[RNG_INIT_TAG_SHORT_ADDR_LO]
+//                                                         + (messageData[RNG_INIT_TAG_SHORT_ADDR_HI] << 8) ;
+
+//                                     // Get response delays from message and update internal timings accordingly
+//                                     resp_dly[RESP_DLY_ANC] =  messageData[RNG_INIT_ANC_RESP_DLY_LO]
+//                                                               + (messageData[RNG_INIT_ANC_RESP_DLY_HI] << 8);
+//                                     resp_dly[RESP_DLY_TAG] =  messageData[RNG_INIT_TAG_RESP_DLY_LO]
+//                                                               + (messageData[RNG_INIT_TAG_RESP_DLY_HI] << 8);
+//                                     for (i = 0; i < RESP_DLY_NB; i++)
+//                                     {
+//                                         if (((resp_dly[i] & RESP_DLY_UNIT_MASK) >> RESP_DLY_UNIT_SHIFT) == RESP_DLY_UNIT_MS)
+//                                         {
+//                                             // Remove unit bit and convert to microseconds.
+//                                             resp_dly[i] &= ~RESP_DLY_UNIT_MASK;
+//                                             resp_dly[i] *= 1000;
+//                                         }
+//                                     }
+//                                     // Update delay between poll transmission and response reception.
+//                                     // Use uint64 for resp_dly here to avoid overflows if it is more than 400 ms.
+//                                     inst->txToRxDelayTag_sy = US_TO_SY_INT((uint64)resp_dly[RESP_DLY_ANC] - inst->frameLengths_us[POLL]) - RX_START_UP_SY;
+//                                     // Update delay between poll transmission and final transmission.
+//                                     final_reply_delay_us = resp_dly[RESP_DLY_ANC] + resp_dly[RESP_DLY_TAG];
+//                                     inst->finalReplyDelay = convertmicrosectodevicetimeu(final_reply_delay_us);
+//                                     inst->finalReplyDelay_ms = CEIL_DIV(final_reply_delay_us, 1000);
+//                                     // If we are using long response delays, deactivate sleep.
+//                                     if (resp_dly[RESP_DLY_ANC] >= LONG_RESP_DLY_LIMIT_US
+//                                         || resp_dly[RESP_DLY_TAG] >= LONG_RESP_DLY_LIMIT_US)
+//                                     {
+//                                         inst->sleepingEabled = 0;
+//                                     }
+
+// #if (USING_64BIT_ADDR == 1)
+//                                     memcpy(&inst->msg.destAddr[0], &srcAddr[0], ADDR_BYTE_SIZE_L); //set the anchor address for the reply (set destination address)
+// #else
+//                                     memcpy(&inst->msg.destAddr[0], &srcAddr[0], ADDR_BYTE_SIZE_S); //set anchor address for the reply (set destination address)
+//                                     inst->msg.sourceAddr[0] =  messageData[RES_R1]; //set tag short address
+//                                     inst->msg.sourceAddr[1] =  messageData[RES_R2];
+//                                     dwt_setaddress16(inst->tagShortAdd);
+// #endif
+
+//                                     memcpy(&inst->relpyAddress[0], &srcAddr[0], ADDR_BYTE_SIZE_L); //remember who to send the reply to (set destination address)
+
+//                                     inst->mode = TAG ;
+//                                     //inst->responseTimeouts = 0; //reset timeout count
+//                                     inst->goToSleep = 0; //don't go to sleep - start ranging instead and then sleep after 1 range is done or poll times out
+//                                     inst->instanceTimerTimeSaved = inst->instanceTimerTime = portGetTickCnt(); //set timer base
+//                                 }
                                 //printf("GOT RTLS_DEMO_MSG_RNG_INIT - start ranging - \n");
                                 //else we ignore this message if already associated... (not TAG_TDOA)
                             }
@@ -742,6 +1099,8 @@ int testapprun(instance_data_t *inst, int message)
 
                             case RTLS_DEMO_MSG_TAG_POLL:
                             {
+                                // send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-RTLS_DEMO_MSG_TAG_POLL ");
+                                // send_rxmsgtousb("RX message fcode: RTLS_DEMO_MSG_TAG_POLL");
                                 if(inst->mode == LISTENER) //don't process any ranging messages when in Listener mode
                                 {
                                     //only enable receiver when not using double buffering
@@ -749,10 +1108,12 @@ int testapprun(instance_data_t *inst, int message)
                                     break;
                                 }
 
-                                if (!inst->frameFilteringEnabled)
+
+                                if (!inst->frameFilteringEnabled) //NOTE this might cause problems... might need to move somewhere else
                                 {
                                     // if we missed the ACK to the ranging init message we may not have turned frame filtering on
                                     dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN); //we are starting ranging - enable the filter....
+                                    
                                     inst->frameFilteringEnabled = 1 ;
                                 }
 
@@ -772,6 +1133,8 @@ int testapprun(instance_data_t *inst, int message)
 
                             case RTLS_DEMO_MSG_ANCH_RESP:
                             {
+                                // send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-RTLS_DEMO_MSG_ANCH_RESP ");
+                                // send_rxmsgtousb("RX message fcode: RTLS_DEMO_MSG_ANCH_RESP");
                                 if(inst->mode == LISTENER) //don't process any ranging messages when in Listener mode
                                 {
                                     inst->testAppState = TA_RXE_WAIT ;              // wait for next frame
@@ -795,6 +1158,7 @@ int testapprun(instance_data_t *inst, int message)
 
                             case RTLS_DEMO_MSG_TAG_FINAL:
                             {
+                                send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-RTLS_DEMO_MSG_TAG_FINAL ");
                                 int64 Rb, Da, Ra, Db ;
                                 uint64 tagFinalTxTime  = 0;
                                 uint64 tagFinalRxTime  = 0;
@@ -850,7 +1214,20 @@ int testapprun(instance_data_t *inst, int message)
                                 inst->newRangeAncAddress = inst->eui64[0] + ((uint16) inst->eui64[1] << 8);
                                 //inst->lastReportTime = time_ms;
 
-                                inst->testAppState = TA_RXE_WAIT ;              // wait for next frame
+                                // inst->testAppState = TA_RXE_WAIT ;              // wait for next frame
+                                // ranging complete with one of the tags, lets go back to listening for blinks/polls!
+                                
+                                //keep track of when the tag was last ranged to
+                                // inst->finalTimeStamp[inst->tagToRangeWith] = tagFinalRxTime;
+                                
+                                inst->testAppState = TA_RXE_WAIT ;
+                                inst->previousState = TA_INIT;
+                                inst->nextState = TA_INIT;
+                                inst->prevTagToRangeWith = inst->tagToRangeWith;
+                                inst->tagToRangeWith = 255;
+                                inst->frameFilteringEnabled = 0;
+                                dwt_enableframefilter(DWT_FF_NOTYPE_EN);
+                                
                                 dwt_setrxaftertxdelay(0);
 
                                 instancesetantennadelays(); //this will update the antenna delay if it has changed
@@ -861,9 +1238,14 @@ int testapprun(instance_data_t *inst, int message)
 
                             default:
                             {
+                                if(inst->mode == ANCHOR)
+                                {
+                                    send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-default ");
+                                }
+                                //send_rxmsgtousb("RX message fcode: default");
                                 inst->testAppState = TA_RXE_WAIT ;              // wait for next frame
                                 dwt_setrxaftertxdelay(0);
-
+                                
                             }
                             break;
                         } //end switch (fcode)
@@ -882,6 +1264,10 @@ int testapprun(instance_data_t *inst, int message)
                 break ; //end of DWT_SIG_RX_OKAY
 
                 case DWT_SIG_RX_TIMEOUT :
+                    if(inst->mode == ANCHOR)
+                    {
+                        send_rxmsgtousb("RX process: DWT_SIG_RX_TIMEOUT ");
+                    }
                     instance_getevent(17); //get and clear this event
                     //printf("PD_DATA_TIMEOUT %d\n", inst->previousState) ;
                     inst_processrxtimeout(inst);
@@ -892,14 +1278,23 @@ int testapprun(instance_data_t *inst, int message)
                 case 0:
                 default :
                 {
+                    if(inst->mode == ANCHOR)
+                    {   
+                        send_rxmsgtousb("RX process: default ");
+                    }
                     //if(DWT_SIG_TX_AA_DONE == message) printf("Got SIG_TX_AA_DONE in RX wait - ignore\n");
                     if(done == INST_NOT_DONE_YET) done = INST_DONE_WAIT_FOR_NEXT_EVENT;
+                    // inst->testAppState = TA_RXE_WAIT;
                 }
                 break;
 
             }
             break ; // end case TA_RX_WAIT_DATA
-            default:
+        default:
+            if (inst->mode == ANCHOR)
+            {
+                send_statetousb(inst);
+            }
                 //printf("\nERROR - invalid state %d - what is going on??\n", inst->testAppState) ;
             break;
     } // end switch on testAppState
@@ -934,7 +1329,9 @@ int instance_init_s(int mode)
 
     dwt_setcallbacks(instance_txcallback, instance_rxgoodcallback, instance_rxtimeoutcallback, instance_rxerrorcallback);
 
-    inst->anchorListIndex = 0 ;
+    //inst->anchorListIndex = 0 ;
+    inst->tagToRangeWith = 255;
+    inst->prevTagToRangeWith = 255;
 
     return 0 ;
 }

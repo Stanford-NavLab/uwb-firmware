@@ -21,6 +21,9 @@ extern "C" {
 #include "deca_types.h"
 #include "deca_device_api.h"
 
+
+
+
 /******************************************************************************************************************
 ********************* NOTES on Decaranging EVK1000 application features/options ***********************************************************
 *******************************************************************************************************************/
@@ -131,11 +134,12 @@ enum
 #define BLINK_FRAME_CRTL_AND_ADDRESS    (BLINK_FRAME_SOURCE_ADDRESS + BLINK_FRAME_CTRLP) //10 bytes
 #define BLINK_FRAME_LEN_BYTES           (BLINK_FRAME_CRTL_AND_ADDRESS + BLINK_FRAME_CRC)
 
-#define TAG_LIST_SIZE				(1)	//anchor will range with 1st Tag it gets blink from
+#define TAG_LIST_SIZE				    (10)	//anchor will range with 1st Tag it gets blink from
+#define TAG_COMM_TIMEOUT                3000    //ms
 
-#define BLINK_SLEEP_DELAY					1000 //ms
-#define POLL_SLEEP_DELAY					500 //ms
-//#define POLL_SLEEP_DELAY					50 //ms	//NOTE 200 gives 5 Hz range period
+#define BLINK_SLEEP_DELAY					1000    //ms
+#define POLL_SLEEP_DELAY					500     //ms
+//#define POLL_SLEEP_DELAY					50      //ms	//NOTE 200 gives 5 Hz range period
 
 
 #define IMMEDIATE_RESPONSE (1)
@@ -243,7 +247,7 @@ typedef enum instanceModes{LISTENER, TAG, ANCHOR, TAG_TDOA, NUM_MODES} INST_MODE
 
 typedef enum inst_states
 {
-    TA_INIT, //0
+    TA_INIT,                    //0
 
     TA_TXE_WAIT,                //1
     TA_TXPOLL_WAIT_SEND,        //2
@@ -256,7 +260,8 @@ typedef enum inst_states
 
     TA_SLEEP_DONE,              //9
     TA_TXBLINK_WAIT_SEND,       //10
-    TA_TXRANGINGINIT_WAIT_SEND  //11
+    TA_TXRANGINGINIT_WAIT_SEND, //11
+    TA_TX_SELECT                //12
 } INST_STATES;
 
 
@@ -419,10 +424,10 @@ typedef struct
 	//message structures used for transmitted messages
 #if (USING_64BIT_ADDR == 1)
 	srd_msg_dlsl rng_initmsg ;	// ranging init message (destination long, source long)
-    srd_msg_dlsl msg ;			// simple 802.15.4 frame structure (used for tx message) - using long addresses
+    srd_msg_dlsl msg[TAG_LIST_SIZE] ; // simple 802.15.4 frame structure (used for tx message) - using long addresses
 #else
 	srd_msg_dlss rng_initmsg ;  // ranging init message (destination long, source short)
-    srd_msg_dsss msg ;			// simple 802.15.4 frame structure (used for tx message) - using short addresses
+    srd_msg_dsss msg[TAG_LIST_SIZE] ; // simple 802.15.4 frame structure (used for tx message) - using short addresses
 #endif
 	iso_IEEE_EUI64_blink_msg blinkmsg ; // frame structure (used for tx blink message)
 
@@ -454,6 +459,8 @@ typedef struct
 
 
     //diagnostic counters/data, results and logging
+    
+
     int32 tof32 ;
     int64 tof ;
     double clockOffset ;
@@ -483,8 +490,12 @@ typedef struct
 
 	uint8 tagToRangeWith;	//it is the index of the tagList array which contains the address of the Tag we are ranging with
     uint8 tagListLen ;
-    uint8 anchorListIndex ;
+    uint8 prevTagToRangeWith ;
 	uint8 tagList[TAG_LIST_SIZE][8];
+    
+    // keep track of when final messages so we can drop tags that we havent communicated with in a while
+    uint32 lastCommTimeStamp[TAG_LIST_SIZE] ;
+    uint8 tagTimeout[TAG_LIST_SIZE] ;    
 
 
 	//event queue - used to store DW1000 events as they are processed by the dw_isr/callback functions
@@ -510,7 +521,9 @@ int reportTOF(instance_data_t *inst);
 void instanceclearcounts(void) ;
 void instcleartaglist(void);
 void instsettagtorangewith(int tagID);
-int instaddtagtolist(instance_data_t *inst, uint8 *tagAddr);
+int instaddwaketagilist(instance_data_t *inst, uint8 *tagAddr);
+int instcheckawaketaginlist(instance_data_t *inst, uint8 *tagAddr);
+int instfindfirstawaketaginlist(instance_data_t *inst, uint8 startindex);
 
 void instance_readaccumulatordata(void);
 //-------------------------------------------------------------------------------------------------------------
@@ -606,6 +619,13 @@ int instance_starttxtest(int framePeriod);
 
 
 instance_data_t* instance_get_local_structure_ptr(unsigned int x);
+
+
+void send_statetousb(instance_data_t *inst);
+void send_rxmsgtousb(char *data);
+void send_txmsgtousb(char *data);
+char* get_msg_fcode_string(int fcode);
+
 
 #ifdef __cplusplus
 }
