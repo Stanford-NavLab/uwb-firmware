@@ -10,8 +10,8 @@
  *
  */
 
-#ifndef _DECA_VERSION_H_
-#define _DECA_VERSION_H_
+#ifndef DECA_VERSION_H_
+#define DECA_VERSION_H_
 
 //
 // The DW1000 device driver is separately version numbered to any version the application using it may have

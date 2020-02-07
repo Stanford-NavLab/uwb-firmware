@@ -18,10 +18,13 @@
 #include "deca_types.h"
 #include "deca_spi.h"
 
-#include "usbd_cdc_core.h"
+//#include "usbd_cdc_core.h"
 #include "usbd_usr.h"
 #include "usb_conf.h"
 #include "usbd_desc.h"
+
+
+
 
 /** @defgroup USB_VCP_Private_Variables
   * @{

@@ -139,7 +139,7 @@ int readfromspi
     {
     	SPIx->DR = 0;  // Dummy write as we read the message body
 
-    	while((SPIx->SR & SPI_I2S_FLAG_RXNE) == (uint16_t)RESET);
+    	while((SPIx->SR & SPI_I2S_FLAG_RXNE) == (uint16_t)RESET){};
 
 	   	readBuffer[i] = SPIx->DR ;//port_SPIx_receive_data(); //this clears RXNE bit
     }

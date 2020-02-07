@@ -9,8 +9,8 @@
  * All rights reserved.
  *
  */
-#ifndef _DECA_PARAM_TYPES_H_
-#define _DECA_PARAM_TYPES_H_
+#ifndef DECA_PARAM_TYPES_H_
+#define DECA_PARAM_TYPES_H_
 
 #ifdef __cplusplus
 extern "C" {

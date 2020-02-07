@@ -20,7 +20,14 @@
 #include "lib.h"
 #include "instance.h"
 
-// #include "deca_usb.h"
+#include <stdio.h>
+
+
+
+extern void usb_run(void);
+extern int usb_init(void);
+extern void usb_printconfig(int, uint8*, int);
+extern void send_usbmessage(uint8*, int);
 
 //NOTE: my added USB debug values/functions
 #define USB_DEBUG_BUFF_LEN (100)
@@ -173,14 +180,15 @@ char* get_msg_fcode_string(int fcode)
 
 void send_statetousb(instance_data_t *inst)
 {
-    // usbrxdebugdata[0] = 0x2 ;  //return cursor home
+    
     int usbdebugdata_size = sprintf((char*)&usbdebugdata[0], "%s , %s , %s , %s", get_inst_states_string(inst->testAppState), get_inst_states_string(inst->previousState), get_inst_states_string(inst->nextState), get_instanceModes_string(inst->mode));
      
-    memcpy(usbdebugdata, usbdebugdata, usbdebugdata_size);
-    if (strncmp(usbdebugdataprev, usbdebugdata, usbdebugdata_size) != 0 || usbdebugdata_size != usbdebugdataprev_size)
+    // memcpy(usbdebugdata, usbdebugdata, usbdebugdata_size);
+    // if (strncmp(usbdebugdataprev, usbdebugdata, usbdebugdata_size) != 0 || usbdebugdata_size != usbdebugdataprev_size)
+    if (memcmp(usbdebugdataprev, usbdebugdata, usbdebugdata_size) != 0 || usbdebugdata_size != usbdebugdataprev_size)
     {
-        
         // send_usbmessage("start", 5);
+
         // usb_run();
         send_usbmessage(&usbdebugdata[0], usbdebugdata_size);
         usb_run();
@@ -198,8 +206,9 @@ void send_rxmsgtousb(char *data)
     // usbrxdebugdata[0] = 0x2 ;  //return cursor home
     int usbrxdebugdata_size = sprintf((char*)&usbrxdebugdata[0], "%s", data);
      
-    memcpy(usbrxdebugdata, usbrxdebugdata, usbrxdebugdata_size);
-    if (strncmp(usbrxdebugdataprev, usbrxdebugdata, usbrxdebugdata_size) != 0 || usbrxdebugdata_size != usbrxdebugdataprev_size)
+    //memcpy(usbrxdebugdata, usbrxdebugdata, usbrxdebugdata_size);
+    // if (strncmp(usbrxdebugdataprev, usbrxdebugdata, usbrxdebugdata_size) != 0 || usbrxdebugdata_size != usbrxdebugdataprev_size)
+    if (memcmp(usbrxdebugdataprev, usbrxdebugdata, usbrxdebugdata_size) != 0 || usbrxdebugdata_size != usbrxdebugdataprev_size)
     {
         // n = sprintf((char*)&usbtmpmsg[0], "prev: %s curr: %s", (char*)&usbrxdebugdata, (char*)&usbrxdebugdataprev);
         // send_usbmessage(&usbtmpmsg[0], n);
@@ -241,6 +250,8 @@ void send_txmsgtousb(char *data)
 int testapprun(instance_data_t *inst, int message)
 {
     int done = INST_NOT_DONE_YET;
+    
+    printf("Test 123");
 
     // uint8 debug_msg[100];
     // int n = sprintf((char*)&debug_msg[0], "Test app run");
@@ -464,7 +475,7 @@ int testapprun(instance_data_t *inst, int message)
                 }
 #endif
                 //DW1000 gone to sleep - report the received range
-                if(inst->tof > 0) //if ToF == 0 - then no new range to report
+                if(inst->tof[inst->tagToRangeWith] > 0) //if ToF == 0 - then no new range to report
                 {
                     if(reportTOF(inst)==0)
                     {
@@ -487,8 +498,7 @@ int testapprun(instance_data_t *inst, int message)
                 // {
                     send_statetousb(inst);
                 // }
-                //send_txmsgtousb("BLINK");
-
+                
                 int flength = (BLINK_FRAME_CRTL_AND_ADDRESS + FRAME_CRC);
 
                 //blink frames with IEEE EUI-64 tag ID
@@ -505,7 +515,17 @@ int testapprun(instance_data_t *inst, int message)
                 //set the delayed rx on time (the ranging init will be sent after this delay)
                 dwt_setrxaftertxdelay((uint32)inst->rnginitW4Rdelay_sy);  //units are 1.0256us - wait for wait4respTIM before RX on (delay RX)
 
-                dwt_starttx(DWT_START_TX_IMMEDIATE | inst->wait4ack); //always using immediate TX and enable dealyed RX
+                int tx_stat = dwt_starttx(DWT_START_TX_IMMEDIATE | inst->wait4ack); //always using immediate TX and enable dealyed RX
+                
+                if(tx_stat == 0)
+                {
+                    send_txmsgtousb("BLINK-SUCCESS");
+                }
+                else
+                {
+                    send_txmsgtousb("BLINK-ERROR");
+                }
+                
 
                 inst->goToSleep = 1; //go to Sleep after this blink
                 inst->testAppState = TA_TX_WAIT_CONF ; // wait confirmation
@@ -717,13 +737,14 @@ int testapprun(instance_data_t *inst, int message)
                 {
                     if(dw_event->type == DWT_SIG_RX_TIMEOUT) //got RX timeout - i.e. did not get the response (e.g. ACK)
                     {
+                        
                         // printf("RX timeout in TA_TX_WAIT_CONF (%d)\n", inst->previousState);
                         //we need to wait for SIG_TX_DONE and then process the timeout and re-send the frame if needed
                         inst->gotTO = 1;
                     }
 
-                    done = INST_DONE_WAIT_FOR_NEXT_EVENT;
                     send_rxmsgtousb("RX process: (1st) got TO in TA_TX_WAIT_CONF");
+                    done = INST_DONE_WAIT_FOR_NEXT_EVENT;
                     break;
 
                 }
@@ -745,8 +766,8 @@ int testapprun(instance_data_t *inst, int message)
                 }
                 else if (inst->gotTO) //timeout
                 {
-                    //printf("got TO in TA_TX_WAIT_CONF\n");
-                    send_rxmsgtousb("RX process: (2nd) got TO in TA_TX_WAIT_CONF");
+                    // printf("got TO in TA_TX_WAIT_CONF\n");
+                    // send_rxmsgtousb("RX process: (2nd) got TO in TA_TX_WAIT_CONF");
                     inst_processrxtimeout(inst);
                     inst->gotTO = 0;
                     inst->wait4ack = 0 ; //clear this
@@ -1147,9 +1168,9 @@ int testapprun(instance_data_t *inst, int message)
 
                                 inst->canPrintInfo = 2;
 
-                                inst->tof = 0;
+                                inst->tof[inst->tagToRangeWith] = 0;
                                 //copy previously calculated ToF
-                                memcpy(&inst->tof, &(messageData[TOFR]), 5);
+                                memcpy(&inst->tof[inst->tagToRangeWith], &(messageData[TOFR]), 5);
 
                                 inst->newRangeAncAddress = srcAddr[0] + ((uint16) srcAddr[1] << 8);
                                 inst->newRangeTagAddress = inst->eui64[0] + ((uint16) inst->eui64[1] << 8);
@@ -1204,7 +1225,7 @@ int testapprun(instance_data_t *inst, int message)
                                 RayDa = ((double)Ra + (double)Da);
 
                                 //time-of-flight
-                                inst->tof = (int64) ( RaRbxDaDb/(RbyDb + RayDa) );
+                                inst->tof[inst->tagToRangeWith] = (int64) ( RaRbxDaDb/(RbyDb + RayDa) );
 
                                 if(reportTOF(inst) == 0)
                                 {
@@ -1264,10 +1285,10 @@ int testapprun(instance_data_t *inst, int message)
                 break ; //end of DWT_SIG_RX_OKAY
 
                 case DWT_SIG_RX_TIMEOUT :
-                    if(inst->mode == ANCHOR)
-                    {
+                    // if(inst->mode == ANCHOR)
+                    // {
                         send_rxmsgtousb("RX process: DWT_SIG_RX_TIMEOUT ");
-                    }
+                    // }
                     instance_getevent(17); //get and clear this event
                     //printf("PD_DATA_TIMEOUT %d\n", inst->previousState) ;
                     inst_processrxtimeout(inst);
@@ -1291,10 +1312,10 @@ int testapprun(instance_data_t *inst, int message)
             }
             break ; // end case TA_RX_WAIT_DATA
         default:
-            if (inst->mode == ANCHOR)
-            {
+            // if (inst->mode == ANCHOR)
+            // {
                 send_statetousb(inst);
-            }
+            // }
                 //printf("\nERROR - invalid state %d - what is going on??\n", inst->testAppState) ;
             break;
     } // end switch on testAppState

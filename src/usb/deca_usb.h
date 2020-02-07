@@ -10,12 +10,15 @@
  *
  * @author DecaWave
  */
+#ifndef DECA_USB_H_
+#define DECA_USB_H_
 
 /* Includes */
 #include "port.h"
-
+//#include "port.h"
+//
 #include "usbd_cdc_core.h"
-#include "usbd_conf.h"
+//#include "usbd_conf.h"
 
 //local data
 extern int local_buff_length;
@@ -53,3 +56,4 @@ CDC_IF_Prop_TypeDef VCP_fops =
 		DW_VCP_DataRx
 };
 
+#endif

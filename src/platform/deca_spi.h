@@ -11,8 +11,8 @@
  * @author DecaWave
  */
 
-#ifndef _DECA_SPI_H_
-#define _DECA_SPI_H_
+#ifndef DECA_SPI_H_
+#define DECA_SPI_H_
 
 #ifdef __cplusplus
 extern "C" {

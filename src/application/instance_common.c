@@ -17,6 +17,11 @@
 
 #include "instance.h"
 
+extern void usb_run(void);
+extern int usb_init(void);
+extern void usb_printconfig(int, uint8*, int);
+extern void send_usbmessage(uint8*, int);
+
 
 // -------------------------------------------------------------------------------------------------------------------
 //      Data Definitions
@@ -117,7 +122,7 @@ int reportTOF(instance_data_t *inst)
 	int64 tofi ;
 
 	// check for negative results and accept them making them proper negative integers
-	tofi = inst->tof ;                          // make it signed
+	tofi = inst->tof[inst->tagToRangeWith] ;                          // make it signed
 	if (tofi > 0x007FFFFFFFFF)                          // MP counter is 40 bits,  close up TOF may be negative
 	{
 		tofi -= 0x010000000000 ;                       // subtract fill 40 bit range to make it negative
@@ -355,11 +360,6 @@ int instanceanchorwaiting(void)
 	return instance_data[0].canPrintInfo;
 }
 
-//NOTE quick hack by me
-void resetinstanceanchorwaiting(void)
-{
-	return instance_data[0].canPrintInfo;
-}
 
 int instancesleeping(void)
 {
@@ -416,7 +416,11 @@ int instance_init(void)
 
     instance_data[instance].tofIndex = 0;
     instance_data[instance].tofCount = 0;
-    instance_data[instance].tof = 0;
+    for(uint8 i=0; i<TAG_LIST_SIZE; i++)
+	{
+		instance_data[instance].tof[i] = 0;
+	}
+	
 
     // Reset the IC (might be needed if not getting here from POWER ON)
     dwt_softreset();
@@ -753,10 +757,13 @@ double instance_get_adist(void) //get average range
 void inst_processrxtimeout(instance_data_t *inst)
 {
 	send_statetousb(inst);
+
+#ifdef USB_SUPPORT //this is set in the port.h file
 	uint8 debug_msg[100];
 	int n = sprintf((char*)&debug_msg[0], "inst_processrxtimeout(), tagToRangeWith: %i, taglistlen: %i", inst->tagToRangeWith, inst->tagListLen);
 	send_usbmessage(&debug_msg[0], n);
 	usb_run();
+#endif
 	
     if(inst->mode == ANCHOR) //we did not receive the final/ACK - wait for next poll
     {
@@ -902,7 +909,8 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 			}
 			else
 				rxd_event = SIG_RX_UNKNOWN;
-				break;
+			
+			break;
 
 		//ACK type frame - not supported in this SW - set as unknown (re-enable RX)
 		case 0x02:
@@ -1036,7 +1044,7 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				else
 				{
 					tag_index = 255;
-					instance_data[instance].tagToRangeWith == 255;
+					instance_data[instance].tagToRangeWith = 255;
 				}
 			}
 			else if(rxd_event == DWT_SIG_RX_BLINK && instance_data[instance].mode == ANCHOR)
@@ -1049,7 +1057,7 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				else
 				{
 					tag_index = 255;
-					instance_data[instance].tagToRangeWith == 255;
+					instance_data[instance].tagToRangeWith = 255;
 				}
 			}
 		}
@@ -1104,9 +1112,9 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 					memcpy(&instance_data[instance].msg[tag_index].destAddr[0], &dw_event.msgu.frame[srcAddr_index], ADDR_BYTE_SIZE_S); //remember who to send the reply to (set destination address)
 #endif
 					// Write calculated TOF into response message
-					memcpy(&(instance_data[instance].msg[tag_index].messageData[TOFR]), &instance_data[instance].tof, 5);
+					memcpy(&(instance_data[instance].msg[tag_index].messageData[TOFR]), &instance_data[instance].tof[tag_index], 5);
 
-					instance_data[instance].tof = 0; //clear ToF ..
+					instance_data[instance].tof[tag_index] = 0; //clear ToF ..
 
 
 					instance_data[instance].msg[tag_index].seqNum = instance_data[instance].frameSN++;
@@ -1171,8 +1179,8 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 	//treat as error
 	if(!event_placed)
 	{
-		// instance_rxerrorcallback(rxd);
-		instancerxon(&instance_data[instance], 0, 0); //immediate enable 
+		instance_rxerrorcallback(rxd);
+		//instancerxon(&instance_data[instance], 0, 0); //immediate enable 
 	}
 
 	
@@ -1321,6 +1329,8 @@ event_data_t* instance_getevent(int x)
 	int instance = 0;
 	int indexOut = instance_data[instance].dweventIdxOut;
 
+	instance_data_t idt = instance_data[instance];
+
 	if(instance_data[instance].dwevent[indexOut].type == 0) //exit with "no event"
 	{
 		dw_event_g.type = 0;
@@ -1376,12 +1386,21 @@ int instance_run(void)
     int done = INST_NOT_DONE_YET;
     int message = instance_peekevent(); //get any of the received events from ISR
 
-
+	// send_rxmsgtousb("Instance Run 1");
 	while(done == INST_NOT_DONE_YET)
 	{
 		//int state = instance_data[instance].testAppState;
 		done = testapprun(&instance_data[instance], message) ;                                               // run the communications application
 
+		if(done == INST_DONE_WAIT_FOR_NEXT_EVENT)
+		{
+			// uint8 debug_msg[100];
+			// int n = sprintf((char*)&debug_msg[0], "done == INST_DONE_WAIT_FOR_NEXT_EVENT");
+			// send_usbmessage(&debug_msg[0], n);
+			// usb_run();
+			// send_rxmsgtousb("done == INST_DONE_WAIT_FOR_NEXT_EVENT");
+			
+		}
 		//we've processed message
 		message = 0;
 	}

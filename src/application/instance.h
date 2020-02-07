@@ -10,8 +10,8 @@
  *
  * @author DecaWave
  */
-#ifndef _INSTANCE_H_
-#define _INSTANCE_H_
+#ifndef INSTANCE_H_
+#define INSTANCE_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -338,7 +338,7 @@ typedef struct
 *******************************************************************************************************************
 *******************************************************************************************************************/
 
-#define MAX_EVENT_NUMBER (4)
+#define MAX_EVENT_NUMBER (8)
 //NOTE: Accumulators don't need to be stored as part of the event structure as when reading them only one RX event can happen...
 //the receiver is singly buffered and will stop after a frame is received
 
@@ -461,8 +461,8 @@ typedef struct
     //diagnostic counters/data, results and logging
     
 
-    int32 tof32 ;
-    int64 tof ;
+    // int32 tof32 ;
+    int64 tof[TAG_LIST_SIZE] ;
     double clockOffset ;
 
     //counts for debug

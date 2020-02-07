@@ -385,6 +385,8 @@ int dw_main(void)
 
         if(inittestapplication(s1switch) == (uint32)-1)
         {
+            
+
             led_on(LED_ALL); //to display error....
             dataseq[0] = 0x2 ;  //return cursor home
             writetoLCD( 1, 0,  &dataseq[0]);

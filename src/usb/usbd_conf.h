@@ -26,8 +26,8 @@
   */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __USBD_CONF__H__
-#define __USBD_CONF__H__
+#ifndef USBD_CONF_H_
+#define USBD_CONF_H_
 
 /* Includes ------------------------------------------------------------------*/
 #include "usb_conf.h"

@@ -10,8 +10,8 @@
  *
  */
 
-#ifndef _DECA_DEVICE_API_H_
-#define _DECA_DEVICE_API_H_
+#ifndef DECA_DEVICE_API_H_
+#define DECA_DEVICE_API_H_
 
 #ifdef __cplusplus
 extern "C" {

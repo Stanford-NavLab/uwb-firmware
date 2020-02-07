@@ -27,8 +27,8 @@
 
 /* Define to prevent recursive inclusion -------------------------------------*/
 
-#ifndef __USB_DESC_H
-#define __USB_DESC_H
+#ifndef USB_DESC_H_
+#define USB_DESC_H_
 
 /* Includes ------------------------------------------------------------------*/
 #include "usbd_def.h"

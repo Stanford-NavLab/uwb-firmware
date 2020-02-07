@@ -26,8 +26,8 @@
   */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __USB_CONF__H__
-#define __USB_CONF__H__
+#ifndef USB_CONF_H_
+#define USB_CONF_H_
 
 /* Includes ------------------------------------------------------------------*/
 #if defined (USE_STM322xG_EVAL)

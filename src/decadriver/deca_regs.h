@@ -11,8 +11,8 @@
  *
  */
 
-#ifndef _DECA_REGS_H_
-#define _DECA_REGS_H_
+#ifndef DECA_REGS_H_
+#define DECA_REGS_H_
 
 #ifdef __cplusplus
 extern "C" {
