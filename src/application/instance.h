@@ -134,13 +134,11 @@ enum
 #define BLINK_FRAME_CRTL_AND_ADDRESS    (BLINK_FRAME_SOURCE_ADDRESS + BLINK_FRAME_CTRLP) //10 bytes
 #define BLINK_FRAME_LEN_BYTES           (BLINK_FRAME_CRTL_AND_ADDRESS + BLINK_FRAME_CRC)
 
-#define TAG_LIST_SIZE				    (10)	//anchor will range with 1st Tag it gets blink from
-#define TAG_COMM_TIMEOUT                3000    //ms
+#define UWB_LIST_SIZE				    (10)	//maximum number of UWBs to range with
+#define UWB_COMM_TIMEOUT                3000    //ms
 
 #define BLINK_SLEEP_DELAY					1000    //ms
 #define POLL_SLEEP_DELAY					500     //ms
-//#define POLL_SLEEP_DELAY					50      //ms	//NOTE 200 gives 5 Hz range period
-
 
 #define IMMEDIATE_RESPONSE (1)
 
@@ -381,7 +379,7 @@ typedef struct {
 
 typedef struct
 {
-    INST_MODE mode;				//instance mode (tag or anchor)
+    INST_MODE mode;				        //instance mode (tag or anchor)
     INST_STATES testAppState ;			//state machine - current state
     INST_STATES nextState ;				//state machine - next state
     INST_STATES previousState ;			//state machine - previous state
@@ -424,20 +422,23 @@ typedef struct
 	//message structures used for transmitted messages
 #if (USING_64BIT_ADDR == 1)
 	srd_msg_dlsl rng_initmsg ;	// ranging init message (destination long, source long)
-    srd_msg_dlsl msg[TAG_LIST_SIZE] ; // simple 802.15.4 frame structure (used for tx message) - using long addresses
+    srd_msg_dlsl msg[UWB_LIST_SIZE] ; // simple 802.15.4 frame structure (used for tx message) - using long addresses
 #else
 	srd_msg_dlss rng_initmsg ;  // ranging init message (destination long, source short)
-    srd_msg_dsss msg[TAG_LIST_SIZE] ; // simple 802.15.4 frame structure (used for tx message) - using short addresses
+    srd_msg_dsss msg[UWB_LIST_SIZE] ; // simple 802.15.4 frame structure (used for tx message) - using short addresses
 #endif
 	iso_IEEE_EUI64_blink_msg blinkmsg ; // frame structure (used for tx blink message)
 
 	//Tag function address/message configuration
 	uint8   eui64[8];				// devices EUI 64-bit address
-	uint16  tagShortAdd ;		    // Tag's short address (16-bit) used when USING_64BIT_ADDR == 0
+	uint16  uwbShortAdd;		    // UWB's short address (16-bit) used when USING_64BIT_ADDR == 0
     uint8   frameSN;				// modulo 256 frame sequence number - it is incremented for each new frame transmittion
 	uint16  panID ;					// panid used in the frames
 
-    uint8 relpyAddress[8] ;         // address of the anchor the tag is ranging with
+    uint8 addrByteSize;             // The bytelength used for addresses. 
+    // uint8 relpyAddress[8] ;         // address of the anchor the tag is ranging with
+
+
 
 	//64 bit timestamps
 	//union of TX timestamps
@@ -460,9 +461,7 @@ typedef struct
 
     //diagnostic counters/data, results and logging
     
-
-    // int32 tof32 ;
-    int64 tof[TAG_LIST_SIZE] ;
+    int64 tof[UWB_LIST_SIZE] ;
     double clockOffset ;
 
     //counts for debug
@@ -478,24 +477,27 @@ typedef struct
     int tofIndex ;
     int tofCount ;
 
-    double idistance ; // instantaneous distance
+    uint8 newRangeUWBIndex;
     int newRange;
     int newRangeAncAddress; //last 4 bytes of anchor address
     int newRangeTagAddress; //last 4 bytes of tag address
+
+    double idistance[UWB_LIST_SIZE];
+    double idistanceraw[UWB_LIST_SIZE];
 
     //if set to 1 then it means that DW1000 is in DEEP_SLEEP
     //so the ranging has finished and micro can output on USB/LCD
     //if sending data to LCD during ranging this limits the speed of ranging
     uint8 canPrintInfo ;
 
-	uint8 tagToRangeWith;	//it is the index of the tagList array which contains the address of the Tag we are ranging with
-    uint8 tagListLen ;
-    uint8 prevTagToRangeWith ;
-	uint8 tagList[TAG_LIST_SIZE][8];
+	uint8 uwbToRangeWith;	//it is the index of the uwbList array which contains the address of the UWB we are ranging with
+    uint8 uwbListLen ;
+    // uint8 prevTagToRangeWith ;
+	uint8 uwbList[UWB_LIST_SIZE][8];
     
-    // keep track of when final messages so we can drop tags that we havent communicated with in a while
-    uint32 lastCommTimeStamp[TAG_LIST_SIZE] ;
-    uint8 tagTimeout[TAG_LIST_SIZE] ;    
+    // keep track of when final messages so we can drop uwbs that we havent communicated with in a while
+    uint32 lastCommTimeStamp[UWB_LIST_SIZE] ;
+    uint8 uwbTimeout[UWB_LIST_SIZE] ;    
 
 
 	//event queue - used to store DW1000 events as they are processed by the dw_isr/callback functions
@@ -516,14 +518,14 @@ typedef struct
 //-------------------------------------------------------------------------------------------------------------
 
 // function to calculate and report the Time of Flight to the GUI/display
-int reportTOF(instance_data_t *inst);
+int reportTOF(instance_data_t *inst, uint8 uwb_index);
 // clear the status/ranging data 
 void instanceclearcounts(void) ;
-void instcleartaglist(void);
-void instsettagtorangewith(int tagID);
-int instaddwaketagilist(instance_data_t *inst, uint8 *tagAddr);
-int instcheckawaketaginlist(instance_data_t *inst, uint8 *tagAddr);
-int instfindfirstawaketaginlist(instance_data_t *inst, uint8 startindex);
+void instclearuwblist(void);
+// void instsetuwbtorangewith(int uwbID);
+int instaddactivateuwbinlist(instance_data_t *inst, uint8 *uwbAddr);
+int instcheckactiveuwbinlist(instance_data_t *inst, uint8 *uwbAddr);
+int instfindfirstactiveuwbinlist(instance_data_t *inst, uint8 startindex);
 
 void instance_readaccumulatordata(void);
 //-------------------------------------------------------------------------------------------------------------
@@ -542,7 +544,7 @@ int instance_init_s(int mode);
 void instance_config(instanceConfig_t *config) ;  
 
 void instancerxon(instance_data_t *inst, int delayed, uint64 delayedReceiveTime);
-void inst_processrxtimeout(instance_data_t *inst);
+void inst_processtxrxtimeout(instance_data_t *inst);
 
 int instancesendpacket(uint16 length, uint8 txmode, uint32 dtime);
 
@@ -572,14 +574,14 @@ int instancegetrole(void) ;
 uint32 instancereaddeviceid(void) ;                                 // Return Device ID reg, enables validation of physical device presence
 
 void instancerxon(instance_data_t *inst, int delayed, uint64 delayedReceiveTime);
-double instance_get_adist(void);
-double instance_get_idist(void);
-double instance_get_idistraw(void);
-int instance_get_lcount(void);
+// double instance_get_adist(void);
+double instance_get_idist(uint8 uwb_index);
+double instance_get_idistraw(uint8 uwb_index);
+// int instance_get_lcount(void);
 
 uint64 instance_get_addr(void); //get own address (8 bytes)
-uint64 instance_get_tagaddr(void); //get tag address (8 bytes)
-uint64 instance_get_anchaddr(void); //get anchor address (that sent the ToF)
+uint64 instance_get_uwbaddr(uint8 uwb_index); //get uwb address (8 bytes)
+// uint64 instance_get_anchaddr(void); //get anchor address (that sent the ToF)
 
 int instancenewrangeancadd(void);
 int instancenewrangetagadd(void);

@@ -66,6 +66,7 @@ int SysTick_Configuration(void)
 		while (1);
 	}
 	NVIC_SetPriority (SysTick_IRQn, 5);
+	// NVIC_SetPriority (SysTick_IRQn, 1);
 
 	return 0;
 }

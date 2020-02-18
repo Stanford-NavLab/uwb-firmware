@@ -295,7 +295,7 @@ int dw_main(void)
     int i = 0;
     int toggle = 1;
     double range_result = 0;
-    double avg_result = 0;
+//    double avg_result = 0;
     int canSleep;
 
     led_off(LED_ALL); //turn off all the LEDs
@@ -464,33 +464,12 @@ int dw_main(void)
 		instance_data_t* inst = instance_get_local_structure_ptr(0);
 		canSleep = instance_run(); //run the state machine!!!
 
-        //if delayed TX scheduled but did not happen after expected time then it has failed... (has to be < slot period)
-        //if anchor just go into RX and wait for next message from tags/anchors
-        //if tag handle as a timeout
-        if((inst->monitor == 1) && ((portGetTickCnt() - inst->timeofTx) > inst->finalReplyDelay_ms))
-        {
-			inst->wait4ack = 0;
-
-			if(instance_mode == TAG)
-			{
-				inst_processrxtimeout(inst);
-			}
-			else //if(instance_mode == ANCHOR)
-			{
-				dwt_forcetrxoff();	//this will clear all events
-				//enable the RX
-				inst->testAppState = TA_RXE_WAIT ;
-			}
-			inst->monitor = 0;
-        }
-
         if(instancenewrange())
         {
-        	int n, l = 0, /*txl = 0, rxl = 0,*/ aaddr, taddr, txa, rxa, rng, rng_raw;
+        	int n, /* txl = 0, rxl = 0,*/ aaddr, taddr, txa, rxa, rng, rng_raw;
             ranging = 1;
             //send the new range information to LCD and/or USB
-            range_result = instance_get_idist();
-            avg_result = instance_get_adist();
+            range_result = instance_get_idist(inst->newRangeUWBIndex);
             //set_rangeresult(range_result);
             dataseq[0] = 0x2 ;  //return cursor home
             writetoLCD( 1, 0,  dataseq);
@@ -499,44 +478,33 @@ int dw_main(void)
             memset(dataseq1, ' ', LCD_BUFF_LEN);
             sprintf((char*)&dataseq[1], "LAST: %4.2f m", range_result);
             writetoLCD( 40, 1, dataseq); //send some data
-
-            sprintf((char*)&dataseq1[1], "AVG8: %4.2f m", avg_result);
+            sprintf((char*)&dataseq1[0], "%llX", instance_get_uwbaddr(inst->newRangeUWBIndex));
+            // sprintf((char*)&dataseq1[1], "            ");
 
             writetoLCD( 16, 1, dataseq1); //send some data
 
-            l = instance_get_lcount();
-            //txl = instance_get_txl();
-            //rxl = instance_get_rxl();
             aaddr = instancenewrangeancadd();
             taddr = instancenewrangetagadd();
             txa =  instancetxantdly();
             rxa =  instancerxantdly();
             rng = (int) (range_result*1000);
-            rng_raw = (int) (instance_get_idistraw()*1000);
+            rng_raw = (int) (instance_get_idistraw(inst->newRangeUWBIndex)*1000); //TODO change this to use actual tag
 
             if(instance_mode == TAG)
             {
                 //n = sprintf((char*)&dataseq[0], "ia%04x t%04x %04x %04x %04x %04x %04x %02x %02x t", aaddr, taddr, rng, rng_raw, l, txa, rxa, txl, rxl);
-            	n = sprintf((char*)&dataseq[0], "ia%04x t%04x %08x %08x %04x %04x %04x t", aaddr, taddr, rng, rng_raw, l, txa, rxa);
+            	// n = sprintf((char*)&dataseq[0], "ia%04x t%04x %08x %08x %04x %04x %04x t", aaddr, taddr, rng, rng_raw, l, txa, rxa);
+                n = sprintf((char*)&dataseq[0], "ia%04x t%04x %08x %08x %04x %04x t", aaddr, taddr, rng, rng_raw, txa, rxa);
+                
             }
             else
             {
                 //n = sprintf((char*)&dataseq[0], "ia%04x t%04x %04x %04x %04x %04x %04x %02x %02x a", aaddr, taddr, rng, rng_raw, l, txa, rxa, txl, rxl);
             	//n = sprintf((char*)&dataseq[0], "ia%04x t%04x %08x %08x %04x %04x %04x %2.2f a", aaddr, taddr, rng, rng_raw, l, txa, rxa, instance_data[0].clockOffset);
-            	n = sprintf((char*)&dataseq[0], "ia%04x t%04x %08x %08x %04x %04x %04x a", aaddr, taddr, rng, rng_raw, l, txa, rxa);
-                //n = sprintf((char*)&dataseq[0], "TEST");
+            	// n = sprintf((char*)&dataseq[0], "ia%04x t%04x %08x %08x %04x %04x %04x a", aaddr, taddr, rng, rng_raw, l, txa, rxa);
+                n = sprintf((char*)&dataseq[0], "ia%04x t%04x %08x %08x %04x %04x a", aaddr, taddr, rng, rng_raw, txa, rxa);
+                
             }
-
-            
-//            ranging = 0;
-//            resetinstanceanchorwaiting();
-//            dataseq[0] = 0x2 ;  //return cursor home
-//            writetoLCD( 1, 0,  dataseq);
-//
-//            memcpy(&dataseq[0], (const uint8 *) "     RESET      ", 16);
-//           writetoLCD( 40, 1, dataseq); //send some data
-//            memcpy(&dataseq[0], (const uint8 *) "     RANGING    ", 16);
-//            writetoLCD( 16, 1, dataseq); //send some data
 
 
 #ifdef USB_SUPPORT //this is set in the port.h file
@@ -550,14 +518,6 @@ int dw_main(void)
         if(ranging == 0) //discovery/initialization mode for anchor and tag
         {
             
-            // dataseq[0] = 0x2 ;  //return cursor home
-            // writetoLCD( 1, 0,  dataseq);
-            // memcpy(&dataseq[0], (const uint8 *) "     RANGING    ", 16);
-            // writetoLCD( 40, 1, dataseq); //send some data
-            // memcpy(&dataseq[0], (const uint8 *) "      == 0      ", 16);
-            // writetoLCD( 16, 1, dataseq); //send some data
-            //Sleep(1000);
-
             if(instance_mode != ANCHOR)
             {
                 if(instancesleeping())
@@ -588,33 +548,17 @@ int dw_main(void)
                     ranging = 1;
                     dataseq[0] = 0x2 ;  //return cursor home
                     writetoLCD( 1, 0,  dataseq);
-                    memcpy(&dataseq[0], (const uint8 *) "    RANGING WITH", 16);
+                    memcpy(&dataseq[0], (const uint8 *) "    RANGING     ", 16);
                     writetoLCD( 40, 1, dataseq); //send some data
-                    sprintf((char*)&dataseq[0], "%016llX", instance_get_anchaddr());
+                    memcpy(&dataseq[0], (const uint8 *) "    STARTED     ", 16);
                     writetoLCD( 16, 1, dataseq); //send some data
                 }
             }
             else //if(instance_mode == ANCHOR)
             {
-                // dataseq[0] = 0x2 ;  //return cursor home
-                // writetoLCD( 1, 0,  dataseq);
-                // memcpy(&dataseq[0], (const uint8 *) "   AM AN        ", 16);
-                // writetoLCD( 40, 1, dataseq); //send some data
-                // memcpy(&dataseq[0], (const uint8 *) "    ANCHOR      ", 16);
-                // writetoLCD( 16, 1, dataseq); //send some data
-                //Sleep(1000);
 
                 if(instanceanchorwaiting())
                 {
-
-                    // dataseq[0] = 0x2 ;  //return cursor home
-                    // writetoLCD( 1, 0,  dataseq);
-                    // memcpy(&dataseq[0], (const uint8 *) " ANCHOR WAITING ", 16);
-                    // writetoLCD( 40, 1, dataseq); //send some data
-                    // memcpy(&dataseq[0], (const uint8 *) "      == 1      ", 16);
-                    // writetoLCD( 16, 1, dataseq); //send some data
-                    //Sleep(1000);
-
 
 
                     toggle+=2;
@@ -639,33 +583,23 @@ int dw_main(void)
                             sprintf((char*)&dataseq[0], "%llX", instance_get_addr());
                             writetoLCD( 16, 1, dataseq); //send some data
                         }
-                    // Sleep(1000);
                     }
 
                 }
                 else if(instanceanchorwaiting() == 2)
                 {
-                    // dataseq[0] = 0x2 ;  //return cursor home
-                    // writetoLCD( 1, 0,  dataseq);
-                    // memcpy(&dataseq[0], (const uint8 *) " ANCHOR WAITING ", 16);
-                    // writetoLCD( 40, 1, dataseq); //send some data
-                    // memcpy(&dataseq[0], (const uint8 *) "      == 2      ", 16);
-                    // writetoLCD( 16, 1, dataseq); //send some data
-                    //Sleep(1000);
 
                     dataseq[0] = 0x2 ;  //return cursor home
                     writetoLCD( 1, 0,  dataseq);
-                    memcpy(&dataseq[0], (const uint8 *) "    RANGING WITH", 16);
+                    memcpy(&dataseq[0], (const uint8 *) "    RANGING     ", 16);
                     writetoLCD( 40, 1, dataseq); //send some data
-                    sprintf((char*)&dataseq[0], "%llX", instance_get_tagaddr());
+                    memcpy(&dataseq[0], (const uint8 *) "    STARTED     ", 16);
                     writetoLCD( 16, 1, dataseq); //send some data
-                    //Sleep(1000);
                 }
             }
         }
 #ifdef USB_SUPPORT //this is set in the port.h file
-        // int n = sprintf((char*)&dataseq[0], "Main Loop");
-        // send_usbmessage(&dataseq[0], n);
+
         usb_run();
 #endif
 
