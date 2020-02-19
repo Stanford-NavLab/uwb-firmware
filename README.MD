@@ -16,8 +16,8 @@ The software and documentation for the EVK1000 evaluation kit and DW1000 transce
 
 The EVB1000 allows for a numer of operational configurations via microswitches and jumpers. For default operations, ensure the EVB1000 is configured as shown in the images below. Consult the EVK1000 documentation for more configuration options.
 
-<img src="STLINK config front.PNG" width="100">
-<img src="STLINK config rear.PNG" width="100">
+<img src="img/STLINK config front.PNG" width="100">
+<img src="img/STLINK config rear.PNG" width="100">
 
 ### Flashing the Binary
 
@@ -25,12 +25,12 @@ To flash the EVK1000, first connect the ST-LINK/V2 to the 20 pin JTAG connector 
 
 **_NOTE:_** The ST-LINK/V2 may not properly connect to yhe ST-LINK Utility software if connected to a USB hub. 
 
-<img src="STLINK connection.PNG" width="100">
+<img src="img/STLINK connection.PNG" width="100">
 
-Next open the ST-LINK Utility. Click the *Program verify* button, then *Browse* in the window that pops up. Select the firmware file and press *Start*. A compiled copy of the firmware (EVK1000.bin) can be found in the root directory of this repository. The STM32 ST-Link Utility can be downloaded from the [ST Link Utility Software Page](https://www.st.com/content/st_com/en/products/development-tools/software-development-tools/stm32-software-development-tools/stm32-programmers/stsw-link004.html#get-software) and is also included in this repository in the [STLINK directory](STLINK directory).
+Next open the ST-LINK Utility. Click the *Program verify* button, then *Browse* in the window that pops up. Select the firmware file and press *Start*. A compiled copy of the firmware (EVK1000.bin) can be found in the root directory of this repository. The STM32 ST-Link Utility can be downloaded from the [ST Link Utility Software Page](https://www.st.com/content/st_com/en/products/development-tools/software-development-tools/stm32-software-development-tools/stm32-programmers/stsw-link004.html#get-software) and is also included in this repository in the [STLINK directory](STLINK).
  
 
-<img src="STLINK software.PNG" width="100">
+<img src="img/STLINK software.PNG" width="100">
 
 ### Building from Source
 
