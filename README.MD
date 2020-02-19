@@ -36,8 +36,12 @@ A compiled copy of the firmware (EVK1000.bin) can be found in the root directory
 
 ### Building from Source
 
-To build the software from the source code, open the [DecaRanging.coproj file](DecaRanging.coproj) file with CoIDE. Simply click the *Build* button and the EVK1000/Debug/bin/ directory will be created and the compiled binary will be placed inside. The binary can then be flashed according to [Flashing the Binary](#flashing-the-binary) or by pressing the *Download Code to Flash* button in CoIDE.
+To build the software from the source code, open the [DecaRanging.coproj file](DecaRanging.coproj) file with CoIDE. Download and install the [GNU Tools ARM Embedded 6-2017-q2-update](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-rm/downloads), click *Project* in the top menu, and click *Select Toolchain Path* from the dropdown. Click *Browse* in the window that pops up and navigate to and select the *GNU Tools Arm Embedded\6 2017-q2-update\bin* directory.
 
-<img src="img/STLINK software.PNG" width="480">
+<img src="img/CoIDE toolchain.PNG" width="480">
+
+Then simply click the *Build* button and the EVK1000/Debug/bin/ directory will be created and the compiled binary will be placed inside. The binary can then be flashed according to [Flashing the Binary](#flashing-the-binary) or by pressing the *Download Code to Flash* button in CoIDE.
+
+<img src="img/CoIDE.PNG" width="480">
 
 ### Interfacing with the iBQR
