@@ -42,7 +42,8 @@ extern "C" {
 #define MASK_TXDTS			(0x00FFFFFFFE00)  //The TX timestamp will snap to 8 ns resolution - mask lower 9 bits.
 
 
-#define USING_64BIT_ADDR (1) //when set to 0 - the DecaRanging application will use 16-bit addresses
+#define USING_64BIT_ADDR (1)                  //when set to 0 - the DecaRanging application will use 16-bit addresses
+#define USING_LCD (0)                         //when set to 0 - the DecaRanging application will not use the LCD display
 
 //! callback events
 #define DWT_SIG_RX_NOERR            0

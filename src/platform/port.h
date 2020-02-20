@@ -170,7 +170,7 @@ void led_on(led_t led);
 void led_off(led_t led);
 
 int  peripherals_init(void);
-void spi_peripheral_init(void);
+void spi_peripheral_init(uint8_t using_lcd);
 
 void setup_DW1000RSTnIRQ(int enable);
 

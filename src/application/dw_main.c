@@ -261,12 +261,14 @@ void setLCDline1(uint8 s1switch)
 **/
 void configure_continuous_txspectrum_mode(uint8 s1switch)
 {
+#if (USING_LCD == 1)
     uint8 command = 0x2 ;  //return cursor home
     writetoLCD( 1, 0,  &command);
 	sprintf((char*)&dataseq[0], "Conti TX %s:%d:%d ", (s1switch & SWS1_SHF_MODE) ? "S" : "L", chan, prf);
 	writetoLCD( 40, 1, dataseq); //send some data
 	memcpy(dataseq, (const uint8 *) "Spectrum Test   ", 16);
 	writetoLCD( 16, 1, dataseq); //send some data
+#endif
 
 	//configure DW1000 into Continuous TX mode
 	instance_starttxtest(0x1000);
@@ -295,17 +297,21 @@ int dw_main(void)
     int i = 0;
     int toggle = 1;
     double range_result = 0;
-//    double avg_result = 0;
     int canSleep;
 
     led_off(LED_ALL); //turn off all the LEDs
 
     peripherals_init();
 
-    spi_peripheral_init();
+#if (USING_LCD == 1)
+    spi_peripheral_init(1);
+#else
+    spi_peripheral_init(0);
+#endif
 
     Sleep(1000); //wait for LCD to power on
 
+#if (USING_LCD == 1)
     initLCD();
 
     memset(dataseq, 0x0, sizeof(dataseq));
@@ -313,6 +319,7 @@ int dw_main(void)
     writetoLCD( 40, 1, dataseq); //send some data
     memcpy(dataseq, (const uint8 *) SOFTWARE_VER_STRING, 16); // Also set at line #26 (Should make this from single value !!!)
     writetoLCD( 16, 1, dataseq); //send some data
+#endif
 
     Sleep(1000);
 
@@ -336,7 +343,7 @@ int dw_main(void)
     {
         int j = 1000000;
         uint8 command;
-
+#if (USING_LCD == 1)
         memset(dataseq, 0, LCD_BUFF_LEN);
 
         while(j--);
@@ -345,18 +352,21 @@ int dw_main(void)
 
         memcpy(dataseq, (const uint8 *) "DECAWAVE   ", 12);
         writetoLCD( 40, 1, dataseq); //send some data
+#endif
 #ifdef USB_SUPPORT //this is set in the port.h file
         memcpy(dataseq, (const uint8 *) "USB to SPI ", 12);
 #else
 #endif
+#if (USING_LCD == 1)
         writetoLCD( 16, 1, dataseq); //send some data
-
+#endif
         j = 1000000;
 
         while(j--);
-
+#if (USING_LCD == 1)
         command = 0x2 ;  //return cursor home
         writetoLCD( 1, 0,  &command);
+#endif
 #ifdef USB_SUPPORT //this is set in the port.h file
         // Do nothing in foreground -- allow USB application to run, I guess on the basis of USB interrupts?
         while (1)       // loop forever
@@ -368,6 +378,7 @@ int dw_main(void)
     }
     else //run DecaRanging application
     {
+#if (USING_LCD == 1)
         uint8 dataseq[LCD_BUFF_LEN];
         uint8 command = 0x0;
 
@@ -376,6 +387,7 @@ int dw_main(void)
         memset(dataseq, ' ', LCD_BUFF_LEN);
         memcpy(dataseq, (const uint8 *) "DECAWAVE   RANGE", 16);
         writetoLCD( 16, 1, dataseq); //send some data
+#endif
 
         led_off(LED_ALL);
 
@@ -385,7 +397,7 @@ int dw_main(void)
 
         if(inittestapplication(s1switch) == (uint32)-1)
         {
-            
+#if (USING_LCD == 1)            
 
             led_on(LED_ALL); //to display error....
             dataseq[0] = 0x2 ;  //return cursor home
@@ -395,6 +407,7 @@ int dw_main(void)
             writetoLCD( 40, 1, dataseq); //send some data
             memcpy(dataseq, (const uint8 *) "  INIT FAIL ", 12);
             writetoLCD( 40, 1, dataseq); //send some data
+#endif
             return 0; //error
         }
 
@@ -409,18 +422,20 @@ int dw_main(void)
         i=30;
         while(i--)
         {
+#if (USING_LCD == 1)            
             if (i & 1) led_off(LED_ALL);
             else    led_on(LED_ALL);
-
+#endif
             Sleep(200);
         }
         i = 0;
         led_off(LED_ALL);
+#if (USING_LCD == 1)        
         command = 0x2 ;  //return cursor home
         writetoLCD( 1, 0,  &command);
 
         memset(dataseq, ' ', LCD_BUFF_LEN);
-
+#endif
         if(s1switch & SWS1_ANC_MODE)
         {
             instance_mode = ANCHOR;
@@ -433,6 +448,7 @@ int dw_main(void)
             led_on(LED_PC7);
         }
 
+#if (USING_LCD == 1)
         if(instance_mode == TAG)
         {
 			memcpy(&dataseq[2], (const uint8 *) " TAG BLINK  ", 12);
@@ -451,10 +467,14 @@ int dw_main(void)
 
         command = 0x2 ;  //return cursor home
         writetoLCD( 1, 0,  &command);
+#endif
+
     }
 
+#if (USING_LCD == 1)
     memset(dataseq, ' ', LCD_BUFF_LEN);
     memset(dataseq1, ' ', LCD_BUFF_LEN);
+#endif
 
     port_EnableEXT_IRQ();
     // main loop
@@ -471,6 +491,7 @@ int dw_main(void)
             //send the new range information to LCD and/or USB
             range_result = instance_get_idist(inst->newRangeUWBIndex);
             //set_rangeresult(range_result);
+#if (USING_LCD == 1)
             dataseq[0] = 0x2 ;  //return cursor home
             writetoLCD( 1, 0,  dataseq);
 
@@ -482,7 +503,7 @@ int dw_main(void)
             // sprintf((char*)&dataseq1[1], "            ");
 
             writetoLCD( 16, 1, dataseq1); //send some data
-
+#endif
             aaddr = instancenewrangeancadd();
             taddr = instancenewrangetagadd();
             txa =  instancetxantdly();
@@ -514,7 +535,7 @@ int dw_main(void)
 #endif
         }
 
-
+#if (USING_LCD == 1)
         if(ranging == 0) //discovery/initialization mode for anchor and tag
         {
             
@@ -598,6 +619,8 @@ int dw_main(void)
                 }
             }
         }
+#endif
+
 #ifdef USB_SUPPORT //this is set in the port.h file
 
         usb_run();

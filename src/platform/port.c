@@ -135,13 +135,17 @@ int peripherals_init (void)
 
 /* @fn 	  spi_peripheral_init
  * */
-void spi_peripheral_init()
+void spi_peripheral_init(uint8_t using_lcd)
 {
 	SPI1_Configuration();	//initialise SPI1 peripheral for DW1000 control
-	SPI2_Configuration();	//initialise SPI2 peripheral for LCD control
 
-	port_LCD_RS_clear();
-	port_LCD_RW_clear();
+	if (using_lcd)
+	{
+		SPI2_Configuration();	//initialise SPI2 peripheral for LCD control
+
+		port_LCD_RS_clear();
+		port_LCD_RW_clear();
+	}
 }
 
 

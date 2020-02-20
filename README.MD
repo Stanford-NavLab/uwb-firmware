@@ -50,10 +50,8 @@ Then simply click the *Build* button and the EVK1000/Debug/bin/ directory will b
 
 ### Interfacing with the iBQR
 
-### EVK1000 Display
+### EVB1000 Display
 
-In order to save power, the LCD display is disabled by default. It can be reenabled by setting ... in .... When enabled, the LCD will display the range calculated and the address of the TAG/ANCHOR that it ranged with.
-
-//TODO have the display disabled by default but allow it to be enabled by setting a flag in the software
+In order to save power, the LCD display is disabled by default. It can be reenabled by changing `#define USING_LCD (0)` to `#define USING_LCD (1)` in [src/application/instance.h](src/application/instance.h). When enabled, the LCD will display the range calculated and the address of the TAG/ANCHOR that it ranged with.
 
 ### Calibration
