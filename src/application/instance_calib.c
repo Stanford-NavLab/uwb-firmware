@@ -110,14 +110,14 @@ int instance_starttxtest(int framePeriod)
 	//NOTE: SPI frequency must be < 3MHz
 	port_set_dw1000_slowrate();  //max SPI before PLLs configured is ~4M
 
-	// the value here 0x1000 gives a period of 32.82 µs
+	// the value here 0x1000 gives a period of 32.82 ï¿½s
 	//this is setting 0x1000 as frame period (125MHz clock cycles) (time from Tx en - to next - Tx en)
 	dwt_configcontinuousframemode(framePeriod);
 
 	dwt_writetxdata(127, (uint8 *)  msg, 0) ;
 	dwt_writetxfctrl(127, 0, 0);
 
-    //to start the first frame - set TXSTRT
+        //to start the first frame - set TXSTRT
 	dwt_starttx(DWT_START_TX_IMMEDIATE);
 
 	//measure the power

@@ -32,18 +32,25 @@ extern "C" {
 
 #define CORRECT_RANGE_BIAS  (1)     // Compensate for small bias due to uneven accumulator growth at close up high power
 
+
+
 /******************************************************************************************************************
 *******************************************************************************************************************
 *******************************************************************************************************************/
 
 #define NUM_INST            1
-#define SPEED_OF_LIGHT      (299702547.0)     // in m/s in air
+#define SPEED_OF_LIGHT      (299704644.54) //(299702547.0)     // in m/s in air
 #define MASK_40BIT			(0x00FFFFFFFFFF)  // DW1000 counter is 40 bits
 #define MASK_TXDTS			(0x00FFFFFFFE00)  //The TX timestamp will snap to 8 ns resolution - mask lower 9 bits.
 
+#define DELAY_CALIB (0)                     // when set to 1 - the LCD display will show information used for TX/RX delay calibration
+
+#define SET_TXRX_DELAY (0)                  //when set to 1 - the DW1000 RX and TX delays are set to the TX_DELAY and RX_DELAY defines
+#define TX_ANT_DELAY                0
+#define RX_ANT_DELAY                0
 
 #define USING_64BIT_ADDR (1)                  //when set to 0 - the DecaRanging application will use 16-bit addresses
-#define USING_LCD (0)                         //when set to 0 - the DecaRanging application will not use the LCD display
+#define USING_LCD (1)                         //when set to 0 - the DecaRanging application will not use the LCD display
 
 //! callback events
 #define DWT_SIG_RX_NOERR            0
@@ -390,7 +397,8 @@ typedef struct
 	dwt_txconfig_t  configTX ;		//DW1000 TX power configuration
 	uint16			txAntennaDelay ; //DW1000 TX antenna delay
 	uint16			rxAntennaDelay ; //DW1000 RX antenna delay
-	uint8 antennaDelayChanged;
+	
+    uint8 antennaDelayChanged;
 	// "MAC" features
     uint8 frameFilteringEnabled ;	//frame filtering is enabled
 
@@ -478,14 +486,14 @@ typedef struct
     int tofIndex ;
     int tofCount ;
 
-    uint8 newRangeUWBIndex;
+    uint8 newRangeUWBIndex; //index for most recent ranging exchange
     int newRange;
-    int newRangeAncAddress; //last 4 bytes of anchor address
-    int newRangeTagAddress; //last 4 bytes of tag address
+    uint64 newRangeAncAddress; //anchor address for most recent ranging exchange
+    uint64 newRangeTagAddress; //tag address for most recent ranging exchange
 
     double idistance[UWB_LIST_SIZE];
     double idistanceraw[UWB_LIST_SIZE];
-
+    
     //if set to 1 then it means that DW1000 is in DEEP_SLEEP
     //so the ranging has finished and micro can output on USB/LCD
     //if sending data to LCD during ranging this limits the speed of ranging
@@ -527,6 +535,8 @@ void instclearuwblist(void);
 int instaddactivateuwbinlist(instance_data_t *inst, uint8 *uwbAddr);
 int instcheckactiveuwbinlist(instance_data_t *inst, uint8 *uwbAddr);
 int instfindfirstactiveuwbinlist(instance_data_t *inst, uint8 startindex);
+int instfindnumactiveuwbinlist(instance_data_t *inst);
+
 
 void instance_readaccumulatordata(void);
 //-------------------------------------------------------------------------------------------------------------
@@ -584,8 +594,8 @@ uint64 instance_get_addr(void); //get own address (8 bytes)
 uint64 instance_get_uwbaddr(uint8 uwb_index); //get uwb address (8 bytes)
 // uint64 instance_get_anchaddr(void); //get anchor address (that sent the ToF)
 
-int instancenewrangeancadd(void);
-int instancenewrangetagadd(void);
+uint64 instancenewrangeancadd(void);
+uint64 instancenewrangetagadd(void);
 int instancenewrange(void);
 int instancesleeping(void);
 int instanceanchorwaiting(void);
@@ -620,9 +630,12 @@ uint16 instancerxantdly(void);
 
 int instance_starttxtest(int framePeriod);
 
+// coid instance_
+
 
 instance_data_t* instance_get_local_structure_ptr(unsigned int x);
 
+uint32 get_dt32(uint32 t1, uint32 t2);
 
 void send_statetousb(instance_data_t *inst);
 void send_rxmsgtousb(char *data);

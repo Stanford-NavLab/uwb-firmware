@@ -21,8 +21,6 @@
 #include "instance.h"
 
 
-
-
 extern void usb_run(void);
 extern int usb_init(void);
 extern void usb_printconfig(int, uint8*, int);
@@ -676,7 +674,8 @@ int testapprun(instance_data_t *inst, int message)
 
                 //sometimes the DW1000 tx callback (TXFRS) fails to trigger and the the SYS_STATE register
                 //reads IDLE for for PMSC, RX, and TX so we need another way to timeout since RX FWTO won't be triggered.
-                uint32 ptc = portGetTickCnt(); 
+                // uint32 ptc = portGetTickCnt();
+                uint32 dt = get_dt32(inst->timeofTx, portGetTickCnt());
 
                 if(inst->previousState == TA_TXBLINK_WAIT_SEND ||
                     inst->previousState == TA_TXFINAL_WAIT_SEND ||
@@ -684,14 +683,16 @@ int testapprun(instance_data_t *inst, int message)
                     inst->previousState == TA_TXRESPONSE_WAIT_SEND)
                 {
                     //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
-                    if(ptc - (uint32)inst->timeofTx > 10)                         {
+                    // if(ptc - (uint32)inst->timeofTx > 10)                         {
+                    if(dt > 10)                         {
                         inst_processtxrxtimeout(inst);
                     }                
                 }
                 else if(inst->previousState == TA_TXRANGINGINIT_WAIT_SEND)
                 {
                     //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
-                    if(ptc - (uint32)inst->timeofTx > 180)
+                    // if(ptc - (uint32)inst->timeofTx > 180)
+                    if(dt > 180)
                     {
                         inst_processtxrxtimeout(inst);
                     }
@@ -916,7 +917,7 @@ int testapprun(instance_data_t *inst, int message)
                                 break;
                             }
 
-                            if (!inst->frameFilteringEnabled) //NOTE this might cause problems... might need to move somewhere else
+                            if (!inst->frameFilteringEnabled)
                             {
                                 // if we missed the ACK to the ranging init message we may not have turned frame filtering on
                                 dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN); //we are starting ranging - enable the filter....
@@ -958,10 +959,10 @@ int testapprun(instance_data_t *inst, int message)
                             memcpy(&inst->tof[inst->uwbToRangeWith], &(messageData[TOFR]), 5);
 
                             inst->newRangeUWBIndex = inst->uwbToRangeWith;
-                            //TODO remove or update below?
-                            inst->newRangeAncAddress = (uint16) srcAddr[0] + ((uint16) srcAddr[1] << 8);
-                            inst->newRangeTagAddress = (uint16) inst->eui64[0] + ((uint16) inst->eui64[1] << 8);
+                            inst->newRangeAncAddress = instance_get_uwbaddr(inst->uwbToRangeWith);
+                            inst->newRangeTagAddress = instance_get_addr();
                         
+
                             break; 
                         } //RTLS_DEMO_MSG_ANCH_RESP
                         case RTLS_DEMO_MSG_TAG_FINAL:
@@ -1012,14 +1013,18 @@ int testapprun(instance_data_t *inst, int message)
                             inst->tof[inst->uwbToRangeWith] = (int64) ( RaRbxDaDb/(RbyDb + RayDa) );
                             inst->newRangeUWBIndex = inst->uwbToRangeWith;
 
+
                             if(reportTOF(inst, inst->newRangeUWBIndex) == 0)
                             {
                                 inst->newRange = 1;
                             }
 
                             //TODO update or remove?
-                            inst->newRangeTagAddress = (uint16) srcAddr[0] + ((uint16) srcAddr[1] << 8);
-                            inst->newRangeAncAddress = (uint16) inst->eui64[0] + ((uint16) inst->eui64[1] << 8);
+                            // inst->newRangeTagAddress = (uint16) srcAddr[0] + ((uint16) srcAddr[1] << 8);
+                            // inst->newRangeAncAddress = (uint16) inst->eui64[0] + ((uint16) inst->eui64[1] << 8);
+                            inst->newRangeTagAddress = instance_get_uwbaddr(inst->uwbToRangeWith);
+                            inst->newRangeAncAddress = instance_get_addr();
+                            
                             
                             inst->testAppState = TA_RXE_WAIT ;
                             inst->previousState = TA_INIT;
@@ -1027,6 +1032,7 @@ int testapprun(instance_data_t *inst, int message)
                             inst->uwbToRangeWith = 255;
                             inst->frameFilteringEnabled = 0;
                             
+
                             dwt_enableframefilter(DWT_FF_NOTYPE_EN);
                             dwt_setrxaftertxdelay(0);
                             instancesetantennadelays(); //this will update the antenna delay if it has changed
@@ -1304,7 +1310,25 @@ void instance_readaccumulatordata(void)
 #endif  // support_sounding
 }
 
+//get the time difference between two between two 32-bit unsigned timestamps
+//t1 is the first timestamp
+//t2 is the second timetamp that occured after t1 
+uint32 get_dt32(uint32 t1, uint32 t2)
+{
+    if(t2 >= t1)
+    {
+        return t2 - t1;
+    }
+    else
+    {
+        //handle timestamp roleover
+        return 4294967295 - t1 + t2; 
+    }
+}
+
+
 #endif
+
 
 
 /* ==========================================================

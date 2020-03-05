@@ -295,7 +295,6 @@ void configure_continuous_txspectrum_mode(uint8 s1switch)
 int dw_main(void)
 {
     int i = 0;
-    int toggle = 1;
     double range_result = 0;
     int canSleep;
 
@@ -304,6 +303,7 @@ int dw_main(void)
     peripherals_init();
 
 #if (USING_LCD == 1)
+    int toggle = 1;
     spi_peripheral_init(1);
 #else
     spi_peripheral_init(0);
@@ -339,11 +339,22 @@ int dw_main(void)
     		| port_is_switch_on(TA_SW1_7) << 6
     		| port_is_switch_on(TA_SW1_8) << 7;
 
+//    uint8 s13 = port_is_switch_on(TA_SW1_3);
+//    uint8 s14 = port_is_switch_on(TA_SW1_4);
+//    uint8 s15 = port_is_switch_on(TA_SW1_5);
+//    uint8 s16 = port_is_switch_on(TA_SW1_6);
+//    uint8 s17 = port_is_switch_on(TA_SW1_7);
+//    uint8 s18 = port_is_switch_on(TA_SW1_8);
+//    uint8 debug_msg[8];
+//    int n = sprintf((char*)&debug_msg[0], "s1switch: %d ", s1switch);
+//    send_usbmessage(&debug_msg[0], n);
+//    usb_run();
+
     if(port_is_switch_on(TA_SW1_3) == S1_SWITCH_OFF)
     {
         int j = 1000000;
-        uint8 command;
 #if (USING_LCD == 1)
+        uint8 command;
         memset(dataseq, 0, LCD_BUFF_LEN);
 
         while(j--);
@@ -486,12 +497,56 @@ int dw_main(void)
 
         if(instancenewrange())
         {
-        	int n, /* txl = 0, rxl = 0,*/ aaddr, taddr, txa, rxa, rng, rng_raw;
+        	int n, rng, rng_raw;
+            uint64 aaddr, taddr;
             ranging = 1;
             //send the new range information to LCD and/or USB
             range_result = instance_get_idist(inst->newRangeUWBIndex);
             //set_rangeresult(range_result);
 #if (USING_LCD == 1)
+#if (DELAY_CALIB_OUTPUT == 1)
+            dataseq[0] = 0x2 ;  //return cursor home
+            writetoLCD( 1, 0,  dataseq);
+
+            dataseq[0] = 0x2 ;  //return cursor home
+            writetoLCD( 1, 0,  dataseq);
+            memset(dataseq, ' ', LCD_BUFF_LEN);
+            memset(dataseq1, ' ', LCD_BUFF_LEN);
+            
+            int toggle_step = 5;
+
+            if(toggle <= toggle_step)
+            {
+                sprintf((char*)&dataseq[1], "ADDRESS - SELF  ");
+                sprintf((char*)&dataseq1[0], "%llX", instance_get_addr());
+            }
+            else if(toggle <= toggle_step*2)
+            {
+                sprintf((char*)&dataseq[1], "RANGING WITH    ");
+                if(inst->mode == TAG)
+                {
+                    sprintf((char*)&dataseq1[0], "%.3u ANCHORS     ", instfindnumactiveuwbinlist(inst));
+                }
+                else if(inst->mode == ANCHOR)
+                {
+                    sprintf((char*)&dataseq1[0], "%.3u TAGS        ", instfindnumactiveuwbinlist(inst));    
+                }
+            }
+            else
+            {   
+                sprintf((char*)&dataseq[0], "TX DELAY: %.5u ", inst->txAntennaDelay);
+                sprintf((char*)&dataseq1[0], "RX DELAY: %.5u ", inst->rxAntennaDelay);
+            }
+            toggle++;
+            if(toggle > toggle_step*3)
+            {
+                toggle = 0;
+            }
+            
+            writetoLCD( 40, 1, dataseq); //send some data
+            writetoLCD( 16, 1, dataseq1); //send some data
+#else
+
             dataseq[0] = 0x2 ;  //return cursor home
             writetoLCD( 1, 0,  dataseq);
 
@@ -500,38 +555,27 @@ int dw_main(void)
             sprintf((char*)&dataseq[1], "LAST: %4.2f m", range_result);
             writetoLCD( 40, 1, dataseq); //send some data
             sprintf((char*)&dataseq1[0], "%llX", instance_get_uwbaddr(inst->newRangeUWBIndex));
-            // sprintf((char*)&dataseq1[1], "            ");
-
             writetoLCD( 16, 1, dataseq1); //send some data
+#endif   
 #endif
+
             aaddr = instancenewrangeancadd();
             taddr = instancenewrangetagadd();
-            txa =  instancetxantdly();
-            rxa =  instancerxantdly();
             rng = (int) (range_result*1000);
-            rng_raw = (int) (instance_get_idistraw(inst->newRangeUWBIndex)*1000); //TODO change this to use actual tag
+            rng_raw = (int) (instance_get_idistraw(inst->newRangeUWBIndex)*1000);
 
             if(instance_mode == TAG)
             {
-                //n = sprintf((char*)&dataseq[0], "ia%04x t%04x %04x %04x %04x %04x %04x %02x %02x t", aaddr, taddr, rng, rng_raw, l, txa, rxa, txl, rxl);
-            	// n = sprintf((char*)&dataseq[0], "ia%04x t%04x %08x %08x %04x %04x %04x t", aaddr, taddr, rng, rng_raw, l, txa, rxa);
-                n = sprintf((char*)&dataseq[0], "ia%04x t%04x %08x %08x %04x %04x t", aaddr, taddr, rng, rng_raw, txa, rxa);
-                
+                n = sprintf((char*)&dataseq[0], "t %llX %llX %08X %08X", aaddr, taddr, rng, rng_raw);
+                          
             }
             else
             {
-                //n = sprintf((char*)&dataseq[0], "ia%04x t%04x %04x %04x %04x %04x %04x %02x %02x a", aaddr, taddr, rng, rng_raw, l, txa, rxa, txl, rxl);
-            	//n = sprintf((char*)&dataseq[0], "ia%04x t%04x %08x %08x %04x %04x %04x %2.2f a", aaddr, taddr, rng, rng_raw, l, txa, rxa, instance_data[0].clockOffset);
-            	// n = sprintf((char*)&dataseq[0], "ia%04x t%04x %08x %08x %04x %04x %04x a", aaddr, taddr, rng, rng_raw, l, txa, rxa);
-                n = sprintf((char*)&dataseq[0], "ia%04x t%04x %08x %08x %04x %04x a", aaddr, taddr, rng, rng_raw, txa, rxa);
-                
+                n = sprintf((char*)&dataseq[0], "a %llX %llX %08X %08X", aaddr, taddr, rng, rng_raw);
             }
 
-
 #ifdef USB_SUPPORT //this is set in the port.h file
-            send_usbmessage(&dataseq[0], n);
-            // n = sprintf((char*)&dataseq[0], "This is a test");
-            // send_usbmessage(&dataseq[0], n);
+           send_usbmessage(&dataseq[0], n);
 #endif
         }
 
@@ -622,7 +666,6 @@ int dw_main(void)
 #endif
 
 #ifdef USB_SUPPORT //this is set in the port.h file
-
         usb_run();
 #endif
 

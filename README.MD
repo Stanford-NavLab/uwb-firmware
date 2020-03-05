@@ -13,6 +13,9 @@ The software and documentation for the EVK1000 evaluation kit and DW1000 transce
 
 ## Getting Started
 
+//TODO add a table of contents...
+
+
 ### UWB Configuration
 
 The EVB1000 allows for a numer of operational configurations via microswitches and jumpers. For default operations, ensure the EVB1000 is configured as shown in the images below. Consult the EVK1000 documentation for more configuration options.
@@ -50,8 +53,26 @@ Then simply click the *Build* button and the EVK1000/Debug/bin/ directory will b
 
 ### Interfacing with the iBQR
 
+tx2-ros-examples
+The `uwb_interface` ROS package for interfacing with UWB can be found in the `tx2-ros-examples` repository. It is run using the following:
+
+```
+rosrun uwb_interface uwb_interface_node -p /dev/ttyAMC0
+```
+
+**_NOTE:_** Roscore must be running first. 
+**_NOTE:_** The argument after `-p` is the path to the USB port connection and may not be the same as listed above. See the `tx2-ros-examples` repository for more information.
+
 ### EVB1000 Display
 
 In order to save power, the LCD display is disabled by default. It can be reenabled by changing `#define USING_LCD (0)` to `#define USING_LCD (1)` in [src/application/instance.h](src/application/instance.h). When enabled, the LCD will display the range calculated and the address of the TAG/ANCHOR that it ranged with.
 
 ### Calibration
+
+The ranging algorithm depends on RX and TX timestamps to accurately determine the time-of-flight (from which UWB distance can be derived) of the communications signals. For the derived distance calculations to be accurate, the signal propogation time from the antenna to the DW1000 transceiver (RX delay) and from the DW1000 to the antenna (TX delay) must be accounted for. By programming the RX and TX delays to the DW1000 OTP memory, the DW1000 will provide corrected timestamps to the ranging firmware. 
+
+**_NOTE:_** Step-by-step instructions for performing the RX and TX delay calibration can be found in the uwb_delay_calibration package of the tx2-ros-examples repository.
+
+**_NOTE:_** The range measurements depend on the speed of light through air. For best results, recalibrate the UWBs using the air conditions expected for the intended operating environment.
+
+

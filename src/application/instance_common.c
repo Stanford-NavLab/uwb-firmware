@@ -274,6 +274,28 @@ int instfindfirstactiveuwbinlist(instance_data_t *inst, uint8 startindex)
 
 
 // -------------------------------------------------------------------------------------------------------------------
+//
+// function to find the number of UWBs in our list that are not in a timeout status
+//
+// -------------------------------------------------------------------------------------------------------------------
+int instfindnumactiveuwbinlist(instance_data_t *inst)
+{
+    uint8 num = 0;
+    
+    for(int i=0; i<inst->uwbListLen; i++)
+    {
+		if(!inst->uwbTimeout[i])
+		{
+			num++;
+		}
+    }
+
+    return num;
+}
+
+
+
+// -------------------------------------------------------------------------------------------------------------------
 #if (NUM_INST != 1)
 #error These functions assume one instance only
 #else
@@ -314,12 +336,12 @@ int instancenewrange(void)
     return 0;
 }
 
-int instancenewrangeancadd(void)
+uint64 instancenewrangeancadd(void)
 {
     return instance_data[0].newRangeAncAddress;
 }
 
-int instancenewrangetagadd(void)
+uint64 instancenewrangetagadd(void)
 {
     return instance_data[0].newRangeTagAddress;
 }
@@ -580,6 +602,7 @@ void instance_config(instanceConfig_t *config)
 
     //NOTE: For EVK1000 the OTP stores calibrated antenna and TX power values for configuration modes 3 and 5,
 
+
     //check if to use the antenna delay calibration values as read from the OTP
     if(dwt_otprevision() <= 1) //in revision 0, 1 of EVB1000/EVK1000
     {
@@ -589,11 +612,15 @@ void instance_config(instanceConfig_t *config)
     	//MUST change the SPI to < 3MHz as the dwt_otpread will change to XTAL clock
     	port_set_dw1000_slowrate(); //reduce SPI to < 3MHz
 
+//#if (SET_TXRX_DELAY == 0)
     	dwt_otpread(ANTDLY_ADDRESS, &antennaDelay, 1);
 
     	instance_data[instance].txAntennaDelay = ((antennaDelay >> (16*(config->pulseRepFreq - DWT_PRF_16M))) & 0xFFFF) >> 1;
-
     	instance_data[instance].rxAntennaDelay = instance_data[instance].txAntennaDelay ;
+//#else
+//		instance_data[instance].txAntennaDelay = (uint16)TX_ANT_DELAY;
+//		instance_data[instance].rxAntennaDelay = (uint16)RX_ANT_DELAY;
+//#endif
 
     	//read any data from the OTP for the TX power
     	dwt_otpread(TXCFG_ADDRESS, otpPower, 12);
@@ -603,11 +630,18 @@ void instance_config(instanceConfig_t *config)
         power = otpPower[(config->pulseRepFreq - DWT_PRF_16M) + (chan_idx[instance_data[instance].configData.chan] * 2)];
     }
 
+#if (SET_TXRX_DELAY == 0)
     // if nothing was actually programmed then set a reasonable value anyway
     if(instance_data[instance].txAntennaDelay == 0)//otherwise a default values should be used
     {
     	instance_data[instance].rxAntennaDelay = instance_data[instance].txAntennaDelay = rfDelays[config->pulseRepFreq - DWT_PRF_16M];
     }
+#else
+    instance_data[instance].txAntennaDelay = (uint16)TX_ANT_DELAY;
+	instance_data[instance].rxAntennaDelay = (uint16)RX_ANT_DELAY;
+#endif
+
+
 
     // -------------------------------------------------------------------------------------------------------------------
     // set the antenna delay, we assume that the RX is the same as TX.
