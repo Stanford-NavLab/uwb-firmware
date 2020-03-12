@@ -16,6 +16,9 @@
 #include "deca_spi.h"
 #include "instance.h"
 
+#include "llist.h"
+#include "uwb_select.h"
+
 #include <inttypes.h>
 
 extern void usb_run(void);
@@ -273,6 +276,7 @@ int instfindfirstactiveuwbinlist(instance_data_t *inst, uint8 startindex)
 }
 
 
+
 // -------------------------------------------------------------------------------------------------------------------
 //
 // function to find the number of UWBs in our list that are not in a timeout status
@@ -292,7 +296,6 @@ int instfindnumactiveuwbinlist(instance_data_t *inst)
 
     return num;
 }
-
 
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -399,8 +402,7 @@ int instance_init(void)
 {
     int instance = 0 ;
     int result;
-    //uint16 temp = 0;
-
+    
     instance_data[instance].mode =  ANCHOR;                                // assume listener,
 
     instance_data[instance].goToSleep = 0;
@@ -414,12 +416,31 @@ int instance_init(void)
 		instance_data[instance].idistanceraw[i] = 0;
 	}
 	instance_data[instance].newRangeUWBIndex = 0;
+
+	struct TimedSelector uwbSelector = TimedSelector.new();
+
+	timing_node *n1ptr, n1;
+	n1ptr = &n1;
+	n1.index = 10;
+	n1.duration = 100;
+
+	uwbSelector.add_node(&uwbSelector, n1ptr);
+
+	timing_node *n2ptr, n2;
+	n2ptr = &n2;
+	n2.index = 10;
+	n2.duration = 100;
+
+	uwbSelector.add_node(&uwbSelector, n2ptr);
 	
+	timing_node *n3ptr = uwbSelector.select(&uwbSelector, portGetTickCnt());
+
+
 
     // Reset the IC (might be needed if not getting here from POWER ON)
     dwt_softreset();
 
-	//we can enable any configuration loding from OTP/ROM on initialisation
+	//we can enable any configuration loading from OTP/ROM on initialization
     result = dwt_initialise(DWT_LOADUCODE) ;
 
     //this is platform dependent - only program if DW EVK/EVB
@@ -427,7 +448,7 @@ int instance_init(void)
 
     if (DWT_SUCCESS != result)
     {
-        return (-1) ;   // device initialise has failed
+        return (-1) ;   // device initialize has failed
     }
 
     //enable TX, RX states on GPIOs 6 and 5

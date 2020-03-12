@@ -385,6 +385,7 @@ typedef struct {
                 uint32 txPwr[2]; //
 }tx_struct;
 
+
 typedef struct
 {
     INST_MODE mode;				        //instance mode (tag or anchor)
@@ -508,6 +509,12 @@ typedef struct
     uint32 lastCommTimeStamp[UWB_LIST_SIZE] ;
     uint8 uwbTimeout[UWB_LIST_SIZE] ;    
 
+    uint32 blink_start;
+    uint32 range_start;
+    uint8 blink0range1;
+
+    uint32 blink_duration;      //expected duration of a blink/response exchange  
+    uint32 range_duration;      //expected duration of a range/response/final exchange
 
 	//event queue - used to store DW1000 events as they are processed by the dw_isr/callback functions
     event_data_t dwevent[MAX_EVENT_NUMBER]; //this holds any TX/RX events and associated message data

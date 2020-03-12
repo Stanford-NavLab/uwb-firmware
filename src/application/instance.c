@@ -20,6 +20,7 @@
 #include "lib.h"
 #include "instance.h"
 
+#include "llist.h"
 
 extern void usb_run(void);
 extern int usb_init(void);
@@ -453,10 +454,24 @@ int testapprun(instance_data_t *inst, int message)
                 //set the delayed rx on time (the ranging init will be sent after this delay)
                 dwt_setrxaftertxdelay((uint32)inst->rnginitW4Rdelay_sy);  //units are 1.0256us - wait for wait4respTIM before RX on (delay RX)
 
-                int tx_stat = dwt_starttx(DWT_START_TX_IMMEDIATE | inst->wait4ack); //always using immediate TX and enable dealyed RX
+                int tx_start = dwt_starttx(DWT_START_TX_IMMEDIATE | inst->wait4ack); //always using immediate TX and enable dealyed RX
                 
-                if(tx_stat == 0)
+                if(tx_start == 0)
                 {
+                    uint32 deltat;
+                    uint8 debug_msg[100];
+                    if(inst->blink0range1 == 1){
+                        deltat = portGetTickCnt() - inst->range_start;
+                        sprintf((char *)&debug_msg, "range time: %u ", (unsigned int)deltat);
+                    }
+                    else{
+                        deltat = portGetTickCnt() - inst->blink_start;
+                        sprintf((char *)&debug_msg, "blink time: %u ", (unsigned int)deltat);
+                    }
+                    send_txmsgtousb((char *)&debug_msg);
+                    
+                    inst->blink0range1 = 0;
+                    inst->blink_start = portGetTickCnt();
                     // send_txmsgtousb("BLINK-SUCCESS");
                     inst->timeofTx = portGetTickCnt();
                 }
@@ -551,7 +566,6 @@ int testapprun(instance_data_t *inst, int message)
                 //inst->monitor = 1;
             }
 
-         
             break;
         }
         case TA_TXPOLL_WAIT_SEND :
@@ -588,6 +602,22 @@ int testapprun(instance_data_t *inst, int message)
             inst->testAppState = TA_TX_WAIT_CONF ;                                          // wait confirmation
             inst->previousState = TA_TXPOLL_WAIT_SEND ;
             done = INST_DONE_WAIT_FOR_NEXT_EVENT; //will use RX FWTO to time out (set below)
+
+            uint32 deltat;
+            uint8 debug_msg[100];
+            if(inst->blink0range1 == 1){
+                deltat = portGetTickCnt() - inst->range_start;
+                sprintf((char *)&debug_msg, "range time: %u ", (unsigned int)deltat);
+            }
+            else{
+                deltat = portGetTickCnt() - inst->blink_start;
+                sprintf((char *)&debug_msg, "blink time: %u ", (unsigned int)deltat);
+            }
+            send_txmsgtousb((char *)&debug_msg);
+            
+            inst->blink0range1 = 1;
+            inst->range_start = portGetTickCnt();
+
 
             inst->timeofTx = portGetTickCnt();
         
@@ -1119,7 +1149,11 @@ int instance_init_s(int mode)
     instance_data_t* inst = instance_get_local_structure_ptr(0);
 
     inst->mode =  mode;                                // assume anchor,
-    inst->testAppState = TA_INIT ;
+    inst->testAppState = TA_INIT;
+
+    inst->blink_duration = 154;
+    inst->range_duration = 348;
+
 
     // if using auto CRC check (DWT_INT_RFCG and DWT_INT_RFCE) are used instead of DWT_INT_RDFR flag
     // other errors which need to be checked (as they disable receiver) are
