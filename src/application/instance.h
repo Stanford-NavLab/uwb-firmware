@@ -20,14 +20,15 @@ extern "C" {
 #include "port.h"
 #include "deca_types.h"
 #include "deca_device_api.h"
-
+#include "tx_scheduler.h"
+#include "rx_scheduler.h"
 
 
 
 /******************************************************************************************************************
 ********************* NOTES on Decaranging EVK1000 application features/options ***********************************************************
 *******************************************************************************************************************/
-#define DEEP_SLEEP (1) //To enable deep-sleep set this to 1
+#define DEEP_SLEEP (0) //To enable deep-sleep set this to 1
 //DEEP_SLEEP mode can be used, for example, by a Tag instance to put the DW1000 into low-power deep-sleep mode
 
 #define CORRECT_RANGE_BIAS  (1)     // Compensate for small bias due to uneven accumulator growth at close up high power
@@ -42,7 +43,7 @@ extern "C" {
 #define SPEED_OF_LIGHT      (299704644.54) //(299702547.0)     // in m/s in air
 #define MASK_40BIT			(0x00FFFFFFFFFF)  // DW1000 counter is 40 bits
 #define MASK_TXDTS			(0x00FFFFFFFE00)  //The TX timestamp will snap to 8 ns resolution - mask lower 9 bits.
-
+#define SYS_MASK_VAL        (DWT_INT_TFRS | DWT_INT_RFCG | DWT_INT_RXOVRR | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO)
 #define DELAY_CALIB (0)                     // when set to 1 - the LCD display will show information used for TX/RX delay calibration
 
 #define SET_TXRX_DELAY (0)                  //when set to 1 - the DW1000 RX and TX delays are set to the TX_DELAY and RX_DELAY defines
@@ -91,7 +92,7 @@ enum
 
 //lengths including the Decaranging Message Function Code byte
 #define TAG_POLL_MSG_LEN                    1				// FunctionCode(1),
-#define ANCH_RESPONSE_MSG_LEN               9               // FunctionCode(1), RespOption (1), OptionParam(2), Measured_TOF_Time(5)
+#define ANCH_RESPONSE_MSG_LEN               15               // FunctionCode(1), RespOption (1), OptionParam(2), Number of Tags(1), Measured_TOF_Time(6), Time Till next window reserved for catching a blink message (4)
 #define TAG_FINAL_MSG_LEN                   16              // FunctionCode(1), Poll_TxTime(5), Resp_RxTime(5), Final_TxTime(5)
 #define RANGINGINIT_MSG_LEN					7				// FunctionCode(1), Tag Address (2), Response Time (2) * 2
 
@@ -114,9 +115,12 @@ enum
 #define FRAME_CRTL_AND_ADDRESS_L    (FRAME_DEST_ADDRESS_L + FRAME_SOURCE_ADDRESS_L + FRAME_CTRLP) //21 bytes for 64-bit addresses)
 #define FRAME_CRTL_AND_ADDRESS_S    (FRAME_DEST_ADDRESS_S + FRAME_SOURCE_ADDRESS_S + FRAME_CTRLP) //9 bytes for 16-bit addresses)
 #define FRAME_CRTL_AND_ADDRESS_LS	(FRAME_DEST_ADDRESS_L + FRAME_SOURCE_ADDRESS_S + FRAME_CTRLP) //15 bytes for 1 16-bit address and 1 64-bit address)
-#define MAX_USER_PAYLOAD_STRING_LL     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_L-TAG_FINAL_MSG_LEN-FRAME_CRC) //127 - 21 - 16 - 2 = 88
-#define MAX_USER_PAYLOAD_STRING_SS     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_S-TAG_FINAL_MSG_LEN-FRAME_CRC) //127 - 9 - 16 - 2 = 100
-#define MAX_USER_PAYLOAD_STRING_LS     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_LS-TAG_FINAL_MSG_LEN-FRAME_CRC) //127 - 15 - 16 - 2 = 94
+//#define MAX_USER_PAYLOAD_STRING_LL     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_L-TAG_FINAL_MSG_LEN-FRAME_CRC) //127 - 21 - 16 - 2 = 88
+//#define MAX_USER_PAYLOAD_STRING_SS     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_S-TAG_FINAL_MSG_LEN-FRAME_CRC) //127 - 9 - 16 - 2 = 100
+//#define MAX_USER_PAYLOAD_STRING_LS     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_LS-TAG_FINAL_MSG_LEN-FRAME_CRC) //127 - 15 - 16 - 2 = 94
+#define MAX_USER_PAYLOAD_STRING_LL     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_L-FRAME_CRC) //127 - 21 - 2 = 104
+#define MAX_USER_PAYLOAD_STRING_SS     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_S-FRAME_CRC) //127 - 9 - 2 = 116
+#define MAX_USER_PAYLOAD_STRING_LS     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_LS-FRAME_CRC) //127 - 15 - 2 = 110
 
 //NOTE: the user payload assumes that there are only 88 "free" bytes to be used for the user message (it does not scale according to the addressing modes)
 #define MAX_USER_PAYLOAD_STRING	MAX_USER_PAYLOAD_STRING_LL
@@ -142,11 +146,13 @@ enum
 #define BLINK_FRAME_CRTL_AND_ADDRESS    (BLINK_FRAME_SOURCE_ADDRESS + BLINK_FRAME_CTRLP) //10 bytes
 #define BLINK_FRAME_LEN_BYTES           (BLINK_FRAME_CRTL_AND_ADDRESS + BLINK_FRAME_CRC)
 
-#define UWB_LIST_SIZE				    (10)	//maximum number of UWBs to range with
-#define UWB_COMM_TIMEOUT                3000    //ms
+#define UWB_LIST_SIZE				    (25)	//maximum number of UWBs to range with (valid options are 0 through 244)
+#define UWB_COMM_TIMEOUT                3000    //ms	//TODO maybe make this a function of other defines?
 
-#define BLINK_SLEEP_DELAY					1000    //ms
-#define POLL_SLEEP_DELAY					500     //ms
+#define BLINK_SLEEP_DELAY					0     //ms //how long the tag should sleep after blinking
+#define POLL_SLEEP_DELAY					25     //ms //how long the tag should sleep after ranging
+
+
 
 #define IMMEDIATE_RESPONSE (1)
 
@@ -165,13 +171,16 @@ enum
 #define PTXT                                1
 #define RRXT                                6
 #define FTXT                                11
-// Length of ToF value in report message. Can be used as offset to put up to
-// 4 ToF values in the report message.
-#define TOFR                                4
+
+
 // Anchor response byte offsets.
 #define RES_R1                              1               // Response option octet 0x02 (1),
 #define RES_R2                              2               // Response option parameter 0x00 (1) - used to notify Tag that the report is coming
 #define RES_R3                              3               // Response option parameter 0x00 (1),
+#define NTAG                                4               // Offset to put number of active TAGs in the report message. (1 byte)
+#define TOFR                                5               // Offset to put ToF values in the report message.			  (6 bytes)
+#define TIME_TILL						    11				// Offset to put time until next RX_ACCEPT in the report message (4 bytes)
+
 // Ranging init message byte offsets. Composed of tag short address, anchor
 // response delay and tag response delay.
 #define RNG_INIT_TAG_SHORT_ADDR_LO 1
@@ -215,7 +224,7 @@ enum
 #define US_TO_SY_INT(x) (((x) * 10000) / 10256)
 
 // Minimum delay between reception and following transmission.
-#define RX_TO_TX_TIME_US 150
+#define RX_TO_TX_TIME_US 300//150 //TODO tune again
 #define RXTOTXTIME          ((int)(150.0 / 1.0256)) //e.g. Poll RX to Response TX time
 
 // Default anchor turn-around time: has to be RX_TO_TX_TIME_US when using
@@ -227,7 +236,7 @@ enum
 // Default tag turn-around time: cannot be less than 300 us. Defined as 500 us
 // so that the tag is not transmitting more than one frame by millisecond (for
 // power management purpose).
-#define TAG_TURN_AROUND_TIME_US 500
+#define TAG_TURN_AROUND_TIME_US 2000//300 //TODO fix again!!!
 
 // "Long" response delays value. Over this limit, special processes must be
 // applied.
@@ -235,7 +244,19 @@ enum
 
 // Delay between blink reception and ranging init message. This is the same for
 // all modes.
-#define RNG_INIT_REPLY_DLY_MS (150)
+#define RNG_INIT_REPLY_DLY_MS (20)
+
+#define MAX(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a > _b ? _a : _b; })
+
+
+#define BLINK_DURATION_MS						RNG_INIT_REPLY_DLY_MS + 1
+#define RANGE_DURATION_MS						MAX(18, POLL_SLEEP_DELAY)  //to increase time between ranging, modify POLL_SLEEP_DELAY
+#define BLINK_FREQUENCY							0.0001
+
+#define RX_CHECK_ON_PERIOD						200; //TODO modify
 
 // Reception start-up time, in symbols.
 #define RX_START_UP_SY 16
@@ -281,7 +302,7 @@ typedef struct
     uint8 panID[2];                             	//  PAN ID 03-04
     uint8 destAddr[ADDR_BYTE_SIZE_L];             	//  05-12 using 64 bit addresses
     uint8 sourceAddr[ADDR_BYTE_SIZE_L];           	//  13-20 using 64 bit addresses
-    uint8 messageData[MAX_USER_PAYLOAD_STRING_LL] ; //  22-124 (application data and any user payload)
+    uint8 messageData[MAX_USER_PAYLOAD_STRING_LL] ; //  21-124 (application data and any user payload)
     uint8 fcs[2] ;                              	//  125-126  we allow space for the CRC as it is logically part of the message. However ScenSor TX calculates and adds these bytes.
 } srd_msg_dlsl ;
 
@@ -502,12 +523,17 @@ typedef struct
 
 	uint8 uwbToRangeWith;	//it is the index of the uwbList array which contains the address of the UWB we are ranging with
     uint8 uwbListLen ;
-    // uint8 prevTagToRangeWith ;
+
 	uint8 uwbList[UWB_LIST_SIZE][8];
-    
+	uint8 uwbNumActive[UWB_LIST_SIZE];		//number of TAGs each tracked ANCHOR is actively ranging with.
+
     // keep track of when final messages so we can drop uwbs that we havent communicated with in a while
     uint32 lastCommTimeStamp[UWB_LIST_SIZE] ;
-    uint8 uwbTimeout[UWB_LIST_SIZE] ;    
+    uint8 uwbTimeout[UWB_LIST_SIZE] ;
+
+    struct TXScheduler tx_scheduler;	//scheduler used by TAG to decide when to blink and when to range with an ANCHOR (and which ANCHOR)
+    struct RXScheduler rx_scheduler;	//scheduler used by ANCHOR to decide which RX messages to accept and respond to
+    uint8 time_till_next_reported[UWB_LIST_SIZE]; //used to keep track of whether we reported the RX_ACCEPT node. 0 if no, 1 if yes.
 
     uint32 blink_start;
     uint32 range_start;
@@ -524,6 +550,12 @@ typedef struct
 	uint8 monitor;
 	uint32 timeofTx ;
 	uint8 smartPowerEn;
+
+	uint32 currentStateStartTime;
+	INST_STATES lastState;
+
+	uint32 rxCheckOnTime;
+
 
 } instance_data_t ;
 

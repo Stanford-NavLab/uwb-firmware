@@ -17,6 +17,13 @@
 #include "deca_regs.h"
 #include "deca_device_api.h"
 
+
+#include <stdio.h>
+extern void usb_run(void);
+extern int usb_init(void);
+extern void usb_printconfig(int, uint8*, int);
+extern void send_usbmessage(uint8*, int);
+
 // Defines for enable_clocks function
 #define FORCE_SYS_XTI  0
 #define ENABLE_ALL_SEQ 1
@@ -446,7 +453,7 @@ void dwt_configure(dwt_config_t *config)
 
     dw1000local.sysCFGreg &= ~SYS_CFG_PHR_MODE_11;
     dw1000local.sysCFGreg |= (SYS_CFG_PHR_MODE_11 & (config->phrMode << SYS_CFG_PHR_MODE_SHFT));
-
+    
     dwt_write32bitreg(SYS_CFG_ID,dw1000local.sysCFGreg) ;
     // Set the lde_replicaCoeff
     dwt_write16bitoffsetreg(LDE_IF_ID, LDE_REPC_OFFSET, reg16) ;
@@ -2122,12 +2129,18 @@ uint8 dwt_checkirq(void)
 void dwt_isr(void)
 {
     uint32 status = dw1000local.cbData.status = dwt_read32bitreg(SYS_STATUS_ID); // Read status register low 32bits
+    uint8 status_high = dwt_read8bitoffsetreg(SYS_STATUS_ID, 4);
+    uint32 mask = dwt_read32bitreg(SYS_MASK_ID);
+
+    uint8 callback_triggered = 0;
 
     // Handle RX good frame event
     if(status & SYS_STATUS_RXFCG)
     {
         uint16 finfo16;
         uint16 len;
+
+        callback_triggered = 1;
 
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_GOOD); // Clear all receive status bits
 
@@ -2170,16 +2183,18 @@ void dwt_isr(void)
             dw1000local.cbRxOk(&dw1000local.cbData);
         }
 
-        if (dw1000local.dblbuffon)
-        {
-            // Toggle the Host side Receive Buffer Pointer
-            dwt_write8bitoffsetreg(SYS_CTRL_ID, SYS_CTRL_HRBT_OFFSET, 1);
-        }
+         if (dw1000local.dblbuffon)
+         {
+             // Toggle the Host side Receive Buffer Pointer
+//             dwt_write8bitoffsetreg(SYS_CTRL_ID, SYS_CTRL_HRBT_OFFSET, 1);
+         }
     }
 
     // Handle TX confirmation event
     if(status & SYS_STATUS_TXFRS)
     {
+    	callback_triggered = 1;
+
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_TX); // Clear TX event bits
 
         // In the case where this TXFRS interrupt is due to the automatic transmission of an ACK solicited by a response (with ACK request bit set)
@@ -2203,6 +2218,24 @@ void dwt_isr(void)
     // Handle frame reception/preamble detect timeout events
     if(status & SYS_STATUS_ALL_RX_TO)
     {
+    	callback_triggered = 1;
+
+    	uint32 and_status = status & SYS_STATUS_ALL_RX_TO;
+		uint8 debug_msg[100];
+		int n = 0;
+		n = sprintf((char*)&debug_msg[0], "rx_timeout!!! and_status: %lu", and_status);
+		send_usbmessage(&debug_msg[0], n);
+		usb_run();
+
+		if(and_status & SYS_STATUS_AFFREJ){
+			uint32 sys_cfg_reg = dwt_read32bitreg(SYS_CFG_ID);
+			n = sprintf((char*)&debug_msg[0], "rx_timeout!!! sys_cfg_reg: %lu", sys_cfg_reg);
+			send_usbmessage(&debug_msg[0], n);
+			usb_run();
+		}
+
+
+
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXRFTO); // Clear RX timeout event bits
 
         dw1000local.wait4resp = 0;
@@ -2223,6 +2256,26 @@ void dwt_isr(void)
     // Handle RX errors events
     if(status & SYS_STATUS_ALL_RX_ERR)
     {
+    	callback_triggered = 1;
+
+    	uint32 and_status = status & SYS_STATUS_ALL_RX_ERR;
+		uint8 debug_msg[100];
+		int n = 0;
+		n = sprintf((char*)&debug_msg[0], "rx_error!!! and_status: %lu", and_status);
+		send_usbmessage(&debug_msg[0], n);
+		usb_run();
+
+		n = sprintf((char*)&debug_msg[0], "rx_error!!! sys_status: %lu", status);
+		send_usbmessage(&debug_msg[0], n);
+		usb_run();
+
+//		if(and_status & SYS_STATUS_AFFREJ){
+//			uint32 sys_cfg_reg = dwt_read32bitreg(SYS_CFG_ID);
+//			n = sprintf((char*)&debug_msg[0], "rx_error!!! sys_cfg_reg: %lu", sys_cfg_reg);
+//			send_usbmessage(&debug_msg[0], n);
+//			usb_run();
+//		}
+
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR); // Clear RX error event bits
 
         dw1000local.wait4resp = 0;
@@ -2239,6 +2292,21 @@ void dwt_isr(void)
             dw1000local.cbRxErr(&dw1000local.cbData);
         }
     }
+
+    //
+    if(callback_triggered == 0)
+    {
+    	//clear status register
+    	uint32 SYS_STATUS_ALL_INT = 1073217534; //TODO cleanup
+    	dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_INT);
+
+    	uint8 debug_msg[50];
+		int n = sprintf((char*)&debug_msg[0], "unsubscribed callback");
+		send_usbmessage(&debug_msg[0], n);
+		usb_run();
+
+    }
+
 }
 
 /*! ------------------------------------------------------------------------------------------------------------------
@@ -2522,6 +2590,7 @@ int dwt_starttx(uint8 mode)
         if ((checkTxOK & SYS_STATUS_TXERR) == 0) // Transmit Delayed Send set over Half a Period away or Power Up error (there is enough time to send but not to power up individual blocks).
         {
             retval = DWT_SUCCESS ; // All okay
+
         }
         else
         {
@@ -2559,10 +2628,18 @@ int dwt_starttx(uint8 mode)
  */
 void dwt_forcetrxoff(void)
 {
+	uint32 SYS_MASK_VAL = 605278336;
+	uint32 SYS_MASK_RESERVED = 0xC0080001;
+	uint32 SYS_STATUS_ALL_INT= 1073217534;
+
     decaIrqStatus_t stat ;
     uint32 mask;
 
     mask = dwt_read32bitreg(SYS_MASK_ID) ; // Read set interrupt mask
+//    if(mask != SYS_MASK_VAL){
+//		uint8 mismatch = 1;
+//	}
+
 
     // Need to beware of interrupts occurring in the middle of following read modify write cycle
     // We can disable the radio, but before the status is cleared an interrupt can be set (e.g. the
@@ -2570,16 +2647,96 @@ void dwt_forcetrxoff(void)
     // thus we need to disable interrupt during this operation
     stat = decamutexon() ;
 
-    dwt_write32bitreg(SYS_MASK_ID, 0) ; // Clear interrupt mask - so we don't get any unwanted events
+
+	mask &= SYS_MASK_RESERVED;
+    //this is writing to the reserved bits!!!
+	//dwt_write32bitreg(SYS_MASK_ID, 0) ; // Clear interrupt mask - so we don't get any unwanted events
+
+    dwt_write32bitreg(SYS_MASK_ID, mask) ; // Clear interrupt mask - so we don't get any unwanted events
 
     dwt_write8bitoffsetreg(SYS_CTRL_ID, SYS_CTRL_OFFSET, (uint8)SYS_CTRL_TRXOFF) ; // Disable the radio
 
     // Forcing Transceiver off - so we do not want to see any new events that may have happened
-    dwt_write32bitreg(SYS_STATUS_ID, (SYS_STATUS_ALL_TX | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_GOOD));
-
+//    dwt_write32bitreg(SYS_STATUS_ID, (SYS_STATUS_ALL_TX | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_GOOD));
+//    dwt_write32bitreg(SYS_STATUS_ID, (SYS_STATUS_ALL_TX | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_GOOD));
+    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_INT);
+//	SYS_MASK_VAL //TODO do something like this for SYS_STATUS above!
     dwt_syncrxbufptrs();
 
-    dwt_write32bitreg(SYS_MASK_ID, mask) ; // Set interrupt mask to what it was
+//    dwt_write32bitreg(SYS_MASK_ID, mask) ; // Set interrupt mask to what it was
+//    uint32 reserved_mask = 0xC0080001;
+//    mask &= reserved_mask; //preserve reserved bits
+    mask |= SYS_MASK_VAL;  //set out desired sys_mask values
+    dwt_write32bitreg(SYS_MASK_ID, mask);
+
+
+//    // Reset the IC (might be needed if not getting here from POWER ON)
+//        dwt_softreset();
+//
+//    	//we can enable any configuration loading from OTP/ROM on initialization
+//        result = dwt_initialise(DWT_LOADUCODE) ;
+//
+//        //this is platform dependent - only program if DW EVK/EVB
+//        dwt_setleds(3) ; //configure the GPIOs which control the leds on EVBs
+//
+//        if (DWT_SUCCESS != result)
+//        {
+//            return (-1) ;   // device initialize has failed
+//        }
+//
+//        //enable TX, RX states on GPIOs 6 and 5
+//        dwt_setlnapamode(1,1);
+//
+//        instanceclearcounts() ;
+//
+//        instance_data[instance].sleepingEabled = 1;
+//        instance_data[instance].panID = 0xdeca ;
+//        instance_data[instance].wait4ack = 0;
+//        instance_data[instance].instanceTimerEnabled = 0;
+//
+//        instance_clearevents();
+//
+//        dwt_geteui(instance_data[instance].eui64);
+//
+//        instance_data[instance].canPrintInfo = 0;
+//
+//        instance_data[instance].clockOffset = 0;
+//        instance_data[instance].monitor = 0;
+//
+//    	dwt_setdblrxbuffmode(1);
+
+
+
+
+
+    uint32 new_mask = dwt_read32bitreg(SYS_MASK_ID);
+    new_mask &= SYS_MASK_VAL;
+
+    uint8 mismatch = 0;
+
+//    while(new_mask != SYS_MASK_VAL){
+	if(new_mask != SYS_MASK_VAL){
+//		dwt_write32bitreg(SYS_MASK_ID, mask);
+//		new_mask = dwt_read32bitreg(SYS_MASK_ID);
+//		new_mask &= SYS_MASK_VAL;
+
+		mismatch = 1;
+    }
+
+    if(mismatch == 1){
+		 uint8 debug_msg[100];
+		 int n = sprintf((char*)&debug_msg[0], "mismatch occurred!");
+		 send_usbmessage(&debug_msg[0], n);
+		 usb_run();
+    }
+
+//    if(new_mask != mask){
+//    	uint8 mismatch = 1;
+//    }
+//    if(new_mask != mask){
+//    	uint8 mismatch = 1;
+//    }
+
 
     // Enable/restore interrupts again...
     decamutexoff(stat) ;
@@ -2865,6 +3022,12 @@ void dwt_setinterrupt(uint32 bitmask, uint8 enable)
 
     // Need to beware of interrupts occurring in the middle of following read modify write cycle
     stat = decamutexon() ;
+
+//    C0080001
+//    uint32 reserved_mask = 0xC0080001;
+//	mask &= reserved_mask; //preserve reserved bits
+//	mask |= SYS_MASK_VAL;  //set out desired sys_mask values
+//	dwt_write32bitreg(SYS_MASK_ID, mask);
 
     mask = dwt_read32bitreg(SYS_MASK_ID) ; // Read register
 
@@ -3246,3 +3409,683 @@ uint8 dwt_readwakeupvbat(void)
    ===============================================================================================
 */
 
+
+void dwt_dumpregisterstousb(){
+
+	//0x00 to 0x3F
+
+	uint8 debug_msg[20000];
+	int n = sprintf((char*)&debug_msg[0], "DWT1000 Register Dump \n");
+	int n_char = n;
+
+	uint8 buffer[4064];
+	int j;
+
+	//0x00 DEV_ID_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x00 DEV_ID_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(DEV_ID_ID,0,DEV_ID_LEN,buffer);
+	for(j = DEV_ID_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x01 EUI_64_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x01 EUI_64_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(EUI_64_ID,0,EUI_64_LEN,buffer);
+	for(j = EUI_64_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x02 RESERVED
+
+	//0x03 PANADR_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x03 PANADR_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(PANADR_ID,0,PANADR_LEN,buffer);
+	for(j = PANADR_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x04 SYS_CFG_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x04 SYS_CFG_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(SYS_CFG_ID,0,SYS_CFG_LEN,buffer);
+	for(j = SYS_CFG_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x05 RESERVED
+
+	//0x06 SYS_TIME_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x06 SYS_TIME_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(SYS_TIME_ID,0,SYS_TIME_LEN,buffer);
+	for(j = SYS_TIME_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x07 RESERVED
+
+	//0x08 TX_FCTRL_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x08 TX_FCTRL_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(TX_FCTRL_ID,0,TX_FCTRL_LEN,buffer);
+	for(j = TX_FCTRL_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x09 TX_BUFFER_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x09 TX_BUFFER_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(TX_BUFFER_ID,0,TX_BUFFER_LEN,buffer);
+	for(j = TX_BUFFER_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+
+	//0x0A DX_TIME_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x0A DX_TIME_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(DX_TIME_ID,0,DX_TIME_LEN,buffer);
+	for(j = DX_TIME_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x0B RESERVED
+
+	//0x0C RX_FWTO_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x0C RX_FWTO_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(RX_FWTO_ID,0,RX_FWTO_LEN,buffer);
+	for(j = RX_FWTO_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x0D SYS_CTRL_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x0D SYS_CTRL_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(SYS_CTRL_ID,0,SYS_CTRL_LEN,buffer);
+	for(j = SYS_CTRL_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x0E SYS_MASK_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x0E SYS_MASK_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(SYS_MASK_ID,0,SYS_MASK_LEN,buffer);
+	for(j = SYS_MASK_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x0F SYS_STATUS_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x0F SYS_STATUS_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(SYS_STATUS_ID,0,SYS_STATUS_LEN,buffer);
+	for(j = SYS_STATUS_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x10 RX_FINFO_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x10 RX_FINFO_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(RX_FINFO_ID,0,RX_FINFO_LEN,buffer);
+	for(j = RX_FINFO_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+
+	//0x11 RX_BUFFER_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x11 RX_BUFFER_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(RX_BUFFER_ID,0,RX_BUFFER_LEN,buffer);
+	for(j = RX_BUFFER_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+
+	//0x12 RX_FQUAL_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x12 RX_FQUAL_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(RX_FQUAL_ID,0,RX_FQUAL_LEN,buffer);
+	for(j = RX_FQUAL_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x13 RX_TTCKI_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x13 RX_TTCKI_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(RX_TTCKI_ID,0,RX_TTCKI_LEN,buffer);
+	for(j = RX_TTCKI_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x14 RX_TTCKO_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x14 RX_TTCKO_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(RX_TTCKO_ID,0,RX_TTCKO_LEN,buffer);
+	for(j = RX_TTCKO_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x15 RX_TIME_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x15 RX_TIME_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(RX_TIME_ID,0,RX_TIME_LLEN,buffer);
+	for(j = RX_TIME_LLEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x16 RESERVED
+
+	//0x17 TX_TIME_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x17 TX_TIME_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(TX_TIME_ID,0,TX_TIME_LLEN,buffer);
+	for(j = TX_TIME_LLEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+
+	//0x18 TX_ANTD_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x18 TX_ANTD_ID:");
+	n_char += n;
+	dwt_readfromdevice(TX_ANTD_ID,0,TX_ANTD_LEN,buffer);
+	for(j = TX_ANTD_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x19 SYS_STATE_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x19 SYS_STATE_ID:");
+	n_char += n;
+	dwt_readfromdevice(SYS_STATE_ID,0,SYS_STATE_LEN,buffer);
+	for(j = SYS_STATE_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x1A ACK_RESP_T_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x1A ACK_RESP_T_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(ACK_RESP_T_ID,0,ACK_RESP_T_LEN,buffer);
+	for(j = ACK_RESP_T_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x1B RESERVED
+	//0x1C RESERVED
+
+	//0x1D RX_SNIFF_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x1D RX_SNIFF_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(RX_SNIFF_ID,0,RX_SNIFF_LEN,buffer);
+	for(j = RX_SNIFF_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x1E TX_POWER_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x1D TX_POWER_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(TX_POWER_ID,0,TX_POWER_LEN,buffer);
+	for(j = TX_POWER_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x1F CHAN_CTRL_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x1F CHAN_CTRL_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(CHAN_CTRL_ID,0,CHAN_CTRL_LEN,buffer);
+	for(j = CHAN_CTRL_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x20 RESERVED
+
+	//0x21 USR_SFD_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x21 USR_SFD_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(USR_SFD_ID,0,USR_SFD_LEN,buffer);
+	for(j = USR_SFD_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x22 RESERVED
+
+	//0x23 AGC_CTRL_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x23 AGC_CTRL_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(AGC_CTRL_ID,0,33,buffer);
+	for(j = 33 - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x24 EXT_SYNC_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x24 EXT_SYNC_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(AGC_CTRL_ID,0,EXT_SYNC_LEN,buffer);
+	for(j = EXT_SYNC_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+
+
+	//0x25 ACC_MEM_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x25 ACC_MEM_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(ACC_MEM_ID,0,ACC_MEM_LEN,buffer);
+	for(j = ACC_MEM_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+
+	//0x26 GPIO_CTRL_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x26 GPIO_CTRL_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(GPIO_CTRL_ID,0,GPIO_CTRL_LEN,buffer);
+	for(j = GPIO_CTRL_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x27 DRX_CONF_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x27 DRX_CONF_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(DRX_CONF_ID,0,DRX_CONF_LEN,buffer);
+	for(j = DRX_CONF_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x28 RF_CONF_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x28 RF_CONF_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(RF_CONF_ID,0,RF_CONF_LEN,buffer);
+	for(j = RF_CONF_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x29 RESERVED
+
+
+	//0x2A-0x00 TX_CAL_ID-TC_SARC_OFFSET
+	n = sprintf((char*)&debug_msg[n_char], "0x2A-0x00 TX_CAL_ID-TC_SARC_OFFSET:\n");
+	n_char += n;
+	dwt_readfromdevice(TX_CAL_ID,TC_SARC_OFFSET,TC_SARC_LEN,buffer);
+	for(j = TC_SARC_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2A-0x03 TX_CAL_ID-TC_SARL_OFFSET
+	n = sprintf((char*)&debug_msg[n_char], "0x2A-0x03 TX_CAL_ID-TC_SARL_OFFSET:\n");
+	n_char += n;
+	dwt_readfromdevice(TX_CAL_ID,TC_SARL_OFFSET,TC_SARL_LEN,buffer);
+	for(j = TC_SARL_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2A-0x06 TX_CAL_ID-TC_SARW_OFFSET
+	n = sprintf((char*)&debug_msg[n_char], "0x2A-0x06 TX_CAL_ID-TC_SARW_OFFSET:\n");
+	n_char += n;
+	dwt_readfromdevice(TX_CAL_ID,TC_SARW_OFFSET,TC_SARW_LEN,buffer);
+	for(j = TC_SARW_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2A-0x08 TX_CAL_ID-TC_PG_CTRL_OFFSET
+	n = sprintf((char*)&debug_msg[n_char], "0x2A-0x08 TX_CAL_ID-TC_PG_CTRL_OFFSET:\n");
+	n_char += n;
+	dwt_readfromdevice(TX_CAL_ID,TC_PG_CTRL_OFFSET,TC_PG_CTRL_LEN,buffer);
+	for(j = TC_PG_CTRL_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2A-0x09 TX_CAL_ID-TC_PG_STATUS_OFFSET
+	n = sprintf((char*)&debug_msg[n_char], "0x2A-0x09 TX_CAL_ID-TC_PG_STATUS_OFFSET:\n");
+	n_char += n;
+	dwt_readfromdevice(TX_CAL_ID,TC_PG_STATUS_OFFSET,TC_PG_STATUS_LEN,buffer);
+	for(j = TC_PG_STATUS_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+
+	//0x2A-0x0B TX_CAL_ID-TC_PGDELAY_OFFSET
+	n = sprintf((char*)&debug_msg[n_char], "0x2A-0x0B TX_CAL_ID-TC_PGDELAY_OFFSET:\n");
+	n_char += n;
+	dwt_readfromdevice(TX_CAL_ID,TC_PGDELAY_OFFSET,TC_PGDELAY_LEN,buffer);
+	for(j = TC_PGDELAY_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2A-0x0C TX_CAL_ID-TC_PGTEST_OFFSET
+	n = sprintf((char*)&debug_msg[n_char], "0x2A-0x0C TX_CAL_ID-TC_PGTEST_OFFSET:\n");
+	n_char += n;
+	dwt_readfromdevice(TX_CAL_ID,TC_PGTEST_OFFSET,TC_PGTEST_LEN,buffer);
+	for(j = TC_PGTEST_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2B FS_CTRL_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x2B FS_CTRL_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(FS_CTRL_ID,0,FS_CTRL_LEN,buffer);
+	for(j = FS_CTRL_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2C AON_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x2C AON_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(AON_ID,0,AON_LEN,buffer);
+	for(j = AON_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2D OTP_IF_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x2D OTP_IF_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(OTP_IF_ID,0,OTP_IF_LEN,buffer);
+	for(j = OTP_IF_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2E-0x0000 DIG_DIAG_ID-LDE_THRESH_OFFSET
+	n = sprintf((char*)&debug_msg[n_char], "0x2E-0x0000 DIG_DIAG_ID-LDE_THRESH_OFFSET:\n");
+	n_char += n;
+	dwt_readfromdevice(OTP_IF_ID,LDE_THRESH_OFFSET,LDE_THRESH_LEN,buffer);
+	for(j = LDE_THRESH_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2E-0x0806 DIG_DIAG_ID-LDE_CFG1_OFFSET
+	n = sprintf((char*)&debug_msg[n_char], "0x2E-0x0806 DIG_DIAG_ID-LDE_CFG1_OFFSET:\n");
+	n_char += n;
+	dwt_readfromdevice(OTP_IF_ID,LDE_CFG1_OFFSET,LDE_CFG1_LEN,buffer);
+	for(j = LDE_CFG1_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2E-0x1000 DIG_DIAG_ID-LDE_PPINDX_OFFSET
+	n = sprintf((char*)&debug_msg[n_char], "0x2E-0x1000 DIG_DIAG_ID-LDE_PPINDX_OFFSET:\n");
+	n_char += n;
+	dwt_readfromdevice(OTP_IF_ID,LDE_PPINDX_OFFSET,LDE_PPINDX_LEN,buffer);
+	for(j = LDE_PPINDX_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2E-0x1002 DIG_DIAG_ID-LDE_PPAMPL_OFFSET
+	n = sprintf((char*)&debug_msg[n_char], "0x2E-0x1002 DIG_DIAG_ID-LDE_PPAMPL_OFFSET:\n");
+	n_char += n;
+	dwt_readfromdevice(OTP_IF_ID,LDE_PPAMPL_OFFSET,LDE_PPAMPL_LEN,buffer);
+	for(j = LDE_PPAMPL_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2E-0x1804 DIG_DIAG_ID-LDE_RXANTD_OFFSET
+	n = sprintf((char*)&debug_msg[n_char], "0x2E-0x1804 DIG_DIAG_ID-LDE_RXANTD_OFFSET:\n");
+	n_char += n;
+	dwt_readfromdevice(OTP_IF_ID,LDE_RXANTD_OFFSET,LDE_RXANTD_LEN,buffer);
+	for(j = LDE_RXANTD_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2E-0x1806 DIG_DIAG_ID-LDE_CFG2_OFFSET
+	n = sprintf((char*)&debug_msg[n_char], "0x2E-0x1806 DIG_DIAG_ID-LDE_CFG2_OFFSET:\n");
+	n_char += n;
+	dwt_readfromdevice(OTP_IF_ID,LDE_CFG2_OFFSET,LDE_CFG2_LEN,buffer);
+	for(j = LDE_CFG2_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2E-0x2804 DIG_DIAG_ID-LDE_REPC_OFFSET
+	n = sprintf((char*)&debug_msg[n_char], "0x2E-0x2804 DIG_DIAG_ID-LDE_REPC_OFFSET:\n");
+	n_char += n;
+	dwt_readfromdevice(OTP_IF_ID,LDE_REPC_OFFSET,LDE_REPC_LEN,buffer);
+	for(j = LDE_REPC_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x2F DIG_DIAG_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x2F DIG_DIAG_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(DIG_DIAG_ID,0,DIG_DIAG_LEN,buffer);
+	for(j = DIG_DIAG_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x30 RESERVED
+	//0x31 RESERVED
+	//0x32 RESERVED
+	//0x33 RESERVED
+	//0x34 RESERVED
+	//0x35 RESERVED
+
+	//0x36 PMSC_ID
+	n = sprintf((char*)&debug_msg[n_char], "0x36 PMSC_ID:\n");
+	n_char += n;
+	dwt_readfromdevice(PMSC_ID,0,PMSC_LEN,buffer);
+	for(j = PMSC_LEN - 1; j >= 0; j--)
+	{
+		n = sprintf((char*)&debug_msg[n_char], "%d,", buffer[j]);
+		n_char += n;
+	}
+	n = sprintf((char*)&debug_msg[n_char], "\n");
+	n_char += n;
+
+	//0x37 RESERVED
+	//0x38 RESERVED
+	//0x39 RESERVED
+	//0x3A RESERVED
+	//0x3B RESERVED
+	//0x3C RESERVED
+	//0x3D RESERVED
+	//0x3E RESERVED
+	//0x3F RESERVED
+
+	int div = 100;
+	int idx = 0;
+
+	for(int i = 0; i + div < n_char; i += div)
+	{
+		idx = i;
+		send_usbmessage(&debug_msg[i], div);
+		usb_run();
+		deca_sleep(10);
+	}
+	if(idx + 1 < n_char)
+	{
+		send_usbmessage(&debug_msg[idx], n_char - idx);
+		usb_run();
+	}
+
+}

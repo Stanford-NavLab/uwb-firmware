@@ -1736,6 +1736,20 @@ void decamutexoff(decaIrqStatus_t s) ;
  */
 void deca_sleep(unsigned int time_ms);
 
+/*! ------------------------------------------------------------------------------------------------------------------
+ * @fn dwt_dumpregisterstousb()
+ *
+ * @brief send all register values to USB.
+ * NB: The body of this function is defined in deca_device.c and is platform specific
+ *
+ * input parameters:
+ *
+ * output parameters
+ *
+ * no return value
+ */
+void dwt_dumpregisterstousb();
+
 #ifdef __cplusplus
 }
 #endif

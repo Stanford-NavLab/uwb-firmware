@@ -302,7 +302,7 @@ extern "C" {
 
 /* All RX errors mask. */
 #define SYS_STATUS_ALL_RX_ERR  (SYS_STATUS_RXPHE | SYS_STATUS_RXFCE | SYS_STATUS_RXRFSL | SYS_STATUS_RXSFDTO \
-                                | SYS_STATUS_AFFREJ | SYS_STATUS_LDEERR)
+                                | SYS_STATUS_AFFREJ | SYS_STATUS_LDEERR | SYS_STATUS_RXOVRR)
 
 /* User defined RX timeouts (frame wait timeout and preamble detect timeout) mask. */
 #define SYS_STATUS_ALL_RX_TO   (SYS_STATUS_RXRFTO | SYS_STATUS_RXPTO)
@@ -310,6 +310,8 @@ extern "C" {
 /* All TX events mask. */
 #define SYS_STATUS_ALL_TX      (SYS_STATUS_AAT | SYS_STATUS_TXFRB | SYS_STATUS_TXPRS | \
                                 SYS_STATUS_TXPHS | SYS_STATUS_TXFRS )
+
+
 
 
 /****************************************************************************//**
@@ -592,7 +594,7 @@ extern "C" {
  * Please take care to write to this register as doing so may cause the DW1000 to malfunction
 **/
 #define AGC_CTRL_ID             0x23            /* Automatic Gain Control configuration */
-#define AGC_CTRL_LEN            (32)
+#define AGC_CTRL_LEN            (32)			//manual says 33...?
 #define AGC_CFG_STS_ID          AGC_CTRL_ID
 /* offset from AGC_CTRL_ID in bytes */
 #define AGC_CTRL1_OFFSET        (0x02)
@@ -950,8 +952,28 @@ extern "C" {
  * @brief Bit definitions for register TX_CAL
  * Refer to section 7.2.43 Register file: 0x2A – Transmitter Calibration block
 **/
+
+
 #define TX_CAL_ID               0x2A            /* Transmitter calibration block */
 #define TX_CAL_LEN              (52)
+
+#define TC_SARC_OFFSET 0x00
+#define TC_SARC_LEN (2)
+#define TC_SARL_OFFSET 0x03
+#define TC_SARL_LEN (3)
+#define TC_SARW_OFFSET 0x06
+#define TC_SARW_LEN (2)
+#define TC_PG_CTRL_OFFSET 0x08
+#define TC_PG_CTRL_LEN (1)
+#define TC_PG_STATUS_OFFSET 0x09
+#define TC_PG_STATUS_LEN (2)
+
+
+
+
+
+
+
 /* offset from TX_CAL_ID in bytes */
 #define TC_SARL_SAR_C		        (0)         /* SAR control */
 /*cause bug in register block TX_CAL, we need to read 1 byte in a time*/

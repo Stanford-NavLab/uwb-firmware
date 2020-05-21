@@ -22,6 +22,8 @@
 
 #include "llist.h"
 
+
+
 extern void usb_run(void);
 extern int usb_init(void);
 extern void usb_printconfig(int, uint8*, int);
@@ -92,7 +94,15 @@ void instancerxon(instance_data_t *inst, int delayed, uint64 delayedReceiveTime)
         dwt_setdelayedtrxtime(dtime) ;
     }
 
-    inst->lateRX -= dwt_rxenable(delayed) ;  //- as when fails -1 is returned             // turn receiver on, immediate/delayed
+//    inst->lateRX -= dwt_rxenable(delayed) ;  //- as when fails -1 is returned             // turn receiver on, immediate/delayed
+
+    uint32 time_now = portGetTickCnt();
+    int dwt_rx_enable_return = dwt_rxenable(delayed);
+	 uint8 debug_msg[100];
+	 int n = sprintf((char*)&debug_msg[0], "RX_ENABLE time_now: %lu, rx_enable: %i", time_now, dwt_rx_enable_return);
+	 send_usbmessage(&debug_msg[0], n);
+	 usb_run();
+	 inst->lateRX -= dwt_rx_enable_return;
 
 } // end instancerxon()
 
@@ -221,6 +231,22 @@ int testapprun(instance_data_t *inst, int message)
 {
     int done = INST_NOT_DONE_YET;
     
+//    uint8 debug_msg[100];
+//	int n = sprintf((char *)&debug_msg, "TAR");
+//	send_usbmessage(&debug_msg[0], n);
+//	usb_run();
+
+
+    //NOTE: temporary debug code
+    if(inst->testAppState != inst->lastState){
+    	inst->currentStateStartTime = portGetTickCnt();
+    }
+    inst->lastState = inst->testAppState;
+
+    send_statetousb(inst);
+
+
+
     switch (inst->testAppState)
     {
         case TA_INIT :
@@ -255,6 +281,7 @@ int testapprun(instance_data_t *inst, int message)
                     }
 
                     inst->testAppState = TA_TXBLINK_WAIT_SEND;
+                    inst->tx_scheduler.last_blink_time = portGetTickCnt();
                     memcpy(&inst->blinkmsg.tagID[0], &inst->eui64[0], ADDR_BYTE_SIZE_L);
 
                     mode = (DWT_PRESRV_SLEEP|DWT_CONFIG|DWT_TANDV);
@@ -272,9 +299,8 @@ int testapprun(instance_data_t *inst, int message)
                 break;
                 case ANCHOR:
                 {
-
-                    dwt_enableframefilter(DWT_FF_NOTYPE_EN); //disable frame filtering
-                    inst->frameFilteringEnabled = 0 ;
+                    dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN | DWT_FF_RSVD_EN);
+                    inst->frameFilteringEnabled = 1 ;
                     dwt_seteui(inst->eui64);
                     dwt_setpanid(inst->panID);
 
@@ -320,26 +346,27 @@ int testapprun(instance_data_t *inst, int message)
         }
         case TA_TX_SELECT:
         {
+//        	send_statetousb(inst);
             // select whether to blink or send out a range poll message.
             // select a uwb from the list if sending out a range poll message
-            if(inst->uwbListLen == 0) //no known anchors yet, send out blink
-            {
-                inst->testAppState = TA_TXBLINK_WAIT_SEND;
-                inst->uwbToRangeWith = 255;
-            }
-            else
-            {
-                //for now, blink after attempting to poll each uwb in the list
-                if((inst->uwbToRangeWith >= inst->uwbListLen) || (inst->uwbTimeout[inst->uwbToRangeWith] == 1))
-                {
-                    inst->testAppState = TA_TXBLINK_WAIT_SEND;
-                    inst->uwbToRangeWith = 255;
-                }
-                else
-                {
-                    inst->testAppState = TA_TXPOLL_WAIT_SEND;
-                }
-            }
+        	int uwb_index = inst->tx_scheduler.tx_select(&inst->tx_scheduler);
+
+//        	uint8 debug_msg[100];
+//			int n = sprintf((char *)&debug_msg, "selected index %i ", uwb_index);
+//			send_usbmessage(&debug_msg[0], n);
+//			usb_run();
+
+        	if(uwb_index < 0){
+        		//do nothing
+        		//TODO would be best to sleep until next possible poll and then select again...
+        		done = INST_DONE_WAIT_FOR_NEXT_EVENT; //TODO make sure that this is the right thing to do.
+        	}else if(uwb_index > 244){
+        		inst->testAppState = TA_TXBLINK_WAIT_SEND;
+        		inst->uwbToRangeWith = (uint8)255;
+        	}else{
+        		inst->testAppState = TA_TXPOLL_WAIT_SEND;
+        		inst->uwbToRangeWith = (uint8)uwb_index;
+        	}
 
             break; // end case TA_TX_SELECT
         }
@@ -347,13 +374,13 @@ int testapprun(instance_data_t *inst, int message)
         {
             // if (inst->mode == ANCHOR)
             // {
-            //     send_statetousb(inst);
+//                 send_statetousb(inst);
             // }
             event_data_t* dw_event = instance_getevent(10); //clear the event from the queue
             // waiting for timout from application to wakup IC
             if (dw_event->type != DWT_SIG_RX_TIMEOUT)
             {
-                // if no pause and no wake-up timeout continu waiting for the sleep to be done.
+                // if no pause and no wake-up timeout continue waiting for the sleep to be done.
                 done = INST_DONE_WAIT_FOR_NEXT_EVENT; //wait here for sleep timeout
                 break;
             }
@@ -391,8 +418,9 @@ int testapprun(instance_data_t *inst, int message)
             //     send_statetousb(inst);
             // }
             //if we are scheduled to go to sleep before next sending then sleep first.
-            if(((inst->nextState == TA_TXPOLL_WAIT_SEND)
-                || (inst->nextState == TA_TXBLINK_WAIT_SEND) || (inst->nextState == TA_TX_SELECT))
+//            if(((inst->nextState == TA_TXPOLL_WAIT_SEND)
+//                || (inst->nextState == TA_TXBLINK_WAIT_SEND) || (inst->nextState == TA_TX_SELECT))
+			if(inst->nextState == TA_TX_SELECT
                     && (inst->goToSleep)  //go to sleep before sending the next poll
                     )
             {
@@ -458,27 +486,33 @@ int testapprun(instance_data_t *inst, int message)
                 
                 if(tx_start == 0)
                 {
-                    uint32 deltat;
-                    uint8 debug_msg[100];
-                    if(inst->blink0range1 == 1){
-                        deltat = portGetTickCnt() - inst->range_start;
-                        sprintf((char *)&debug_msg, "range time: %u ", (unsigned int)deltat);
-                    }
-                    else{
-                        deltat = portGetTickCnt() - inst->blink_start;
-                        sprintf((char *)&debug_msg, "blink time: %u ", (unsigned int)deltat);
-                    }
-                    send_txmsgtousb((char *)&debug_msg);
+//                    uint32 deltat;
+//                    uint8 debug_msg[100];
+//                    if(inst->blink0range1 == 1){
+//                        deltat = portGetTickCnt() - inst->range_start;
+//                        sprintf((char *)&debug_msg, "range time: %u ", (unsigned int)deltat);
+//                    }
+//                    else{
+//                        deltat = portGetTickCnt() - inst->blink_start;
+//                        sprintf((char *)&debug_msg, "blink time: %u ", (unsigned int)deltat);
+//                    }
+//                    send_txmsgtousb((char *)&debug_msg);
+
                     
-                    inst->blink0range1 = 0;
+					uint8 debug_msg[100];
+					int n = sprintf((char *)&debug_msg, "TX_BLINK,%llX,NULL", instance_get_addr());
+					send_usbmessage(&debug_msg[0], n);
+					usb_run();
+
+					inst->blink0range1 = 0;
                     inst->blink_start = portGetTickCnt();
                     // send_txmsgtousb("BLINK-SUCCESS");
                     inst->timeofTx = portGetTickCnt();
                 }
-                // else
-                // {
-                //     send_txmsgtousb("BLINK-ERROR");
-                // }
+                else
+                {
+//                    send_txmsgtousb("BLINK-ERROR");
+                }
 
 
                 inst->goToSleep = 1; //go to Sleep after this blink
@@ -495,7 +529,7 @@ int testapprun(instance_data_t *inst, int message)
             // {
             //     send_statetousb(inst);
             // }
-            // send_txmsgtousb("RTLS_DEMO_MSG_RNG_INIT");
+//            send_txmsgtousb("RTLS_DEMO_MSG_RNG_INIT");
 
             uint16 resp_dly_us, resp_dly;
 
@@ -563,6 +597,7 @@ int testapprun(instance_data_t *inst, int message)
 
                 instanceconfigframeheader(inst);
                 inst->timeofTx = portGetTickCnt();
+//                ints->
                 //inst->monitor = 1;
             }
 
@@ -570,9 +605,9 @@ int testapprun(instance_data_t *inst, int message)
         }
         case TA_TXPOLL_WAIT_SEND :
         {
-            // uint8 debug_msg[100];
-            // sprintf((char *)&debug_msg, "RTLS_DEMO_MSG_TAG_POLL -> uwb %i ", inst->uwbToRangeWith);
-            // send_txmsgtousb((char *)&debug_msg);
+//            uint8 debug_msg[100];
+//            sprintf((char *)&debug_msg, "RTLS_DEMO_MSG_TAG_POLL -> uwb %i ", inst->uwbToRangeWith);
+//            send_txmsgtousb((char *)&debug_msg);
             int psduLength = 0;
             
             inst->goToSleep = 1; //go to Sleep after this poll
@@ -588,8 +623,8 @@ int testapprun(instance_data_t *inst, int message)
             psduLength = TAG_POLL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
 #endif
             //set the delayed rx on time (the response message will be sent after this delay)
-            dwt_setrxaftertxdelay(inst->txToRxDelayTag_sy);
-            dwt_setrxtimeout((uint16)inst->fwtoTime_sy);
+            dwt_setrxaftertxdelay(inst->txToRxDelayTag_sy*0); //TODO fix this! remove *0
+            dwt_setrxtimeout((uint16)inst->fwtoTime_sy*2);    //TODO fix this! remove *2
 
             dwt_writetxdata(psduLength, (uint8 *)  &inst->msg[inst->uwbToRangeWith], 0) ; // write the frame data
 
@@ -597,24 +632,56 @@ int testapprun(instance_data_t *inst, int message)
             inst->wait4ack = DWT_RESPONSE_EXPECTED;
 
             dwt_writetxfctrl(psduLength, 0, 1);
-            dwt_starttx(DWT_START_TX_IMMEDIATE | inst->wait4ack);
+            if(dwt_starttx(DWT_START_TX_IMMEDIATE | inst->wait4ack) == 0){
+//            	uint32 time_now = portGetTickCnt();
+            	uint8 debug_msg[100];
+//				int n = sprintf((char *)&debug_msg, "TX_POLL,%llX,%llX,%lu", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith),time_now);
+				int n = sprintf((char *)&debug_msg, "TX_POLL,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+				send_usbmessage(&debug_msg[0], n);
+				usb_run();
+
+				uint8 buffer[SYS_STATUS_LEN];
+				uint64 sys_status_reg;
+				dwt_readfromdevice(SYS_STATUS_ID,0,SYS_STATUS_LEN,buffer);
+
+				for (int j = SYS_STATUS_LEN-1 ; j >= 0 ; j --)
+				{
+					sys_status_reg = (sys_status_reg << 8) + buffer[j] ;
+				}
+
+				uint64 sys_state_reg;
+				dwt_readfromdevice(SYS_STATE_ID,0,SYS_STATE_LEN,buffer);
+
+				for (int j = SYS_STATE_LEN-1 ; j >= 0 ; j --)
+				{
+					sys_state_reg = (sys_state_reg << 8) + buffer[j] ;
+				}
+
+//				debug_msg[100];
+				n = sprintf((char *)&debug_msg, "SYS_STATUS: %llu SYS_STATE: %llu", sys_status_reg, sys_state_reg);
+				send_usbmessage(&debug_msg[0], n);
+				usb_run();
+
+            }
 
             inst->testAppState = TA_TX_WAIT_CONF ;                                          // wait confirmation
             inst->previousState = TA_TXPOLL_WAIT_SEND ;
             done = INST_DONE_WAIT_FOR_NEXT_EVENT; //will use RX FWTO to time out (set below)
 
-            uint32 deltat;
-            uint8 debug_msg[100];
-            if(inst->blink0range1 == 1){
-                deltat = portGetTickCnt() - inst->range_start;
-                sprintf((char *)&debug_msg, "range time: %u ", (unsigned int)deltat);
-            }
-            else{
-                deltat = portGetTickCnt() - inst->blink_start;
-                sprintf((char *)&debug_msg, "blink time: %u ", (unsigned int)deltat);
-            }
-            send_txmsgtousb((char *)&debug_msg);
+//            uint32 deltat;
+////            uint8 debug_msg[100];
+//            if(inst->blink0range1 == 1){
+//                deltat = portGetTickCnt() - inst->range_start;
+//                sprintf((char *)&debug_msg, "range time: %u ", (unsigned int)deltat);
+//            }
+//            else{
+//                deltat = portGetTickCnt() - inst->blink_start;
+//                sprintf((char *)&debug_msg, "blink time: %u ", (unsigned int)deltat);
+//            }
+//            send_txmsgtousb((char *)&debug_msg);
             
+
+//            inst->uwbToRangeWith = 255; //let the rx_scheduler reselect the uwb
             inst->blink0range1 = 1;
             inst->range_start = portGetTickCnt();
 
@@ -654,16 +721,29 @@ int testapprun(instance_data_t *inst, int message)
 
             dwt_writetxdata(psduLength, (uint8 *)  &inst->msg[inst->uwbToRangeWith], 0) ; // write the frame data
 
+            uint32 response_time = portGetTickCnt() - inst->range_start;
+
+//            uint16 reg = dwt_read16bitoffsetreg(PMSC_ID, 0) ;
+//			reg |= 0x20 ; // set bit 5 high
+//			dwt_write16bitoffsetreg(PMSC_ID, 0, reg) ;
+
             if(instancesendpacket(psduLength, DWT_START_TX_DELAYED, inst->delayedReplyTime))
             {
                 // initiate the re-transmission
                 inst->testAppState = TA_TXE_WAIT ;
-                inst->nextState = TA_TXPOLL_WAIT_SEND ;
-                
+                //inst->nextState = TA_TXPOLL_WAIT_SEND ; //TODO should this go to TX_SELECT instead?
+//                inst->testAppState = TA_TX_SELECT; //TODO reset next and previous?
+                inst->nextState = TA_TX_SELECT; //TODO reset next and previous?
+
                 inst->wait4ack = 0; //clear the flag as the TX has failed the TRX is off
                 inst->lateTX++;
 
-                break; //exit this switch case...
+//
+                uint8 debug_msg[100];
+				sprintf((char *)&debug_msg, "RTLS_DEMO_MSG_TAG_FINAL -> late tx");
+				send_txmsgtousb((char *)&debug_msg);
+				usb_run();
+
             }
             else
             {
@@ -674,18 +754,27 @@ int testapprun(instance_data_t *inst, int message)
                 
                 inst->timeofTx = portGetTickCnt();
                 inst->monitor = 1;
-                // uint8 debug_msg[100];
-                // sprintf((char *)&debug_msg, "RTLS_DEMO_MSG_TAG_FINAL -> tag %i ", inst->uwbToRangeWith);
-                // send_txmsgtousb((char *)&debug_msg);
-            
-                break;
+
+               uint8 debug_msg[100];
+				sprintf((char *)&debug_msg, "RTLS_DEMO_MSG_TAG_FINAL -> success!");
+				send_txmsgtousb((char *)&debug_msg);
+				usb_run();
             }
+//            uint8 debug_msg[100];
+//			 int n = sprintf((char*)&debug_msg[0], "time_now: %lu, replytime: %lu", dwt_readsystimestamphi32(), inst->delayedReplyTime);
+//			 send_usbmessage(&debug_msg[0], n);
+//			 usb_run();
+
+
+
+
+            break;
         }
         case TA_TX_WAIT_CONF :
         {
             // if (inst->mode == ANCHOR)
             // {
-            //     send_statetousb(inst);
+//                 send_statetousb(inst);
             // }
             event_data_t* dw_event = instance_getevent(11); //get and clear this event
 
@@ -702,29 +791,33 @@ int testapprun(instance_data_t *inst, int message)
 
                 done = INST_DONE_WAIT_FOR_NEXT_EVENT;
 
+
+                //TODO maybe move out of this if statement???
                 //sometimes the DW1000 tx callback (TXFRS) fails to trigger and the the SYS_STATE register
                 //reads IDLE for for PMSC, RX, and TX so we need another way to timeout since RX FWTO won't be triggered.
-                // uint32 ptc = portGetTickCnt();
                 uint32 dt = get_dt32(inst->timeofTx, portGetTickCnt());
 
-                if(inst->previousState == TA_TXBLINK_WAIT_SEND ||
-                    inst->previousState == TA_TXFINAL_WAIT_SEND ||
+                if( inst->previousState == TA_TXFINAL_WAIT_SEND ||
                     inst->previousState == TA_TXPOLL_WAIT_SEND ||
                     inst->previousState == TA_TXRESPONSE_WAIT_SEND)
                 {
                     //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
-                    // if(ptc - (uint32)inst->timeofTx > 10)                         {
-                    if(dt > 10)                         {
-                        inst_processtxrxtimeout(inst);
+                    if(dt > 20)
+                    {
+                        inst->gotTO = 1;
                     }                
+                }
+                else if(inst->previousState == TA_TXBLINK_WAIT_SEND){ //TODO put this back above???
+                	if(dt > BLINK_SLEEP_DELAY + 20)
+					{
+						inst->gotTO = 1;
+					}
                 }
                 else if(inst->previousState == TA_TXRANGINGINIT_WAIT_SEND)
                 {
-                    //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
-                    // if(ptc - (uint32)inst->timeofTx > 180)
-                    if(dt > 180)
+                    if(dt > RNG_INIT_REPLY_DLY_MS + 20)
                     {
-                        inst_processtxrxtimeout(inst);
+                    	inst->gotTO = 1;
                     }
                 }
                 
@@ -733,20 +826,47 @@ int testapprun(instance_data_t *inst, int message)
 
             done = INST_NOT_DONE_YET;
 
-            if(inst->previousState == TA_TXFINAL_WAIT_SEND) //TAG operations
-            {
+            if (inst->gotTO) //timeout
+			{
+            	uint8 debug_msg[100];
+				int n = sprintf((char *)&debug_msg, "inst->gotTO");
+				send_usbmessage(&debug_msg[0], n);
+				usb_run();
+				// send_txmsgtousb("(2nd) got TO in TA_TX_WAIT_CONF");
+				inst_processtxrxtimeout(inst);
+				inst->gotTO = 0;
+				inst->wait4ack = 0 ; //clear this
+
+				break;
+			}
+            else if(inst->previousState == TA_TXFINAL_WAIT_SEND) //TAG operations
+			{
+
+            	//TODO is this in the wrong spot?
+            	//add cooldown node
+            	uint32 time_now = portGetTickCnt();
+				tx_timing_node *node = malloc(sizeof(tx_timing_node));
+				node->index = inst->uwbToRangeWith;
+				uint32 time_remaining = 0;
+				if(time_now < inst->tx_scheduler.expected_tx_end_time){
+					time_remaining = inst->tx_scheduler.expected_tx_end_time - time_now;
+				}
+				node->duration = (inst->uwbNumActive[inst->uwbToRangeWith]-1)*(uint32)RANGE_DURATION_MS + time_remaining+20;
+
+//				node->duration = (inst->uwbNumActive[inst->uwbToRangeWith]-1)*(int)RANGE_DURATION_MS + inst->tx_scheduler.time_reject_select - time_now;
+				node->time = time_now;
+
+				inst->tx_scheduler.add_node(&inst->tx_scheduler, node);
+
+//				uint8 debug_msg[100];
+//				int n = sprintf((char *)&debug_msg, "tx_scheduler add_node duration %lu", node->duration);
+//				send_usbmessage(&debug_msg[0], n);
+//				usb_run();
+
                 inst->testAppState = TA_TXE_WAIT ;
                 inst->nextState = TA_TX_SELECT;
-                inst->uwbToRangeWith = instfindfirstactiveuwbinlist(inst, inst->uwbToRangeWith + 1);
+//                inst->uwbToRangeWith = instfindfirstactiveuwbinlist(inst, inst->uwbToRangeWith + 1);
                 
-                break;
-            }
-            else if (inst->gotTO) //timeout
-            {
-                // send_txmsgtousb("(2nd) got TO in TA_TX_WAIT_CONF");
-                inst_processtxrxtimeout(inst);
-                inst->gotTO = 0;
-                inst->wait4ack = 0 ; //clear this
                 break;
             }
             else 
@@ -790,6 +910,12 @@ int testapprun(instance_data_t *inst, int message)
             if(inst->wait4ack == 0) //if this is set the RX will turn on automatically after TX
             {
                 //turn RX on
+
+            	uint8 debug_msg[100];
+				 int n = sprintf((char*)&debug_msg[0], "instancerxon called from  case TA_RXE_WAIT :");
+				 send_usbmessage(&debug_msg[0], n);
+				 usb_run();
+
                 instancerxon(inst, 0, 0) ;   // turn RX on, without delay
             }
             else
@@ -804,6 +930,7 @@ int testapprun(instance_data_t *inst, int message)
             }
 
             inst->testAppState = TA_RX_WAIT_DATA;   // let this state handle it
+            inst->rxCheckOnTime = portGetTickCnt() + RX_CHECK_ON_PERIOD;
 
             // end case TA_RXE_WAIT, don't break, but fall through into the TA_RX_WAIT_DATA state to process it immediately.
             if(message == 0) 
@@ -823,7 +950,7 @@ int testapprun(instance_data_t *inst, int message)
             {
                 case DWT_SIG_RX_BLINK :
                 {
-                    // send_rxmsgtousb("RX process: DWT_SIG_RX_BLINK ");
+//                     send_rxmsgtousb("RX process: DWT_SIG_RX_BLINK ");
                     event_data_t* dw_event = instance_getevent(12); //get and clear this event
                     
                     if((inst->mode == LISTENER) || (inst->mode == ANCHOR))
@@ -889,8 +1016,13 @@ int testapprun(instance_data_t *inst, int message)
                     {
                         case RTLS_DEMO_MSG_RNG_INIT:
                         {
-                            // send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-RTLS_DEMO_MSG_RNG_INIT");
+//                            send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-RTLS_DEMO_MSG_RNG_INIT");
                             
+                        	uint8 debug_msg[100];
+							int n = sprintf((char *)&debug_msg, "BLINK_COMPLETE,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+							send_usbmessage(&debug_msg[0], n);
+							usb_run();
+
                             uint32 final_reply_delay_us;
                             uint32 resp_dly[RESP_DLY_NB];
                             int i;
@@ -931,7 +1063,7 @@ int testapprun(instance_data_t *inst, int message)
 
                             memcpy(&inst->msg[inst->uwbToRangeWith].destAddr[0], &srcAddr[0], inst->addrByteSize); //set the anchor address for the reply (set destination address)
 
-                            inst->mode = TAG ;
+//                            inst->mode = TAG ;
                             //inst->responseTimeouts = 0; //reset timeout count
                             inst->goToSleep = 0; //don't go to sleep - start ranging instead and then sleep after 1 range is done or poll times out
                             inst->instanceTimerTimeSaved = inst->instanceTimerTime = portGetTickCnt(); //set timer base
@@ -945,14 +1077,6 @@ int testapprun(instance_data_t *inst, int message)
                                 //only enable receiver when not using double buffering
                                 inst->testAppState = TA_RXE_WAIT ;  // wait for next frame
                                 break;
-                            }
-
-                            if (!inst->frameFilteringEnabled)
-                            {
-                                // if we missed the ACK to the ranging init message we may not have turned frame filtering on
-                                dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN); //we are starting ranging - enable the filter....
-                                
-                                inst->frameFilteringEnabled = 1 ;
                             }
 
                             if(dw_event->typePend == DWT_SIG_TX_PENDING)
@@ -971,7 +1095,7 @@ int testapprun(instance_data_t *inst, int message)
                         }//RTLS_DEMO_MSG_TAG_POLL
                         case RTLS_DEMO_MSG_ANCH_RESP:
                         {
-                            // send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-RTLS_DEMO_MSG_ANCH_RESP ");
+//                             send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-RTLS_DEMO_MSG_ANCH_RESP ");
                             if(inst->mode == LISTENER) //don't process any ranging messages when in Listener mode
                             {
                                 inst->testAppState = TA_RXE_WAIT ;              // wait for next frame
@@ -980,24 +1104,47 @@ int testapprun(instance_data_t *inst, int message)
 
                             inst->anchorRespRxTime = dw_event->timeStamp ; //Response's Rx time
 
+                            uint32 dt = portGetTickCnt() - inst->timeofTx;
+							char debug_msg[100];
+							int n = sprintf((char*)&debug_msg[0], "time till ANCH_RESP %lu", dt);
+							send_usbmessage(&debug_msg[0], n);
+							usb_run();
+
                             inst->testAppState = TA_TXFINAL_WAIT_SEND ; // send our response / the final
 
                             inst->canPrintInfo = 2;
 
                             inst->tof[inst->uwbToRangeWith] = 0;
                             //copy previously calculated ToF
-                            memcpy(&inst->tof[inst->uwbToRangeWith], &(messageData[TOFR]), 5);
+                            memcpy(&inst->tof[inst->uwbToRangeWith], &messageData[TOFR], 6);
+                            memcpy(&inst->uwbNumActive[inst->uwbToRangeWith], &messageData[NTAG], 1);
+
+                            uint32 time_till = 0;
+                            memcpy(&time_till, &messageData[TIME_TILL], sizeof(uint32));
+                            if(time_till != 0){
+
+                            	tx_timing_node *node = malloc(sizeof(tx_timing_node));
+								node->index = inst->uwbToRangeWith;
+								node->duration = 200; //TODO cleanup, set to blink window duration
+//								node->time = portGetTickCnt() - inst->tof[inst->uwbToRangeWith] + time_till; //TODO correctly implement (convert tof timescale?)
+								node->time = portGetTickCnt() + time_till;
+
+								inst->tx_scheduler.add_node(&inst->tx_scheduler, node);
+
+
+
+                            }
+
 
                             inst->newRangeUWBIndex = inst->uwbToRangeWith;
                             inst->newRangeAncAddress = instance_get_uwbaddr(inst->uwbToRangeWith);
                             inst->newRangeTagAddress = instance_get_addr();
-                        
 
                             break; 
                         } //RTLS_DEMO_MSG_ANCH_RESP
                         case RTLS_DEMO_MSG_TAG_FINAL:
                         {
-                            // send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-RTLS_DEMO_MSG_TAG_FINAL ");
+//                            send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-RTLS_DEMO_MSG_TAG_FINAL ");
                             int64 Rb, Da, Ra, Db ;
                             uint64 tagFinalTxTime  = 0;
                             uint64 tagFinalRxTime  = 0;
@@ -1043,6 +1190,10 @@ int testapprun(instance_data_t *inst, int message)
                             inst->tof[inst->uwbToRangeWith] = (int64) ( RaRbxDaDb/(RbyDb + RayDa) );
                             inst->newRangeUWBIndex = inst->uwbToRangeWith;
 
+//							char debug_msg[100];
+//							int n = sprintf((char*)&debug_msg[0], "(int64) ( RaRbxDaDb/(RbyDb + RayDa) ); %lld", inst->tof[inst->uwbToRangeWith]);
+//							send_usbmessage(&debug_msg[0], n);
+//							usb_run();
 
                             if(reportTOF(inst, inst->newRangeUWBIndex) == 0)
                             {
@@ -1055,27 +1206,65 @@ int testapprun(instance_data_t *inst, int message)
                             inst->newRangeTagAddress = instance_get_uwbaddr(inst->uwbToRangeWith);
                             inst->newRangeAncAddress = instance_get_addr();
                             
-                            
+                            uint8 debug_msg[100];
+							int n = sprintf((char *)&debug_msg, "POLL_COMPLETE,%llX,%llX", inst->newRangeTagAddress, inst->newRangeAncAddress);
+							send_usbmessage(&debug_msg[0], n);
+							usb_run();
+
+                            //get num active
+                            rx_timing_node *node = malloc(sizeof(rx_timing_node));
+							node->index = inst->uwbToRangeWith;
+							uint32 num_active = 0;
+							for(int i = 0; i < inst->uwbListLen; i++)
+							{
+								if(inst->uwbTimeout[i] == 0)
+								{
+									num_active++;
+								}
+							}
+							uint32 time_now = portGetTickCnt();
+							uint32 time_remaining = 0;
+//							if(time_now < inst->rx_scheduler.time_reject_all){
+//								time_remaining = inst->rx_scheduler.time_reject_all - time_now;
+//							}
+							if(time_now < inst->rx_scheduler.accepted_node_end_time){
+								time_remaining = inst->rx_scheduler.accepted_node_end_time - time_now;
+							}
+							node->duration = (int)RANGE_DURATION_MS*(num_active-1) + time_remaining;
+							node->time = time_now;
+							node->type = RX_REJECT;
+
+							inst->rx_scheduler.add_node(&inst->rx_scheduler, node);
+
+//							char debug_msg[100];
+//							n = sprintf((char*)&debug_msg[0], "TAG_FINAL %i", *node->index);
+//							send_usbmessage(&debug_msg[0], n);
+//							usb_run();
+
+
                             inst->testAppState = TA_RXE_WAIT ;
                             inst->previousState = TA_INIT;
                             inst->nextState = TA_INIT;
                             inst->uwbToRangeWith = 255;
-                            inst->frameFilteringEnabled = 0;
-                            
 
-                            dwt_enableframefilter(DWT_FF_NOTYPE_EN);
                             dwt_setrxaftertxdelay(0);
-                            instancesetantennadelays(); //this will update the antenna delay if it has changed
+							instancesetantennadelays(); //this will update the antenna delay if it has changed
 
-                        
+
+                            //char debug_msg[100];
+//							n = sprintf((char*)&debug_msg[0], "TAG_FINAL %d", inst->uwbToRangeWith);
+//							send_usbmessage(&debug_msg[0], n);
+//							usb_run();
+
+
                             break; 
                         } //RTLS_DEMO_MSG_TAG_FINAL
                         default:
                         {
-                            // if(inst->mode == ANCHOR)
-                            // {
-                            //     send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-default ");
-                            // }
+//                            if(inst->mode == ANCHOR)
+//                            {
+//                                send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-default ");
+//                            }
                             inst->testAppState = TA_RXE_WAIT ;              // wait for next frame
                             dwt_setrxaftertxdelay(0);
                             
@@ -1093,23 +1282,137 @@ int testapprun(instance_data_t *inst, int message)
                     break ; 
                 } //end of DWT_SIG_RX_OKAY
                 case DWT_SIG_RX_TIMEOUT :
-                {    
-                    // send_txmsgtousb("RX process: DWT_SIG_RX_TIMEOUT ");
+                {
+//                    send_txmsgtousb("RX process: DWT_SIG_RX_TIMEOUT ");
+                    int n;
+                    if(inst->previousState == TA_TXBLINK_WAIT_SEND)
+					{
+						uint8 debug_msg[100];
+						n = sprintf((char *)&debug_msg, "TX_BLINK_TIMEOUT,%llX,NULL", instance_get_addr());
+						send_usbmessage(&debug_msg[0], n);
+						usb_run();
+					}
+					else if(inst->previousState == TA_TXFINAL_WAIT_SEND)
+					{
+						uint8 debug_msg[100];
+						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+						send_usbmessage(&debug_msg[0], n);
+						usb_run();
+					}
+					else if(inst->previousState == TA_TXPOLL_WAIT_SEND)
+					{
+						uint8 debug_msg[100];
+						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+						send_usbmessage(&debug_msg[0], n);
+						usb_run();
+					}
                     
+                    uint8 buffer[SYS_STATUS_LEN];
+					uint64 sys_status_reg;
+					dwt_readfromdevice(SYS_STATUS_ID,0,SYS_STATUS_LEN,buffer);
+
+					for (int j = SYS_STATUS_LEN-1 ; j >= 0 ; j --)
+					{
+						sys_status_reg = (sys_status_reg << 8) + buffer[j] ;
+					}
+
+					uint64 sys_state_reg;
+					dwt_readfromdevice(SYS_STATE_ID,0,SYS_STATE_LEN,buffer);
+
+					for (int j = SYS_STATE_LEN-1 ; j >= 0 ; j --)
+					{
+						sys_state_reg = (sys_state_reg << 8) + buffer[j] ;
+					}
+
+					uint8 debug_msg[100];
+					n = sprintf((char *)&debug_msg, "SYS_STATUS: %llu SYS_STATE: %llu", sys_status_reg, sys_state_reg);
+					send_usbmessage(&debug_msg[0], n);
+					usb_run();
+
+
+
                     instance_getevent(17); //get and clear this event
                     inst_processtxrxtimeout(inst);
                     message = 0; //clear the message as we have processed the event
                     
                     break;
                 }
+                case DWT_SIG_TX_DONE: //shouldn't happen under normal conditions, but this signal seems to be somewhat buggy
+                {
+                	//clear the event?
+                	//event_data_t* dw_event = instance_getevent(11); //get and clear this event
+                	instance_getevent(11); //get and clear this event
+
+//                	uint8 debug_msg[100];
+//					int n = sprintf((char *)&debug_msg, "DWT_SIG_TX_DONE in RX_WAIT_DATA");
+//					send_usbmessage(&debug_msg[0], n);
+//					usb_run();
+                	break;
+                }
                 case DWT_SIG_TX_AA_DONE: //ignore this event - just process the rx frame that was received before the ACK response
                 case 0:
                 default :
                 {
-                    // if(inst->mode == ANCHOR)
-                    // {   
-                    //     send_rxmsgtousb("RX process: default ");
-                    // }
+                	//TODO maybe also check the events to see if nothing is upcoming that will handle this for us!
+                	//check if RX is on every so often. Turn it on if it isn't.
+                	uint32 time_now = portGetTickCnt();
+					if(time_now >= inst->rxCheckOnTime)
+					{
+						inst->rxCheckOnTime = portGetTickCnt() + RX_CHECK_ON_PERIOD;
+
+						//read SYS_STATE, getting second byte
+						uint8 regval = dwt_read8bitoffsetreg(SYS_STATE_ID,1);
+						//get the first 5 bytes
+						regval &= 0x1F;
+						if(regval == 0){//RX IDLE
+							dwt_forcetrxoff();
+							instancerxon(inst, 0, 0);
+							uint8 debug_msg[200];
+							int n = sprintf((char *)&debug_msg, "RX IDLE, RESET: regval %u", regval);
+							send_usbmessage(&debug_msg[0], n);
+							usb_run();
+						}
+
+
+						uint8 debug_msg[200];
+						int n = sprintf((char *)&debug_msg, "RX CHECKED: regval %u", regval);
+						send_usbmessage(&debug_msg[0], n);
+						usb_run();
+
+					}
+
+
+                    if(inst->mode == ANCHOR)
+                    {   
+//                        send_rxmsgtousb("RX process: default ");
+
+                    	uint32 delta_t = portGetTickCnt() - inst->currentStateStartTime;
+                    	if(delta_t > 20000){
+
+
+							 uint8 buffer[SYS_STATUS_LEN];
+							uint64 sys_status_reg;
+							dwt_readfromdevice(SYS_STATUS_ID,0,SYS_STATUS_LEN,buffer);
+
+							for (int j = SYS_STATUS_LEN-1 ; j >= 0 ; j --)
+							{
+								sys_status_reg = (sys_status_reg << 8) + buffer[j] ;
+							}
+
+							uint64 sys_state_reg;
+							dwt_readfromdevice(SYS_STATE_ID,0,SYS_STATE_LEN,buffer);
+
+							for (int j = SYS_STATE_LEN-1 ; j >= 0 ; j --)
+							{
+								sys_state_reg = (sys_state_reg << 8) + buffer[j] ;
+							}
+
+							uint8 debug_msg[200];
+							int n = sprintf((char *)&debug_msg, "SYS_STATUS: %llu SYS_STATE: %llu", sys_status_reg, sys_state_reg);
+							send_usbmessage(&debug_msg[0], n);
+							usb_run();
+                    	}
+                    }
                     if(done == INST_NOT_DONE_YET)
                     {
                         done = INST_DONE_WAIT_FOR_NEXT_EVENT;
@@ -1148,17 +1451,46 @@ int instance_init_s(int mode)
 {
     instance_data_t* inst = instance_get_local_structure_ptr(0);
 
+
     inst->mode =  mode;                                // assume anchor,
     inst->testAppState = TA_INIT;
 
-    inst->blink_duration = 154;
-    inst->range_duration = 348;
+//    inst->blink_duration = BLINK_DURATION_MS;
+//    inst->range_duration = RANGE_DURATION_MS;
+//
+//	//TODO move and tie to other #define variables
+//	float_t blink_frequency = 0.0001;
+//
+//	if(inst->mode == ANCHOR){
+//		inst->rx_scheduler = RXScheduler.new(blink_frequency, inst->range_duration, &inst->uwbList, &inst->uwbListLen, UWB_LIST_SIZE, inst->uwbTimeout);
+//	}
+//	else if(inst->mode == TAG){
+//		inst->tx_scheduler = TXScheduler.new(blink_frequency, inst->blink_duration, inst->range_duration, &inst->uwbList, &inst->uwbListLen, UWB_LIST_SIZE, inst->uwbTimeout);
+//	}
+
+//    inst->blink_duration = BLINK_DURATION_MS;
+//	inst->range_duration = RANGE_DURATION_MS;
+
+	//TODO move and tie to other #define variables
+	//float_t blink_frequency = 0.0001;
+
+	if(inst->mode == ANCHOR){
+		inst->rx_scheduler = RXScheduler.new(BLINK_FREQUENCY, BLINK_DURATION_MS, RANGE_DURATION_MS, &inst->uwbList, &inst->uwbListLen, UWB_LIST_SIZE, inst->uwbTimeout, inst->time_till_next_reported);//TODO do i need & ???
+	}
+	else if(inst->mode == TAG){
+		inst->tx_scheduler = TXScheduler.new(BLINK_FREQUENCY, BLINK_DURATION_MS, RANGE_DURATION_MS, &inst->uwbList, &inst->uwbListLen, UWB_LIST_SIZE, inst->uwbTimeout);
+	}
 
 
     // if using auto CRC check (DWT_INT_RFCG and DWT_INT_RFCE) are used instead of DWT_INT_RDFR flag
     // other errors which need to be checked (as they disable receiver) are
     //dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | (DWT_INT_SFDT | DWT_INT_RFTO /*| DWT_INT_RXPTO*/), 1);
-    dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | (DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO /*| DWT_INT_RXPTO*/), 1);
+    // dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | (DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO /*| DWT_INT_RXPTO*/), 1);
+//    dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | (DWT_INT_RXOVRR | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO /*| DWT_INT_RXPTO*/), 1);
+    dwt_setinterrupt(SYS_MASK_VAL, 1);
+
+//    uint32 mask = dwt_read32bitreg(SYS_MASK_ID);
+
 
     //this is platform dependent - only program if DW EVK/EVB
     dwt_setleds(3) ; //configure the GPIOs which control the LEDs on EVBs
@@ -1190,7 +1522,7 @@ void instance_init_timings(void)
         RESP_FRAME_LEN_BYTES, FINAL_FRAME_LEN_BYTES};
     int i;
     // Margin used for timeouts computation.
-    const int margin_sy = 50;
+    const int margin_sy = 500; //50;
 
     // All internal computations are done in tens of picoseconds before
     // conversion into microseconds in order to ensure that we keep the needed
@@ -1286,6 +1618,7 @@ void instance_init_timings(void)
 #else
     inst->responseReplyDelay = 0 ;
 #endif
+
 
     // Smart Power is automatically applied by DW chip for frame of which length
     // is < 1 ms. Let the application know if it will be used depending on the

@@ -462,7 +462,7 @@ int dw_main(void)
 #if (USING_LCD == 1)
         if(instance_mode == TAG)
         {
-			memcpy(&dataseq[2], (const uint8 *) " TAG BLINK  ", 12);
+			memcpy(&dataseq[0], (const uint8 *) "   TAG BLINK    ", 16);
 
 			writetoLCD( 40, 1, dataseq); //send some data
 			sprintf((char*)&dataseq[0], "%llX", instance_get_addr());
@@ -470,9 +470,9 @@ int dw_main(void)
         }
         else
         {
-            memcpy(&dataseq[2], (const uint8 *) "  AWAITING  ", 12);
+            memcpy(&dataseq[0], (const uint8 *) "    AWAITING    ", 16);
             writetoLCD( 40, 1, dataseq); //send some data
-            memcpy(&dataseq[2], (const uint8 *) "    POLL    ", 12);
+            memcpy(&dataseq[0], (const uint8 *) "      POLL      ", 16);
             writetoLCD( 16, 1, dataseq); //send some data
         }
 
@@ -502,6 +502,11 @@ int dw_main(void)
             ranging = 1;
             //send the new range information to LCD and/or USB
             range_result = instance_get_idist(inst->newRangeUWBIndex);
+//            uint8 debug_msg[200];
+//			n = 0;
+//			n = sprintf((char*)&debug_msg[0], "inst->newRangeUWBIndex %d", inst->newRangeUWBIndex);
+//			send_usbmessage(&debug_msg[0], n);
+//			usb_run();
             //set_rangeresult(range_result);
 #if (USING_LCD == 1)
 #if (DELAY_CALIB_OUTPUT == 1)
@@ -517,12 +522,12 @@ int dw_main(void)
 
             if(toggle <= toggle_step)
             {
-                sprintf((char*)&dataseq[1], "ADDRESS - SELF  ");
+                sprintf((char*)&dataseq[0], "ADDRESS - SELF  ");
                 sprintf((char*)&dataseq1[0], "%llX", instance_get_addr());
             }
             else if(toggle <= toggle_step*2)
             {
-                sprintf((char*)&dataseq[1], "RANGING WITH    ");
+                sprintf((char*)&dataseq[0], "RANGING WITH    ");
                 if(inst->mode == TAG)
                 {
                     sprintf((char*)&dataseq1[0], "%.3u ANCHORS     ", instfindnumactiveuwbinlist(inst));
@@ -552,7 +557,8 @@ int dw_main(void)
 
             memset(dataseq, ' ', LCD_BUFF_LEN);
             memset(dataseq1, ' ', LCD_BUFF_LEN);
-            sprintf((char*)&dataseq[1], "LAST: %4.2f m", range_result);
+
+            sprintf((char*)&dataseq[0], "LAST: %4.2f m", range_result);
             writetoLCD( 40, 1, dataseq); //send some data
             sprintf((char*)&dataseq1[0], "%llX", instance_get_uwbaddr(inst->newRangeUWBIndex));
             writetoLCD( 16, 1, dataseq1); //send some data
@@ -571,18 +577,22 @@ int dw_main(void)
             }
             else
             {
-                n = sprintf((char*)&dataseq[0], "a %llX %llX %08X %08X", aaddr, taddr, rng, rng_raw);
+//                n = sprintf((char*)&dataseq[0], "a %llX %llX %08X %08X", aaddr, taddr, rng, rng_raw);
+                n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
             }
 
 #ifdef USB_SUPPORT //this is set in the port.h file
-           send_usbmessage(&dataseq[0], n);
+           if(instance_mode == ANCHOR)
+           {
+        	   send_usbmessage(&dataseq[0], n);
+           }
+//           send_usbmessage(&dataseq[0], n);
 #endif
         }
 
 #if (USING_LCD == 1)
         if(ranging == 0) //discovery/initialization mode for anchor and tag
         {
-            
             if(instance_mode != ANCHOR)
             {
                 if(instancesleeping())
@@ -600,7 +610,7 @@ int dw_main(void)
                     else
                     {
                         toggle = 1;
-                        memcpy(&dataseq[2], (const uint8 *) "   TAG BLINK    ", 16);
+                        memcpy(&dataseq[0], (const uint8 *) "   TAG BLINK    ", 16);
 
                         writetoLCD( 40, 1, dataseq); //send some data
                         sprintf((char*)&dataseq[0], "%llX", instance_get_addr());

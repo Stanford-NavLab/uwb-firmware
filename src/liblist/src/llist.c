@@ -35,37 +35,8 @@ typedef struct {
 	_list_node *head;
 	_list_node *tail;
 
-	//multi-threading support
-//	unsigned char ismt;
-//	pthread_rwlockattr_t llist_lock_attr;
-//	pthread_rwlock_t llist_lock;
 } _llist;
 
-//static inline int write_lock(llist list)
-//{
-//	int rc = 0;
-//
-//	if (((_llist *)list)->ismt)
-//		rc = pthread_rwlock_wrlock(&((_llist *) list)->llist_lock);
-//
-//	return rc;
-//}
-
-//static inline int read_lock(llist list)
-//{
-//	int rc = 0;
-//
-//	if (((_llist *)list)->ismt)
-//		rc = pthread_rwlock_rdlock(&((_llist *) list)->llist_lock);
-//
-//	return rc;
-//}
-
-//static inline void unlock(llist list)
-//{
-//	if (((_llist *)list)->ismt)
-//		pthread_rwlock_unlock(&((_llist *) list)->llist_lock);
-//}
 
 /* Helper functions - not to be exported */
 static _list_node *listsort(_list_node *list, _list_node **updated_tail,
@@ -89,24 +60,6 @@ llist llist_create(comperator compare_func, equal equal_func, unsigned int flags
 	new_list->count = 0;
 	new_list->head = NULL;
 	new_list->tail = NULL;
-
-//	new_list->ismt = false;
-//	if (flags & FLAG_MT_SUPPORT) {
-//		new_list->ismt = true;
-//		rc = pthread_rwlockattr_setpshared(&new_list->llist_lock_attr,
-//						   PTHREAD_PROCESS_PRIVATE);
-//		if (rc != 0) {
-//			free(new_list);
-//			return NULL;
-//		}
-//		rc = pthread_rwlock_init(&new_list->llist_lock,
-//					 &new_list->llist_lock_attr);
-//		if (rc != 0) {
-//			pthread_rwlockattr_destroy(&new_list->llist_lock_attr);
-//			free(new_list);
-//			return NULL;
-//		}
-//	}
 
 	return new_list;
 }
@@ -136,49 +89,32 @@ void llist_destroy(llist list, bool destroy_nodes, node_func destructor)
 		iterator = next;
 	}
 
-//	if (true == ((_llist *)list)->ismt) {
-//		//release any thread related resource, just try to destroy no use checking return code
-//		pthread_rwlockattr_destroy(&((_llist *) list)->llist_lock_attr);
-//		pthread_rwlock_destroy(&((_llist *) list)->llist_lock);
-//	}
 	//release the list
 	free(list);
 }
 
 int llist_size(llist list)
 {
-	unsigned int retval = 0;
-
 	if (list == NULL)
 		return 0;
 
-//	if (read_lock(list))
-//		return LLIST_MULTITHREAD_ISSUE;
-
 	//read only critical section
-	retval = ((_llist *) list)->count;
-
-//	unlock(list);
+	unsigned int retval = ((_llist *) list)->count;
 
 	return retval;
 }
 
 int llist_add_node(llist list, llist_node node, int flags)
 {
-	_list_node *node_wrapper = NULL;
 
 	if (list == NULL)
 		return LLIST_NULL_ARGUMENT;
-	//
-	//write critical section
+
+	_list_node *node_wrapper = NULL;
+
 	node_wrapper = malloc(sizeof(_list_node));
 	if (node_wrapper == NULL)
 		return LLIST_MALLOC_ERROR;
-
-//	if (write_lock(list)) {
-//		free(node_wrapper);
-//		return LLIST_MULTITHREAD_ISSUE;
-//	}
 
 	node_wrapper->node = node;
 	((_llist *) list)->count++;
@@ -196,7 +132,6 @@ int llist_add_node(llist list, llist_node node, int flags)
 		((_llist *) list)->tail = node_wrapper;
 	}
 
-//	unlock(list);
 
 	return LLIST_SUCCESS;
 }
@@ -205,6 +140,7 @@ int llist_delete_node(llist list, llist_node node,
 		      bool destroy_node, node_func destructor)
 {
 	_list_node *iterator;
+	_list_node *tail;
 	_list_node *temp;
 	equal actual_equal;
 
@@ -216,13 +152,11 @@ int llist_delete_node(llist list, llist_node node,
 	if (actual_equal == NULL)
 		return LLIST_EQUAL_MISSING;
 
-//	if (write_lock(list))
-//		return LLIST_MULTITHREAD_ISSUE;
-
 	iterator = ((_llist *) list)->head;
+	tail = ((_llist *) list)->tail;
+
 
 	if (iterator == NULL) {
-//		unlock(list);
 		return LLIST_NODE_NOT_FOUND;
 	}
 
@@ -233,49 +167,71 @@ int llist_delete_node(llist list, llist_node node,
 				destructor(iterator->node);
 			else
 				free(iterator->node);
-			}
+		}
 
-			((_llist *) list)->head = ((_llist *) list)->head->next;
-			free(iterator);
-			((_llist *) list)->count--;
+		((_llist *) list)->head = ((_llist *) list)->head->next;
+		free(iterator);
+		((_llist *) list)->count--;
 
-			if (((_llist *) list)->count == 0) {
-				/*
-				 *  if we deleted the last node, we need to reset the tail also
-				 *  There's no need to check it somewhere else, because the last node must be the head (and tail)
-				 */
-				((_llist *) list)->tail = NULL;
-			}
-			//assert ( ( ( _llist * ) list )->count >= 0 );
-//			unlock(list);
-			return LLIST_SUCCESS;
+		if (((_llist *) list)->count == 0) {
+			/*
+			 *  if we deleted the last node, we need to reset the tail also
+			 *  There's no need to check it somewhere else, because the last node must be the head (and tail)
+			 */
+			((_llist *) list)->tail = NULL;
+			((_llist *) list)->head = NULL;
+		}
+		//assert ( ( ( _llist * ) list )->count >= 0 );
+		return LLIST_SUCCESS;
+	}else if(actual_equal(tail->node, node)){ //is it the last node?
+		while(iterator->next != tail){
+			iterator = iterator->next;
+		}
+		//iterator now second to last.
+		((_llist *) list)->tail = iterator;
+		iterator->next = NULL;
+		if (destroy_node) {
+			if (destructor)
+				destructor(tail->node);
+			else
+				free(tail->node);
+		}
+
+		free(tail);
+		((_llist *) list)->count--;
+
+		return LLIST_SUCCESS;
 	} else {
 		while (iterator->next != NULL) {
 			if (actual_equal(iterator->next->node, node)) {
 				// found it
 				temp = iterator->next;
 				iterator->next = temp->next;
+				if (destroy_node) {
+					if (destructor)
+						destructor(temp->node);
+					else
+						free(temp->node);
+				}
 				free(temp);
 
 				((_llist *) list)->count--;
 				//assert ( ( ( _llist * ) list )->count >= 0 );
 
-//				unlock(list);
 				return LLIST_SUCCESS;
 			}
 
-				iterator = iterator->next;
-			}
-		}
+			iterator = iterator->next;
 
-		if (iterator->next == NULL) {
-//			unlock(list);
-			return LLIST_NODE_NOT_FOUND;
 		}
+	}
+
+	if (iterator->next == NULL) {
+		return LLIST_NODE_NOT_FOUND;
+	}
 
 	//assert ( 1 == 2 );
 	// this assert always failed. we assume that the function never gets here...
-//	unlock(list);
 
 	return LLIST_ERROR;
 }
@@ -304,16 +260,12 @@ int llist_for_each_arg(llist list, node_func_arg func, void *arg)
 	if ((list == NULL) || (func == NULL))
 		return LLIST_NULL_ARGUMENT;
 
-//	read_lock(list);
-
 	iterator = ((_llist *) list)->head;
 
 	while (iterator != NULL) {
 		func(iterator->node, arg);
 		iterator = iterator->next;
 	}
-
-//	unlock(list);
 
 	return LLIST_SUCCESS;
 }
@@ -327,11 +279,9 @@ int llist_insert_node(llist list, llist_node new_node, llist_node pos_node,
 	if ((list == NULL) || (new_node == NULL) || (pos_node == NULL))
 		return LLIST_NULL_ARGUMENT;
 
-//	write_lock(list);
 	node_wrapper = malloc(sizeof(_list_node));
 
 	if (node_wrapper == NULL) {
-//		unlock(list);
 		return LLIST_MALLOC_ERROR;
 	}
 
@@ -351,7 +301,8 @@ int llist_insert_node(llist list, llist_node new_node, llist_node pos_node,
 			node_wrapper->next = iterator->next;
 			iterator->next = node_wrapper;
 		}
-//		unlock(list);
+
+		//TODO update tail?
 
 		return LLIST_SUCCESS;
 	}
@@ -367,14 +318,12 @@ int llist_insert_node(llist list, llist_node new_node, llist_node pos_node,
 				node_wrapper->next = iterator->next;
 				iterator->next = node_wrapper;
 			}
-//			unlock(list);
 			return LLIST_SUCCESS;
 		}
 
 		iterator = iterator->next;
 	}
 
-//	unlock(list);
 
 //	assert(1 == 2);
 	// this assert will always fail. we assume that the function never gets here...
@@ -416,50 +365,50 @@ int llist_find_node(llist list, void *data, llist_node *found)
 
 llist_node llist_get_head(llist list)
 {
-//	read_lock(list);
 
 	if (list != NULL) {
 		if (((_llist *) list)->head) {      // there's at least one node
-//			unlock(list);
 			return ((_llist *) list)->head->node;
 		}
 	}
 
-//	unlock(list);
-
 	return NULL;
 }
 
-// llist_node llist_get_next(llist list, llist_node node);
-// {
-// 	_list_node *iterator = node;
+ llist_node llist_get_next(llist list, llist_node node)
+ {
+ 	_list_node *iterator;
+ 	equal actual_equal;
 
-// 	if ((list == NULL) || (func == NULL))
-// 		return LLIST_NULL_ARGUMENT;
+	if ((list == NULL) || (node == NULL))
+		return NULL;
 
-// 	iterator = ((_llist *) list)->head;
+	iterator = ((_llist *) list)->head;
+	actual_equal = ((_llist *) list)->equal_func;
 
-// 	while (iterator != NULL) {
-// 		func(iterator->node);
-// 		iterator = iterator->next;
-// 	}
+	if (actual_equal == NULL)
+		return NULL;
 
-// 	return LLIST_SUCCESS;	
-// }
+ 	while(iterator->next != NULL)
+ 	{
+		if (actual_equal(iterator->node, node)) {
+			return iterator->next->node;
+		}
+
+		iterator = iterator->next;
+ 	}
+
+ 	return NULL;
+ }
 
 llist_node llist_get_tail(llist list)
 {
 	if (list != NULL)
 		return NULL;
 
-//	read_lock(list);
-
 	if (((_llist *) list)->tail) {      // there's at least one node
-//		unlock(list);
 		return ((_llist *) list)->tail->node;
 	}
-
-//	unlock(list);
 
 	return NULL;
 }
