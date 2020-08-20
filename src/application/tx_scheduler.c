@@ -1,4 +1,4 @@
-#include "tx_scheduler.h"
+#include "tmda_scheduler.h"
 #include "port.h"
 
 
@@ -6,10 +6,10 @@ extern void usb_run(void);
 extern void send_usbmessage(uint8*, int);
 
 //private methods
-int tx_node_compare(llist_node first, llist_node second)
+int tdma_node_compare(llist_node first, llist_node second)
 {
-    tx_timing_node *first_node = (tx_timing_node *)first;
-    tx_timing_node *second_node = (tx_timing_node *)second;
+    tdma_timing_node *first_node = (tx_timing_node *)first;
+    tdma_timing_node *second_node = (tx_timing_node *)second;
 
 	if(first_node->time == second_node->time)
 	{
@@ -27,7 +27,7 @@ int tx_node_compare(llist_node first, llist_node second)
 }
 
 
-bool tx_node_equal(llist_node first, llist_node second)
+bool tdma_node_equal(llist_node first, llist_node second)
 {
     if(first == second){return true;}
 
@@ -36,10 +36,7 @@ bool tx_node_equal(llist_node first, llist_node second)
 
 
 //class methods
-
-//return index of uwb to initiate comms with
-//index 0-244 for uwb, 255 for blink, -1 for none
-static int tx_select(struct TXScheduler *this)
+static int set_slot(struct TDMAScheduler *this)
 {
 	uint32 time_now = portGetTickCnt();
 	uint32 offset = 0;
@@ -65,7 +62,7 @@ static int tx_select(struct TXScheduler *this)
 
 		if(llist_size(this->list) == 0){break;}
 
-		tx_timing_node *node = llist_get_head(this->list);
+		tdma_timing_node *node = llist_get_head(this->list);
 
 		if(time_now_offset > node->time + node->duration + offset){ //expired
 			llist_delete_node(this->list, node, true, NULL);
@@ -133,7 +130,8 @@ static int tx_select(struct TXScheduler *this)
 	return -1;
 }
 
-static bool add_node(struct TXScheduler *this, tx_timing_node *node) //TODO handle unsuccessful add
+
+static bool add_node(struct TDMAScheduler *this, tdma_timing_node *node) //TODO handle unsuccessful add
 {
 //	char debug_msg[100];
 //	n = sprintf((char*)&debug_msg[0], "node added, index %i", *node->index);
@@ -166,23 +164,51 @@ static bool add_node(struct TXScheduler *this, tx_timing_node *node) //TODO hand
 	}
 }
 
-static struct TXScheduler new(float blink_frequency, uint32 blink_duration, uint32 range_duration, uint8 (*uwb_list)[][8], uint8 *uwb_list_length, uint8 uwb_max_list_length, uint8 uwb_timeout_list[]){
-	struct TXScheduler ret = {.uwb_list = uwb_list, .uwb_list_length = uwb_list_length, .uwb_max_list_length=uwb_max_list_length, .uwb_timeout_list = uwb_timeout_list};
-	ret.list = llist_create(tx_node_compare, tx_node_equal, 0);
-	ret.blink_frequency = blink_frequency;
-	ret.blink_duration = blink_duration;
-	ret.range_duration = range_duration;
+static struct TDMAScheduler new(float blink_frequency, uint8 (*uwb_list)[][8], uint8 *uwb_list_length, uint8 uwb_max_list_length, uint8 min_framelength /*uint8 uwb_timeout_list[]*/){
+	struct TDMAScheduler ret = {};
 	ret.blink_period = (int)(1.0/blink_frequency);
-	ret.tx_select = &tx_select;
+	ret.uwb_list = uwb_list;
+	ret.uwb_list_length = uwb_list_length;
+	ret.uwb_max_list_length = uwb_max_list_length;
+//	ret.uwb_timeout_list = uwb_timeout_list; //might need uwbliststate pointer here
+
+	ret.list = llist_create(tx_node_compare, tx_node_equal, 0);
+
 	ret.add_node = &add_node;
-	ret.last_blink_time = 0;
-	ret.last_select_index = 0;
-	ret.time_reject_select = 0;
-	ret.poll_frequency = .05;
-	ret.poll_frequency_period = (uint32)(1.0/ret.poll_frequency);
+	ret.set_slot = &set_slot;
+
+	time_now = portGetTickCnt();
+
+	ret.last_blink_time = time_now;
+	ret.framelength = min_framelength;
+	ret.maxFramelength = min_framelength;
+	while(ret.maxFramelength < ret.uwb_max_list_length + 1)
+	{
+		ret.maxFramelength *= 2;
+	}
+    ret.slotDuration = 30; //TODO use a #define or something?
+
+    ret.slotAssignments = malloc(sizeof(uint16)*ret.maxFramelength);
+    for(int i = 0; i < inst->maxFramelength; i++)
+    {
+    	uint16 blank = 0x0000;
+    	memcpy(&ret.slotAssignments[i], &blank, 2);
+    }
+
+    ret.uwbFramelengths = malloc(sizeof(uint8)*ret.maxFramelength);
+    for(int i = 0; i < 	ret.uwb_max_list_length; i++)
+    {
+    	ret.uwbFramelengths[i] = 0;
+    }
+
+    ret.frameStartTime = time_now;
+    ret.lastSlotStartTime = time_now;
+    ret.discoveryStartTime = time_now;
+    ret.last_blink_time = time_now;
+
 	return ret;
 }
 
-const struct TXSchedulerClass TXScheduler={.new=&new};
+const struct TDMASchedulerClass TDMAScheduler={.new=&new};
 
 

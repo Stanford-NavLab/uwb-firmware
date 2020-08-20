@@ -36,7 +36,7 @@ extern void send_usbmessage(uint8*, int);
 #define SWS1_CH5_MODE		0x40  //channel 5 mode (switch S1-7)
 
 int dr_mode = 0;
-int instance_mode = ANCHOR;
+int instance_mode = DISCOVERY;
 
 uint8 s1switch = 0;
 int chan, tagaddr, ancaddr, prf;
@@ -191,6 +191,8 @@ uint32 inittestapplication(uint8 s1switch)
     result = instance_init() ;
     if (0 > result) return(-1) ; // Some failure has occurred
 
+    result = tdma_init_s();
+
     port_set_dw1000_fastrate();
     devID = instancereaddeviceid() ;
 
@@ -202,19 +204,19 @@ uint32 inittestapplication(uint8 s1switch)
 
     if(s1switch & SWS1_ANC_MODE)
     {
-        instance_mode = ANCHOR;
+//        instance_mode = ANCHOR;
 
         led_on(LED_PC6);
 
     }
     else
     {
-        instance_mode = TAG;
+//        instance_mode = TAG;
         led_on(LED_PC7);
     }
 
-    instance_init_s(instance_mode);
-    dr_mode = decarangingmode(s1switch);
+    instance_init_s();
+	dr_mode = decarangingmode(s1switch);
 
     chan = chConfig[dr_mode].channelNumber ;
     prf = (chConfig[dr_mode].pulseRepFreq == DWT_PRF_16M)? 16 : 64 ;
@@ -329,6 +331,8 @@ int dw_main(void)
     // enable the USB functionality
     usb_init();
     Sleep(1000);
+    usb_run();
+    Sleep(10000);
 #endif
 
     s1switch = port_is_boot1_on(0) << 1 // is_switch_on(TA_SW1_2) << 2
@@ -449,32 +453,32 @@ int dw_main(void)
 #endif
         if(s1switch & SWS1_ANC_MODE)
         {
-            instance_mode = ANCHOR;
+//            instance_mode = ANCHOR;
 
             led_on(LED_PC6);
         }
         else
         {
-            instance_mode = TAG;
+//            instance_mode = TAG;
             led_on(LED_PC7);
         }
 
 #if (USING_LCD == 1)
-        if(instance_mode == TAG)
-        {
-			memcpy(&dataseq[0], (const uint8 *) "   TAG BLINK    ", 16);
+//        if(instance_mode == TAG)
+//        {
+			memcpy(&dataseq[0], (const uint8 *) " DISCOVERY MODE ", 16);
 
 			writetoLCD( 40, 1, dataseq); //send some data
 			sprintf((char*)&dataseq[0], "%llX", instance_get_addr());
 			writetoLCD( 16, 1, dataseq); //send some data
-        }
-        else
-        {
-            memcpy(&dataseq[0], (const uint8 *) "    AWAITING    ", 16);
-            writetoLCD( 40, 1, dataseq); //send some data
-            memcpy(&dataseq[0], (const uint8 *) "      POLL      ", 16);
-            writetoLCD( 16, 1, dataseq); //send some data
-        }
+//        }
+//        else
+//        {
+//            memcpy(&dataseq[0], (const uint8 *) "    AWAITING    ", 16);
+//            writetoLCD( 40, 1, dataseq); //send some data
+//            memcpy(&dataseq[0], (const uint8 *) "      POLL      ", 16);
+//            writetoLCD( 16, 1, dataseq); //send some data
+//        }
 
         command = 0x2 ;  //return cursor home
         writetoLCD( 1, 0,  &command);
@@ -494,12 +498,13 @@ int dw_main(void)
         
 		instance_data_t* inst = instance_get_local_structure_ptr(0);
 		canSleep = instance_run(); //run the state machine!!!
+		instance_mode = inst->mode; //TODO modify how the rest of this works with DISCOVER, TAG, and ANCHOR!
 
         if(instancenewrange())
         {
         	int n, rng, rng_raw;
             uint64 aaddr, taddr;
-            ranging = 1;
+//            ranging = 1;
             //send the new range information to LCD and/or USB
             range_result = instance_get_idist(inst->newRangeUWBIndex);
 //            uint8 debug_msg[200];
@@ -570,28 +575,43 @@ int dw_main(void)
             rng = (int) (range_result*1000);
             rng_raw = (int) (instance_get_idistraw(inst->newRangeUWBIndex)*1000);
 
-            if(instance_mode == TAG)
-            {
-                n = sprintf((char*)&dataseq[0], "t %llX %llX %08X %08X", aaddr, taddr, rng, rng_raw);
-                          
-            }
-            else
-            {
-//                n = sprintf((char*)&dataseq[0], "a %llX %llX %08X %08X", aaddr, taddr, rng, rng_raw);
-                n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
-            }
+
+
+//            n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
+//            n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
+
+			if(instance_mode == TAG)
+			{
+//				n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
+
+			}
+			else
+			{
+//				n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
+			}
+
+//            if(instance_mode == TAG)
+//            {
+//                n = sprintf((char*)&dataseq[0], "t %llX %llX %08X %08X", aaddr, taddr, rng, rng_raw);
+//
+//            }
+//            else
+//            {
+////                n = sprintf((char*)&dataseq[0], "a %llX %llX %08X %08X", aaddr, taddr, rng, rng_raw);
+//                n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
+//            }
 
 #ifdef USB_SUPPORT //this is set in the port.h file
-           if(instance_mode == ANCHOR)
+           if(instance_mode == TAG)
            {
-        	   send_usbmessage(&dataseq[0], n);
+//        	   send_usbmessage(&dataseq[0], n);
            }
 //           send_usbmessage(&dataseq[0], n);
 #endif
         }
 
 #if (USING_LCD == 1)
-        if(ranging == 0) //discovery/initialization mode for anchor and tag
+        if(instanceisranging() == 0) //discovery/initialization mode for anchor and tag
         {
             if(instance_mode != ANCHOR)
             {
@@ -620,7 +640,7 @@ int dw_main(void)
 
                 if(instanceanchorwaiting() == 2)
                 {
-                    ranging = 1;
+//                    ranging = 1;
                     dataseq[0] = 0x2 ;  //return cursor home
                     writetoLCD( 1, 0,  dataseq);
                     memcpy(&dataseq[0], (const uint8 *) "    RANGING     ", 16);
@@ -676,7 +696,7 @@ int dw_main(void)
 #endif
 
 #ifdef USB_SUPPORT //this is set in the port.h file
-        usb_run();
+//        usb_run();
 #endif
 
         if(canSleep)__WFI();

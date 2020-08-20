@@ -57,7 +57,7 @@ int local_have_data = 0;
 int version_size;
 uint8* version;
 int s1configswitch;
-extern int ranging;
+//extern int ranging;
 
 extern uint32_t APP_Rx_length;
 extern uint32 inittestapplication(uint8 s1switch);
@@ -383,7 +383,7 @@ int process_usbmessage(void)
 					//enable DW1000 IRQ
 					port_EnableEXT_IRQ(); //enable IRQ before starting
 
-					ranging = 0;
+//					ranging = 0;
 
 				}
 				//d (from "deca")

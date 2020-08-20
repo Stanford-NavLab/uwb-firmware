@@ -2128,9 +2128,17 @@ uint8 dwt_checkirq(void)
  */
 void dwt_isr(void)
 {
+
+
     uint32 status = dw1000local.cbData.status = dwt_read32bitreg(SYS_STATUS_ID); // Read status register low 32bits
-    uint8 status_high = dwt_read8bitoffsetreg(SYS_STATUS_ID, 4);
-    uint32 mask = dwt_read32bitreg(SYS_MASK_ID);
+//    uint8 status_high = dwt_read8bitoffsetreg(SYS_STATUS_ID, 4);
+//    uint32 mask = dwt_read32bitreg(SYS_MASK_ID);
+
+//    uint8 debug_msg[50];
+//	int n = sprintf((char*)&debug_msg[0], "dwt_isr SYS_STATUS: %lu", status);
+//	send_usbmessage(&debug_msg[0], n);
+//	usb_run();
+
 
     uint8 callback_triggered = 0;
 
@@ -2186,7 +2194,7 @@ void dwt_isr(void)
          if (dw1000local.dblbuffon)
          {
              // Toggle the Host side Receive Buffer Pointer
-//             dwt_write8bitoffsetreg(SYS_CTRL_ID, SYS_CTRL_HRBT_OFFSET, 1);
+             dwt_write8bitoffsetreg(SYS_CTRL_ID, SYS_CTRL_HRBT_OFFSET, 1);
          }
     }
 
@@ -2220,19 +2228,19 @@ void dwt_isr(void)
     {
     	callback_triggered = 1;
 
-    	uint32 and_status = status & SYS_STATUS_ALL_RX_TO;
-		uint8 debug_msg[100];
-		int n = 0;
-		n = sprintf((char*)&debug_msg[0], "rx_timeout!!! and_status: %lu", and_status);
-		send_usbmessage(&debug_msg[0], n);
-		usb_run();
+//    	uint32 and_status = status & SYS_STATUS_ALL_RX_TO;
+//		uint8 debug_msg[100];
+//		int n = 0;
+//		n = sprintf((char*)&debug_msg[0], "rx_timeout!!! and_status: %lu", and_status);
+//		send_usbmessage(&debug_msg[0], n);
+//		usb_run();
 
-		if(and_status & SYS_STATUS_AFFREJ){
-			uint32 sys_cfg_reg = dwt_read32bitreg(SYS_CFG_ID);
-			n = sprintf((char*)&debug_msg[0], "rx_timeout!!! sys_cfg_reg: %lu", sys_cfg_reg);
-			send_usbmessage(&debug_msg[0], n);
-			usb_run();
-		}
+//		if(and_status & SYS_STATUS_AFFREJ){
+//			uint32 sys_cfg_reg = dwt_read32bitreg(SYS_CFG_ID);
+//			n = sprintf((char*)&debug_msg[0], "rx_timeout!!! sys_cfg_reg: %lu", sys_cfg_reg);
+//			send_usbmessage(&debug_msg[0], n);
+//			usb_run();
+//		}
 
 
 
@@ -2258,17 +2266,17 @@ void dwt_isr(void)
     {
     	callback_triggered = 1;
 
-    	uint32 and_status = status & SYS_STATUS_ALL_RX_ERR;
-		uint8 debug_msg[100];
-		int n = 0;
-		n = sprintf((char*)&debug_msg[0], "rx_error!!! and_status: %lu", and_status);
-		send_usbmessage(&debug_msg[0], n);
-		usb_run();
-
-		n = sprintf((char*)&debug_msg[0], "rx_error!!! sys_status: %lu", status);
-		send_usbmessage(&debug_msg[0], n);
-		usb_run();
-
+//    	uint32 and_status = status & SYS_STATUS_ALL_RX_ERR;
+//		uint8 debug_msg[100];
+//		int n = 0;
+//		n = sprintf((char*)&debug_msg[0], "rx_error!!! and_status: %lu", and_status);
+//		send_usbmessage(&debug_msg[0], n);
+//		usb_run();
+//
+//		n = sprintf((char*)&debug_msg[0], "rx_error!!! sys_status: %lu", status);
+//		send_usbmessage(&debug_msg[0], n);
+//		usb_run();
+//
 //		if(and_status & SYS_STATUS_AFFREJ){
 //			uint32 sys_cfg_reg = dwt_read32bitreg(SYS_CFG_ID);
 //			n = sprintf((char*)&debug_msg[0], "rx_error!!! sys_cfg_reg: %lu", sys_cfg_reg);
@@ -2300,10 +2308,10 @@ void dwt_isr(void)
     	uint32 SYS_STATUS_ALL_INT = 1073217534; //TODO cleanup
     	dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_INT);
 
-    	uint8 debug_msg[50];
-		int n = sprintf((char*)&debug_msg[0], "unsubscribed callback");
-		send_usbmessage(&debug_msg[0], n);
-		usb_run();
+//    	uint8 debug_msg[50];
+//		int n = sprintf((char*)&debug_msg[0], "unsubscribed callback");
+//		send_usbmessage(&debug_msg[0], n);
+//		usb_run();
 
     }
 
@@ -2712,23 +2720,23 @@ void dwt_forcetrxoff(void)
     uint32 new_mask = dwt_read32bitreg(SYS_MASK_ID);
     new_mask &= SYS_MASK_VAL;
 
-    uint8 mismatch = 0;
+//    uint8 mismatch = 0;
 
 //    while(new_mask != SYS_MASK_VAL){
-	if(new_mask != SYS_MASK_VAL){
-//		dwt_write32bitreg(SYS_MASK_ID, mask);
-//		new_mask = dwt_read32bitreg(SYS_MASK_ID);
-//		new_mask &= SYS_MASK_VAL;
+//	if(new_mask != SYS_MASK_VAL){
+////		dwt_write32bitreg(SYS_MASK_ID, mask);
+////		new_mask = dwt_read32bitreg(SYS_MASK_ID);
+////		new_mask &= SYS_MASK_VAL;
+//
+//		mismatch = 1;
+//    }
 
-		mismatch = 1;
-    }
-
-    if(mismatch == 1){
-		 uint8 debug_msg[100];
-		 int n = sprintf((char*)&debug_msg[0], "mismatch occurred!");
-		 send_usbmessage(&debug_msg[0], n);
-		 usb_run();
-    }
+//    if(mismatch == 1){
+//		 uint8 debug_msg[100];
+//		 int n = sprintf((char*)&debug_msg[0], "mismatch occurred!");
+//		 send_usbmessage(&debug_msg[0], n);
+//		 usb_run();
+//    }
 
 //    if(new_mask != mask){
 //    	uint8 mismatch = 1;

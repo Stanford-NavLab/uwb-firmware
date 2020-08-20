@@ -18,7 +18,7 @@
 #include "deca_spi.h"
 #include "instance.h"
 
-#include "llist.h"
+//#include "llist.h"
 //#include "uwb_select.h"
 
 #include <inttypes.h>
@@ -36,6 +36,7 @@ extern void send_usbmessage(uint8*, int);
 // -------------------------------------------------------------------------------------------------------------------
 
 static instance_data_t instance_data[NUM_INST] ;
+static struct TDMAHandler tdma_handler;
 
 extern const uint16 rfDelays[2];
 extern const tx_struct txSpectrumConfig[8];
@@ -57,6 +58,32 @@ instance_data_t* instance_get_local_structure_ptr(unsigned int x)
 
 	return &instance_data[x];
 }
+
+// -------------------------------------------------------------------------------------------------------------------
+// Functions
+// -------------------------------------------------------------------------------------------------------------------
+/* @fn 	  instance_get_local_structure_ptr
+ * @brief function to return the pointer to local instance data structure
+ * */
+struct TDMAHandler* tdma_get_local_structure_ptr()
+{
+
+	return &tdma_handler;
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+// function to initialise tdma structures
+//
+// Returns 0 on success and -1 on error
+int tdma_init_s()
+{
+
+    tdma_handler = TDMAHandler.new();
+
+    return 0 ;
+}
+
+
 
 // -------------------------------------------------------------------------------------------------------------------
 // convert microseconds to device time
@@ -187,18 +214,19 @@ int reportTOF(instance_data_t *inst, uint8 uwb_index)
 //
 // -------------------------------------------------------------------------------------------------------------------
 // return index of UWB
-int instgetuwblistindex(instance_data_t *inst, uint8 *uwbAddr)
+int instgetuwblistindex(instance_data_t *inst, uint8 *uwbAddr, uint8 addrByteSize)
 {
     uint8 blank[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+
 
     //add the new UWB to the list, if not already there and there is space
     for(uint8 i=0; i<UWB_LIST_SIZE; i++)
     {
-        if(memcmp(&inst->uwbList[i][0], &uwbAddr[0], inst->addrByteSize) != 0)
+        if(memcmp(&inst->uwbList[i][0], &uwbAddr[0], addrByteSize) != 0)
         {
-            if(memcmp(&inst->uwbList[i][0], &blank[0], inst->addrByteSize) == 0) //blank entry
+            if(memcmp(&inst->uwbList[i][0], &blank[0], addrByteSize) == 0) //blank entry
             {
-                memcpy(&inst->uwbList[i][0], &uwbAddr[0], inst->addrByteSize) ;
+                memcpy(&inst->uwbList[i][0], &uwbAddr[0], addrByteSize) ;
                 inst->uwbListLen = i + 1 ;
 				inst->uwbTimeout[i] = 1;
 				return i;
@@ -227,7 +255,7 @@ int instaddactivateuwbinlist(instance_data_t *inst, uint8 *uwbAddr)
     uint8 blank[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
     //add the new UWB to the list, if not already there and there is space
-    for(i=0; i<UWB_LIST_SIZE; i++)
+    for(i=1; i<UWB_LIST_SIZE; i++)//0 reserved for self. timeout status not used for self
     {
         if(memcmp(&inst->uwbList[i][0], &uwbAddr[0], inst->addrByteSize) != 0)
         {
@@ -273,7 +301,7 @@ int instcheckactiveuwbinlist(instance_data_t *inst, uint8 *uwbAddr)
     uint8 blank[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
     //add the new UWB to the list, if not already there and there is space
-    for(i=0; i<UWB_LIST_SIZE; i++)
+    for(i=1; i<UWB_LIST_SIZE; i++)//0 reserved for self, timeout not used for self
     {
         if(memcmp(&inst->uwbList[i][0], &uwbAddr[0], inst->addrByteSize) == 0)
         {
@@ -332,7 +360,7 @@ int instfindnumactiveuwbinlist(instance_data_t *inst)
 {
     uint8 num = 0;
     
-    for(int i=0; i<inst->uwbListLen; i++)
+    for(int i=1; i<inst->uwbListLen; i++) //0 reserved for self, timeout status not applicable
     {
 		if(!inst->uwbTimeout[i])
 		{
@@ -342,6 +370,47 @@ int instfindnumactiveuwbinlist(instance_data_t *inst)
 
     return num;
 }
+
+// -------------------------------------------------------------------------------------------------------------------
+//
+// function to find the number of neighbor UWBs in our list that are not in a timeout status
+//
+// -------------------------------------------------------------------------------------------------------------------
+int instfindnumactiveneighbors(instance_data_t *inst)
+{
+    uint8 num = 0;
+
+    for(int i=1; i<inst->uwbListLen; i++)// 0 reserved for self, cant be neighbor
+    {
+		if(inst->uwbListType[i] == UWB_LIST_NEIGHBOR)
+		{
+			num++;
+		}
+    }
+
+    return num;
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+//
+// function to find the number of hidden neighbor UWBs in our list that are not in a timeout status
+//
+// -------------------------------------------------------------------------------------------------------------------
+int instfindnumactivehidden(instance_data_t *inst)
+{
+    uint8 num = 0;
+
+    for(int i=1; i<inst->uwbListLen; i++)//0 reserved for self, cannot be hidden
+    {
+		if(inst->uwbListType[i] == UWB_LIST_HIDDEN)
+		{
+			num++;
+		}
+    }
+
+    return num;
+}
+
 
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -360,10 +429,12 @@ void instclearuwbList(void)
 	for(int i=0; i<UWB_LIST_SIZE; i++)
 	{
 		instance_data[instance].lastCommTimeStamp[i] = 0;
+		instance_data[instance].lastRangeTimeStamp[i] = 0;
 		instance_data[instance].uwbTimeout[i] = 0;
 		instance_data[instance].time_till_next_reported[i] = 0;
 		
 		memcpy(&instance_data[instance].uwbList[i][0], &blank[0], 8);
+		instance_data[instance].uwbListType[i] = UWB_LIST_INACTIVE;
 	}
 }
 
@@ -373,6 +444,16 @@ void instclearuwbList(void)
 int instancegetrole(void)
 {
     return instance_data[0].mode;
+}
+
+int instanceisranging(void)
+{
+    if(instance_data[0].ranging == 1)
+    {
+        return 1;
+    }
+
+    return 0;
 }
 
 int instancenewrange(void)
@@ -449,10 +530,11 @@ void instanceclearcounts(void)
 int instance_init(void)
 {
     int instance = 0 ;
+
     int result;
     
-    instance_data[instance].mode =  ANCHOR;                                // assume listener,
-
+    instance_data[instance].mode =  DISCOVERY;
+    instance_data[instance].ranging = 0;
     instance_data[instance].goToSleep = 0;
 
     instance_data[instance].tofIndex = 0;
@@ -500,7 +582,7 @@ int instance_init(void)
     instance_data[instance].clockOffset = 0;
     instance_data[instance].monitor = 0;
 
-	dwt_setdblrxbuffmode(1);
+//	dwt_setdblrxbuffmode(1);
     return 0 ;
 }
 
@@ -647,8 +729,9 @@ void instance_config(instanceConfig_t *config)
     instance_data[instance].configData.txPreambLength = config->preambleLen ;
     instance_data[instance].configData.rxPAC = config->pacSize ;
     instance_data[instance].configData.nsSFD = config->nsSFD ;
-    instance_data[instance].configData.phrMode = DWT_PHRMODE_STD ;
-    instance_data[instance].configData.sfdTO = config->sfdTO;
+//    instance_data[instance].configData.phrMode = DWT_PHRMODE_STD ;
+    instance_data[instance].configData.phrMode = DWT_PHRMODE_EXT ;
+        instance_data[instance].configData.sfdTO = config->sfdTO;
 
     //configure the channel parameters
     dwt_configure(&instance_data[instance].configData) ;
@@ -665,15 +748,10 @@ void instance_config(instanceConfig_t *config)
     	//MUST change the SPI to < 3MHz as the dwt_otpread will change to XTAL clock
     	port_set_dw1000_slowrate(); //reduce SPI to < 3MHz
 
-//#if (SET_TXRX_DELAY == 0)
     	dwt_otpread(ANTDLY_ADDRESS, &antennaDelay, 1);
 
     	instance_data[instance].txAntennaDelay = ((antennaDelay >> (16*(config->pulseRepFreq - DWT_PRF_16M))) & 0xFFFF) >> 1;
     	instance_data[instance].rxAntennaDelay = instance_data[instance].txAntennaDelay ;
-//#else
-//		instance_data[instance].txAntennaDelay = (uint16)TX_ANT_DELAY;
-//		instance_data[instance].rxAntennaDelay = (uint16)RX_ANT_DELAY;
-//#endif
 
     	//read any data from the OTP for the TX power
     	dwt_otpread(TXCFG_ADDRESS, otpPower, 12);
@@ -693,8 +771,6 @@ void instance_config(instanceConfig_t *config)
     instance_data[instance].txAntennaDelay = (uint16)TX_ANT_DELAY;
 	instance_data[instance].rxAntennaDelay = (uint16)RX_ANT_DELAY;
 #endif
-
-
 
     // -------------------------------------------------------------------------------------------------------------------
     // set the antenna delay, we assume that the RX is the same as TX.
@@ -794,16 +870,64 @@ int instance_get_rxl(void) //get number of late Tx frames
 
 void inst_processtxrxtimeout(instance_data_t *inst)
 {
+
+
 	// send_statetousb(inst);
 
-	// uint8 debug_msg[100];
-	// int n = sprintf((char*)&debug_msg[0], "inst_processrxtimeout(), uwbToRangeWith: %i, uwbListlen: %i", inst->uwbToRangeWith, inst->uwbListLen);
-	// send_usbmessage(&debug_msg[0], n);
-	// usb_run();
+//	 uint8 debug_msg[100];
+//	 int n = sprintf((char*)&debug_msg[0], "inst_processrxtimeout(), uwbToRangeWith: %i, uwbListlen: %i", inst->uwbToRangeWith, inst->uwbListLen);
+//	 send_usbmessage(&debug_msg[0], n);
+//	 usb_run();
 	
-    if(inst->mode == ANCHOR) //we did not receive the final/ACK - wait for next poll
+//	tdma_handler.waitForInf = FALSE;
+//	tdma_handler.waitForRngInit = FALSE;
+
+
+	if(inst->mode == DISCOVERY)
+	{
+		inst->wait4ack = 0;
+		inst->uwbToRangeWith = 255;
+//		uint32 maxFrameDuration = tdma_handler.maxFramelength*tdma_handler.slotDuration;
+
+		if(tdma_handler.discovery_mode == WAIT_RNG_INIT || tdma_handler.discovery_mode == WAIT_INF_INIT)
+		{
+//			tdma_handler.discovery_mode = WAIT_INF_REG;
+			uint32 time_now = portGetTickCnt();
+			tdma_handler.set_discovery_mode(&tdma_handler, WAIT_INF_REG, time_now);
+		}
+
+//		if(inst->previousState == TA_TXBLINK_WAIT_SEND)
+//		{
+//			tdma_handler.waitForRngInit = FALSE;
+//		}
+//		else if(inst->previousState == TA_TXRANGINGINIT_WAIT_SEND)
+//		{
+//			tdma_handler.waitForInf = FALSE;
+//		}
+
+		//TODO should I keep/remove this...?
+		if(tdma_handler.check_blink(&tdma_handler) == TRUE)
+		{
+			inst->testAppState = TA_TX_SELECT;
+		}
+		else
+		{
+			inst->testAppState = TA_RXE_WAIT;
+		}
+//		uint32 maxFrameDuration = tdma_handler.maxFramelength*tdma_handler.slotDuration;
+//		if(portGetTickCnt() - tdma_handler.discoveryStartTime > maxFrameDuration) //TODO handle number wrapping!
+//		{
+//			inst->testAppState = TA_TX_SELECT ;
+//		}
+//		else
+//		{
+//			inst->testAppState = TA_RXE_WAIT;
+//		}
+
+		dwt_setrxtimeout(0);
+	}
+	else if(inst->mode == ANCHOR) //we did not receive the final/ACK - wait for next poll
     {
-    	//TODO should I set uwbToRangeWith == 255???
     	inst->wait4ack = 0;
     	inst->uwbToRangeWith = 255;
 		inst->testAppState = TA_RXE_WAIT ;              // wait for next frame
@@ -828,6 +952,7 @@ void inst_processtxrxtimeout(instance_data_t *inst)
 //		}
     }
 
+    inst->previousState = TA_INIT;
     //timeout - disable the radio (if using SW timeout the rx will not be off)
     dwt_forcetrxoff() ;
 }
@@ -849,11 +974,11 @@ void instance_txcallback(const dwt_cb_data_t *txd)
 	dw_event.rxLength = 0;
 	dw_event.typeSave = dw_event.type = DWT_SIG_TX_DONE ;
 
-	// uint32 dt = portGetTickCnt() - instance_data[instance].timeofTx;
-	// char debug_msg[100];
-	// int n = sprintf((char*)&debug_msg[0], "TX CALLBACK: DWT_SIG_TX_DONE. dt: %lu ", dt);
-	// send_usbmessage((uint8*)&debug_msg[0], n);
-	// usb_run();
+//	 uint32 dt = portGetTickCnt() - instance_data[instance].timeofTx;
+//	 char debug_msg[100];
+//	 int n = sprintf((char*)&debug_msg[0], "TX CALLBACK: DWT_SIG_TX_DONE. dt: %lu ", dt);
+//	 send_usbmessage((uint8*)&debug_msg[0], n);
+//	 usb_run();
 
 	instance_putevent(dw_event);
 
@@ -869,14 +994,16 @@ void instance_rxtimeoutcallback(const dwt_cb_data_t *rxd)
 {
 	event_data_t dw_event;
 
-	int instance = 0;
-	uint32 response_time = portGetTickCnt() - instance_data[instance].range_start;
+//	int instance = 0;
+//	uint32 response_time = portGetTickCnt() - instance_data[instance].range_start;
 
-	uint8 debug_msg[200];
-	int n = 0;
-	n = sprintf((char*)&debug_msg[0], "RX TIMEOUT CALLBACK duration: %lu", response_time);
-	send_usbmessage(&debug_msg[0], n);
-	usb_run();
+//	uint8 debug_msg[200];
+//	int n = 0;
+//	n = sprintf((char*)&debug_msg[0], "RX TIMEOUT CALLBACK");// duration: %lu", response_time);
+//	send_usbmessage(&debug_msg[0], n);
+//	usb_run();
+
+
 
 	dw_event.typeSave = dw_event.type = DWT_SIG_RX_TIMEOUT;
 	dw_event.rxLength = 0;
@@ -889,11 +1016,11 @@ void instance_rxtimeoutcallback(const dwt_cb_data_t *rxd)
 
 void instance_rxerrorcallback(const dwt_cb_data_t *rxd)
 {
-	uint8 debug_msg[200];
-	int n = 0;
-	n = sprintf((char*)&debug_msg[0], "RX ERROR CALLBACK");
-	send_usbmessage(&debug_msg[0], n);
-	usb_run();
+//	uint8 debug_msg[200];
+//	int n = 0;
+//	n = sprintf((char*)&debug_msg[0], "RX ERROR CALLBACK");
+//	send_usbmessage(&debug_msg[0], n);
+//	usb_run();
 
 
 	int instance = 0;
@@ -905,10 +1032,20 @@ void instance_rxerrorcallback(const dwt_cb_data_t *rxd)
 	}
 
 
+//	tdma_handler.waitForInf = FALSE;
+//	tdma_handler.waitForRngInit = FALSE;
+	if(tdma_handler.discovery_mode == WAIT_RNG_INIT || tdma_handler.discovery_mode == WAIT_INF_INIT)
+	{
+//		tdma_handler.discovery_mode = WAIT_INF_REG;
+		uint32 time_now = portGetTickCnt();
+		tdma_handler.set_discovery_mode(&tdma_handler, WAIT_INF_REG, time_now);
+	}
+
+
 	event_data_t dw_event;
 	//re-enable the receiver
 	//for ranging application rx error frame is same as TO - as we are not going to get the expected frame
-	if(instance_data[instance].mode == TAG)		//TODO I think frame filtering error events are causing this!!! maybe just turn rx back on like the tag!
+	if(instance_data[instance].mode == TAG || instance_data[instance].mode == DISCOVERY)
 	{
 		dw_event.type = DWT_SIG_RX_TIMEOUT;
 		dw_event.typeSave = 0x40 | DWT_SIG_RX_TIMEOUT;
@@ -918,10 +1055,10 @@ void instance_rxerrorcallback(const dwt_cb_data_t *rxd)
 	}
 	else
 	{
-		uint8 debug_msg[100];
-		 int n = sprintf((char*)&debug_msg[0], "instancerxon called from  case instance_rxerrorcallback :");
-		 send_usbmessage(&debug_msg[0], n);
-		 usb_run();
+//		uint8 debug_msg[100];
+//		 int n = sprintf((char*)&debug_msg[0], "instancerxon called from  case instance_rxerrorcallback :");
+//		 send_usbmessage(&debug_msg[0], n);
+//		 usb_run();
 
 		 instance_data[instance].uwbToRangeWith = 255;
 
@@ -930,335 +1067,9 @@ void instance_rxerrorcallback(const dwt_cb_data_t *rxd)
 
 }
 
-//void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
-//{
-//	uint8 debug_msg[200];
-//	int n = 0;
-//
-//	int instance = 0;
-//	uint8 rxTimeStamp[5]  = {0, 0, 0, 0, 0};
-//	uint8 srcAddr_index = 0;
-//    uint8 rxd_event = 0;
-//	uint8 fcode_index  = 0;
-//	event_data_t dw_event;
-//
-//	//if we got a frame with a good CRC - RX OK
-//	rxd_event = DWT_SIG_RX_OKAY;
-//
-//	dw_event.rxLength = rxd->datalength;
-//
-//	//need to process the frame control bytes to figure out what type of frame we have received
-//	switch(rxd->fctrl[0])
-//	{
-//		//blink type frame
-//		case 0xC5:
-//			if(rxd->datalength == 12)
-//			{
-//				rxd_event = DWT_SIG_RX_BLINK;
-//				n = sprintf((char*)&debug_msg[0], "RX CALLBACK: DWT_SIG_RX_BLINK");
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-//			}
-//			else
-//				rxd_event = SIG_RX_UNKNOWN;
-//
-//			break;
-//
-//		//ACK type frame - not supported in this SW - set as unknown (re-enable RX)
-//		case 0x02:
-//			rxd_event = SIG_RX_UNKNOWN;
-//			break;
-//
-//		//data type frames (with/without ACK request) - assume PIDC is on.
-//		case 0x41:
-//		case 0x61:
-//			//read the frame
-//			if(rxd->datalength > STANDARD_FRAME_SIZE)
-//				rxd_event = SIG_RX_UNKNOWN;
-//
-//
-//			//need to check the destination/source address mode
-//			if((rxd->fctrl[1] & 0xCC) == 0x88) //dest & src short (16 bits)
-//			{
-//				fcode_index = FRAME_CRTL_AND_ADDRESS_S; //function code is in first byte after source address
-//				srcAddr_index = FRAME_CTRLP + ADDR_BYTE_SIZE_S;
-//			}
-//			else if((rxd->fctrl[1] & 0xCC) == 0xCC) //dest & src long (64 bits)
-//			{
-//				fcode_index = FRAME_CRTL_AND_ADDRESS_L; //function code is in first byte after source address
-//				srcAddr_index = FRAME_CTRLP + ADDR_BYTE_SIZE_L;
-//			}
-//			else //using one short/one long
-//			{
-//				fcode_index = FRAME_CRTL_AND_ADDRESS_LS; //function code is in first byte after source address
-//
-//				if(((rxd->fctrl[1] & 0xCC) == 0x8C)) //source short
-//				{
-//					srcAddr_index = FRAME_CTRLP + ADDR_BYTE_SIZE_L;
-//				}
-//				else
-//				{
-//					srcAddr_index = FRAME_CTRLP + ADDR_BYTE_SIZE_S;
-//				}
-//
-//			}
-//
-//			break;
-//
-//		//any other frame types are not supported by this application
-//		default:
-//			rxd_event = SIG_RX_UNKNOWN;
-//			break;
-//	}
-//
-//
-//	//read rx timestamp
-//	if((rxd_event == DWT_SIG_RX_BLINK) || (rxd_event == DWT_SIG_RX_OKAY))
-//	{
-//		dwt_readrxtimestamp(rxTimeStamp) ;
-//		dw_event.timeStamp32l =  (uint32)rxTimeStamp[0] + ((uint32)rxTimeStamp[1] << 8) + ((uint32)rxTimeStamp[2] << 16) + ((uint32)rxTimeStamp[3] << 24);
-//		dw_event.timeStamp = rxTimeStamp[4];
-//		dw_event.timeStamp <<= 32;
-//		dw_event.timeStamp += dw_event.timeStamp32l;
-//		dw_event.timeStamp32h = ((uint32)rxTimeStamp[4] << 24) + (dw_event.timeStamp32l >> 8);
-//
-//		dwt_readrxdata((uint8 *)&dw_event.msgu.frame[0], rxd->datalength, 0);  // Read Data Frame
-//	}
-//
-//	dw_event.typeSave = dw_event.type = rxd_event;
-//
-//	//----------------------------------------------------------------------------------------------
-//	//TWR - here we check if we need to respond to a TWR Poll or Response Messages
-//	//----------------------------------------------------------------------------------------------
-//
-//	//dont process unkown signals or non-blinks that aren't addressed to this UWB
-//	if(rxd_event == DWT_SIG_RX_OKAY)
-//	{
-//		if((dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT ) ||
-//		   (dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL ) ||
-//		   (dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_ANCH_RESP) ||
-//		   (dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_FINAL))
-//		{
-//			uint8 destAddr_index = FRAME_CTRLP;
-//
-//			if(memcmp(&instance_data[instance].eui64[0], &dw_event.msgu.frame[destAddr_index], instance_data[instance].addrByteSize) != 0)
-//			{
-//				// n = sprintf((char*)&debug_msg[0], "RX Message not addressed to me");
-//				// send_usbmessage(&debug_msg[0], n);
-//				// usb_run();
-//				rxd_event = SIG_RX_UNKNOWN;
-//			}
-//		}
-//		else
-//		{
-//			rxd_event = SIG_RX_UNKNOWN;
-//		}
-//	}
-//
-//
-//	//ANCHOR RX
-//	//first check if the address is already tracked.
-//	//if not, add it.
-//	//then get the index for that address
-//
-//	//next check if the ANCHOR is busy with a blink or ranging exchange.
-//	//if BLINK message and busy, add an RX_ACCEPT node to the rx_scheduler
-//	//if not busy with a blink/range exchange, check if we can accept the BLINK or POLL
-//	//if we can accept, set to corresponding index, set to 255
-//
-//
-//	int uwb_index = 255;
-//	if(rxd_event == DWT_SIG_RX_BLINK)
-//	{
-//		uwb_index = instcheckactiveuwbinlist(&instance_data[instance], &dw_event.msgu.rxblinkmsg.tagID[0]);
-//
-//		// n = sprintf((char*)&debug_msg[0], "RX CALLBACK RECEIVED: BLINK <- uwb %d", uwb_index);
-//		// send_usbmessage(&debug_msg[0], n);
-//		// usb_run();
-//	}
-//	else if(rxd_event == DWT_SIG_RX_OKAY)
-//	{
-//
-//		uwb_index = instcheckactiveuwbinlist(&instance_data[instance], &dw_event.msgu.frame[srcAddr_index]);
-//
-//
-//		 n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s <- uwb %d ", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), uwb_index);
-//		 send_usbmessage(&debug_msg[0], n);
-//		 usb_run();
-//
-//	}
-//
-//	// select a uwb to range with if certain messages are received when not currently ranging with another uwb
-//	if (instance_data[instance].uwbToRangeWith == 255 && rxd_event != SIG_RX_UNKNOWN)
-//	{
-//		if(uwb_index == 255) //uwb not yet in list, or timed out
-//		{
-//			if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT && instance_data[instance].mode == TAG)
-//			{
-//				//only process range init from anchors not already in our list, or those that have timed out
-//				if(instaddactivateuwbinlist(&instance_data[instance], &dw_event.msgu.frame[srcAddr_index]))
-//				{
-//					uwb_index = instance_data[instance].uwbToRangeWith;
-//				}
-//				else
-//				{
-//					uwb_index = 255;
-//					instance_data[instance].uwbToRangeWith = 255;
-//				}
-//			}
-//			else if(rxd_event == DWT_SIG_RX_BLINK && instance_data[instance].mode == ANCHOR)
-//			{
-//				//TODO consider adding to anchor list once a RTLS_DEMO_MSG_TAG_POLL has been received...
-//				//only process blinks from tags not already in our list, or those that have timed out
-//				if(instaddactivateuwbinlist(&instance_data[instance], &dw_event.msgu.rxblinkmsg.tagID[0]))
-//				{
-//					uwb_index = instance_data[instance].uwbToRangeWith;
-//				}
-//				else
-//				{
-//					uwb_index = 255;
-//					instance_data[instance].uwbToRangeWith = 255;
-//				}
-//			}
-//		}
-//		else //uwb_index != 255, uwb already in list and not timed out
-//		{
-//			if (dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL && instance_data[instance].mode == ANCHOR)
-//			{
-//				instance_data[instance].uwbToRangeWith = uwb_index;
-//			}
-//		}
-//	}
-//
-//	int event_placed = 0;
-//	if(uwb_index != 255 && instance_data[instance].uwbToRangeWith == uwb_index)
-//	{
-//		//update the timestamp for the most recent communication
-//		instance_data[instance].lastCommTimeStamp[uwb_index] = portGetTickCnt();
-//
-//		if(rxd_event == DWT_SIG_RX_OKAY)
-//		{
-//			//process RTLS_DEMO_MSG_TAG_POLL immediately.
-//			if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL)
-//			{
-//				uint16 frameLength = 0;
-//
-//				instance_data[instance].tagPollRxTime = dw_event.timeStamp ; //Poll's Rx time
-//
-//#if (IMMEDIATE_RESPONSE == 0)
-//				instance_data[instance].delayedReplyTime = (instance_data[instance].tagPollRxTime + instance_data[instance].responseReplyDelay) >> 8 ;  // time we should send the response
-//#else
-//				instance_data[instance].delayedReplyTime = 0;
-//#endif
-//
-//#if (USING_64BIT_ADDR == 1)
-//				frameLength = ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC;
-//#else
-//				frameLength = ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
-//#endif
-//
-//				memcpy(&instance_data[instance].msg[uwb_index].destAddr[0], &dw_event.msgu.frame[srcAddr_index], instance_data[instance].addrByteSize); //remember who to send the reply to (set destination address)
-//
-//				// Write calculated TOF into response message
-//				memcpy(&(instance_data[instance].msg[uwb_index].messageData[TOFR]), &instance_data[instance].tof[uwb_index], 5);
-//
-//				// TODO include the number of active TAGS that the ANCHOR is ranging with
-//				uint8 num_active = 0;
-//				for(int i = 0; i < instance_data[instance].uwbListLen; i++){
-//					if(!instance_data[instance].uwbTimeout[i]){
-//						num_active++;
-//					}
-//				}
-//				memcpy(&(instance_data[instance].msg[uwb_index].messageData[NTAG]), &num_active, 1);
-//
-//
-//				instance_data[instance].tof[uwb_index] = 0; //clear ToF ..
-//
-//				instance_data[instance].msg[uwb_index].seqNum = instance_data[instance].frameSN++;
-//
-//				//set the delayed rx on time (the final message will be sent after this delay)
-////				dwt_setrxaftertxdelay((uint32)instance_data[instance].txToRxDelayAnc_sy);  //units are 1.0256us - wait for wait4respTIM before RX on (delay RX)
-//				 dwt_setrxaftertxdelay(0);  //units are 1.0256us - wait for wait4respTIM before RX on (delay RX)
-//
-//				//response is expected
-//				instance_data[instance].wait4ack = DWT_RESPONSE_EXPECTED;
-//
-//				dwt_writetxfctrl(frameLength, 0, 1);
-//				dwt_writetxdata(frameLength, (uint8 *)  &instance_data[instance].msg[uwb_index], 0) ;	// write the frame data
-//
-//				//report out which message is being sent!
-//				 send_txmsgtousb(get_msg_fcode_string((int)instance_data[instance].msg[uwb_index].messageData[FCODE]));
-//
-//
-//#if (IMMEDIATE_RESPONSE == 1)
-//				dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
-//#else
-//				if(instancesendpacket(frameLength, DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED, instance_data[instance].delayedReplyTime))
-//				{
-//					dw_event.typePend = DWT_SIG_TX_ERROR ;
-//					dwt_setrxaftertxdelay(0);
-//					instance_data[instance].wait4ack = 0; //clear the flag as the TX has failed the TRX is off
-//					instance_data[instance].lateTX++;
-//				}
-//				else
-//#endif
-//				{
-//					dw_event.typePend = DWT_SIG_TX_PENDING ; // exit this interrupt and notify the application/instance that TX is in progress.
-//					instance_data[instance].timeofTx = portGetTickCnt();
-//				}
-//			}
-//
-//			instance_putevent(dw_event);
-//			event_placed = 1;
-//
-//#if (DEEP_SLEEP == 1)
-//			if (instance_data[instance].sleepingEabled)
-//			{
-//				instance_data[instance].rxmsgcount++;
-//			}
-//#endif
-//		}
-//		else if (rxd_event == DWT_SIG_RX_BLINK)
-//		{
-//			// n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: BLINK");
-//			// send_usbmessage(&debug_msg[0], n);
-//			// usb_run();
-//
-//			instance_putevent(dw_event);
-//			event_placed = 1;
-//
-//#if (DEEP_SLEEP == 1)
-//			if (instance_data[instance].sleepingEabled)
-//			{
-//				instance_data[instance].rxmsgcount++;
-//			}
-//#endif
-//		}
-//	}
-//
-//	// TODO figure out a better way to do this, I'd like to keep it where it was if possible
-//	// Toggle the Host side Receive Buffer Pointer
-//	dwt_write8bitoffsetreg(SYS_CTRL_ID, SYS_CTRL_HRBT_OFFSET, 1);
-//
-//
-//	if(!event_placed)
-//	{
-//		// instance_rxerrorcallback(rxd);
-//
-//		instancerxon(&instance_data[instance], 0, 0); //immediately reenable RX
-//	}
-//}
 
 void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 {
-//	uint8 debug_msg[150];
-//	int n = 0;
-
-
-	uint8 debug_msg[150];
-	int n = sprintf((char*)&debug_msg[0], "RX CALLBACK");
-	send_usbmessage(&debug_msg[0], n);
-	usb_run();
 
 	int instance = 0;
 	uint8 rxTimeStamp[5]  = {0, 0, 0, 0, 0};
@@ -1267,6 +1078,21 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 	uint8 fcode_index  = 0;
 	event_data_t dw_event;
 	
+
+//	int num_neighbors = instfindnumactiveneighbors(&instance_data[instance]);
+//	uint8 debug_msg[150];
+//	int n = sprintf((char*)&debug_msg[0], "RX CALLBACK, mode: %s, num_neighbors %d, discovery_mode %s", get_instanceModes_string(instance_data[instance].mode), num_neighbors, get_discovery_modes_string(tdma_handler.discovery_mode));
+//	send_usbmessage(&debug_msg[0], n);
+//	usb_run();
+
+//		uint8 debug_msg[150];
+//		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK, %llX, xxx", instance_get_addr());
+//		send_usbmessage(&debug_msg[0], n);
+//		usb_run();
+
+
+	uint32 time_now = portGetTickCnt();
+
 	//if we got a frame with a good CRC - RX OK
 	rxd_event = DWT_SIG_RX_OKAY;
 
@@ -1281,10 +1107,10 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 			{
 				rxd_event = DWT_SIG_RX_BLINK;
 
-//				uint8 debug_msg[150];
-//				int n = sprintf((char*)&debug_msg[0], "RX CALLBACK: DWT_SIG_RX_BLINK");
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
+				uint8 debug_msg[150];
+				int n = sprintf((char*)&debug_msg[0], "RX CALLBACK: DWT_SIG_RX_BLINK");
+				send_usbmessage(&debug_msg[0], n);
+				usb_run();
 			}
 			else
 				rxd_event = SIG_RX_UNKNOWN;
@@ -1300,9 +1126,8 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 		case 0x41:
 		case 0x61:
 			//read the frame
-			if(rxd->datalength > STANDARD_FRAME_SIZE)
+			if(rxd->datalength > EXTENDED_FRAME_SIZE)
 				rxd_event = SIG_RX_UNKNOWN;
-
 			
 			//need to check the destination/source address mode
 			if((rxd->fctrl[1] & 0xCC) == 0x88) //dest & src short (16 bits)
@@ -1357,10 +1182,9 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 	//TWR - here we check if we need to respond to a TWR Poll or Response Messages
 	//----------------------------------------------------------------------------------------------
 
-	//don't process unknown signals or non-blinks that aren't addressed to this UWB
+	//don't process unknown signals or non-broadcast messages that aren't addressed to this UWB
 	if(rxd_event == DWT_SIG_RX_OKAY)
 	{
-
 
 		if((dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT ) || 
 		   (dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL ) ||
@@ -1369,24 +1193,41 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 		{
 			uint8 destAddr_index = FRAME_CTRLP;
 
-			//TODO make work with short address
-			if(memcmp(&instance_data[instance].eui64[0], &dw_event.msgu.frame[destAddr_index], instance_data[instance].addrByteSize) != 0)
-			{
-				 n = sprintf((char*)&debug_msg[0], "RX Message not addressed to me");
-				 send_usbmessage(&debug_msg[0], n);
-				 usb_run();
+//#if (USING_64BIT_ADDR==0)
+//			if(memcmp(&instance_data[instance].uwbShortAdd, &dw_event.msgu.frame[destAddr_index], instance_data[instance].addrByteSize) != 0)
+//#else
+//    		if(memcmp(&instance_data[instance].eui64[0], &dw_event.msgu.frame[destAddr_index], instance_data[instance].addrByteSize) != 0)
+//#endif
+			if(memcmp(&instance_data[instance].uwbList[0][0], &dw_event.msgu.frame[destAddr_index], instance_data[instance].addrByteSize) != 0)
+    		{
+//				uint8 debug_msg[150];
+//				int n = sprintf((char*)&debug_msg[0], "RX Message not addressed to me");
+//				 send_usbmessage(&debug_msg[0], n);
+//				 usb_run();
 				rxd_event = SIG_RX_UNKNOWN;
 			}
 		}
-		else
+
+
+		else if(dw_event.msgu.frame[fcode_index] != RTLS_DEMO_MSG_INF_REG &&
+				dw_event.msgu.frame[fcode_index] != RTLS_DEMO_MSG_INF_INIT &&
+				dw_event.msgu.frame[fcode_index] != RTLS_DEMO_MSG_INF_SUG &&
+				dw_event.msgu.frame[fcode_index] != RTLS_DEMO_MSG_INF_UPDATE &&
+				dw_event.msgu.frame[fcode_index] != RTLS_DEMO_MSG_RNG_REPORT)
 		{
 			rxd_event = SIG_RX_UNKNOWN;
+//			uint8 debug_msg[150];
+//			int n = sprintf((char*)&debug_msg[0], "not INIT/POLL/RESP/FINAL");
+//			 send_usbmessage(&debug_msg[0], n);
+//			 usb_run();
 		}
 	}
 
-//	bool debug = false;
-//	if(rxd_event == DWT_SIG_RX_BLINK){
-//		debug = true;
+//	if(rxd_event == SIG_RX_UNKNOWN){
+//		uint8 debug_msg[150];
+//		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK: SIG_RX_UNKNOWN");
+//		send_usbmessage(&debug_msg[0], n);
+//		usb_run();
 //	}
 
 	//ANCHOR RX
@@ -1396,121 +1237,164 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 	uint8 uwb_index = 255;
 	if(rxd_event == DWT_SIG_RX_BLINK)
 	{
-		uwb_index = instgetuwblistindex(&instance_data[instance], &dw_event.msgu.rxblinkmsg.tagID[0]);
+		uint8 blink_address[8] = {0,0,0,0,0,0,0,0};
+#if (USING_64BIT_ADDR==0)
+		memcpy(&blink_address, &dw_event.msgu.rxblinkmsg.tagID[0], instance_data[instance].addrByteSize);
+#else
+		uint16 blink_address_short = address64to16(&dw_event.msgu.rxblinkmsg.tagID[0]);
+		memcpy(&blink_address, &blink_address_short, instance_data[instance].addrByteSize);
+#endif
+
+		//must be a neighbor
+//		uwb_index = instgetuwblistindex(&instance_data[instance], &dw_event.msgu.rxblinkmsg.tagID[0], instance_data[instance].addrByteSize);
+		uwb_index = instgetuwblistindex(&instance_data[instance], &blink_address[0], instance_data[instance].addrByteSize);
+//		instance_data[instance].uwbListType[uwb_index] = UWB_LIST_NEIGHBOR;
 
 
-		uint8 debug_msg[100];
-		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK RECEIVED: BLINK uwb_index: %d, uwbToRangeWith: %d ", uwb_index, instance_data[instance].uwbToRangeWith);
-		send_usbmessage(&debug_msg[0], n);
-		usb_run();
+//		uint8 debug_msg[100];
+//		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK RECEIVED: BLINK uwb_index: %d, uwbToRangeWith: %d ", uwb_index, instance_data[instance].uwbToRangeWith);
+//		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK RECEIVED: BLINK %llX, xxxx", instance_get_addr());
+//		send_usbmessage(&debug_msg[0], n);
+//		usb_run();
 	}
 	else if(rxd_event == DWT_SIG_RX_OKAY)
 	{
-		uwb_index = instgetuwblistindex(&instance_data[instance], &dw_event.msgu.frame[srcAddr_index]);
+		//must be a neighbor
+		uwb_index = instgetuwblistindex(&instance_data[instance], &dw_event.msgu.frame[srcAddr_index], instance_data[instance].addrByteSize);
 
-		uint8 debug_msg[100];
-		 int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s uwb_index %d, uwbToRangeWith: %d ", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), uwb_index, instance_data[instance].uwbToRangeWith);
-		 send_usbmessage(&debug_msg[0], n);
-		 usb_run();
+		//TODO maybe do this somewhere else...
+		instance_data[instance].uwbListType[uwb_index] = UWB_LIST_NEIGHBOR;
+		instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
+		instance_data[instance].uwbTimeout[uwb_index] = 0;
+
+//		uint8 debug_msg[100];
+//		 int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s uwb_index %d, uwbToRangeWith: %d ", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), uwb_index, instance_data[instance].uwbToRangeWith);
+//		 int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s, %llX, xxxx", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), instance_get_addr());
+//		 send_usbmessage(&debug_msg[0], n);
+//		 usb_run();
 	}
 
-
-	if(instance_data[instance].mode == ANCHOR)
-	{
-		//TODO this was the missing ingredient, figure out the best way to implement
-		if(instance_data[instance].rx_scheduler.past_accepted_end_Time(&instance_data[instance].rx_scheduler)){
-			instance_data[instance].uwbToRangeWith = 255;
-		}
-	}
-
-	//next check if the ANCHOR is busy with a blink or ranging exchange.
-	//if BLINK message and busy, add an RX_ACCEPT node to the rx_scheduler
-	//if not busy with a blink/range exchange, check if we can accept the BLINK or POLL
-	//if we can accept, set to corresponding index
+	bool accept_inf = FALSE;
+	//check if the incoming message indicates that we should range with the source UWB or just accept and process the message
 	if(rxd_event != SIG_RX_UNKNOWN)
 	{
-
-		if(instance_data[instance].uwbToRangeWith == 255) //not busy
+		if(instance_data[instance].uwbToRangeWith == 255)
 		{
-			if(instance_data[instance].mode == TAG)
+			if(rxd_event == DWT_SIG_RX_OKAY)
 			{
-				if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT)
+				if(instance_data[instance].mode == ANCHOR)
 				{
-					instance_data[instance].uwbTimeout[uwb_index] = 0;
-					instance_data[instance].lastCommTimeStamp[uwb_index] = portGetTickCnt();
-					instance_data[instance].uwbToRangeWith = uwb_index;
-					instance_data[instance].tx_scheduler.last_select_index = uwb_index;
-				}
-			}
-			else if(instance_data[instance].mode == ANCHOR)
-			{
-				if((rxd_event == DWT_SIG_RX_BLINK && instance_data[instance].uwbTimeout[uwb_index] == 1) || (dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL))
-				{
-					RX_MESSAGE_TYPE message_type = RX_POLL;
-					if(rxd_event == DWT_SIG_RX_BLINK)
+					if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL)
 					{
-						message_type = RX_BLINK;
-					}
-
-					if(instance_data[instance].rx_scheduler.rx_accept(&instance_data[instance].rx_scheduler, uwb_index, message_type))
-					{
+						//TODO would be good to check if the UWB sending this message was supposed to be ranging in this timeslot
 						instance_data[instance].uwbToRangeWith = uwb_index;
 					}
-					else if(rxd_event == DWT_SIG_RX_BLINK)
+					else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_REG || dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_SUG || dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_UPDATE)//only anchor if already received INF_INIT or collected regular INF messages and joined with SUG message
 					{
-						//add an RX_ACCEPT node to the rx_scheduler
-						rx_timing_node *node = malloc(sizeof(rx_timing_node));
-						node->index = uwb_index;
-						uint32 half_blink_accept_window = 100; //TODO cleanup (should be a function of the max range...)
-						node->duration = half_blink_accept_window*2;
-						node->time = portGetTickCnt() + instance_data[instance].rx_scheduler.blink_period - half_blink_accept_window;
-						node->type = RX_ACCEPT;
-
-						instance_data[instance].rx_scheduler.add_node(&instance_data[instance].rx_scheduler, node);
-
-						uint8 debug_msg[100];
-						int n = sprintf((char *)&debug_msg, "RX_ACCEPT-add_node (uwbToRangeWith == 255), time_now %lu, index %u", portGetTickCnt(), node->index);
-						send_usbmessage(&debug_msg[0], n);
-						usb_run();
+						accept_inf = TRUE;
+					}
+				}
+				else if (instance_data[instance].mode == DISCOVERY)
+				{
+					//TODO use switch case?
+					if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT)
+					{
+						if(tdma_handler.discovery_mode == WAIT_RNG_INIT)
+						{
+							//only accept RNG_INIT if no other active neighbors exist (and we are waiting for RNG_INIT)
+							int num_active = instfindnumactiveneighbors(&instance_data[instance]);
+							if(num_active <= 1)
+							{
+								instance_data[instance].uwbToRangeWith = uwb_index;
+							}
+						}
+					}
+					else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_INIT)
+					{
+						//only accept if we are waiting for INF_INIT
+						if(tdma_handler.discovery_mode == WAIT_INF_INIT)
+						{
+							instance_data[instance].uwbToRangeWith = uwb_index;
+							accept_inf = TRUE;
+						}
+					}
+					else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_REG ||
+							dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_UPDATE ||
+							dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_SUG)
+					{
+						if(tdma_handler.discovery_mode == WAIT_INF_REG || tdma_handler.discovery_mode == COLLECT_INF_REG)
+						{
+							accept_inf = TRUE;
+						}
 					}
 				}
 			}
-		}
-		else //busy
-		{
-			//note: blinks are auto filtered by DW1000 for TAGs
-			//only process blinks for inactive UWBs
-			if(rxd_event == DWT_SIG_RX_BLINK && instance_data[instance].uwbTimeout[uwb_index] == 1)
+			else if(rxd_event == DWT_SIG_RX_BLINK)
 			{
-				//add an RX_ACCEPT node to the rx_scheduler
-				rx_timing_node *node = malloc(sizeof(rx_timing_node));
-				node->index = uwb_index;
-				uint32 half_blink_accept_window = 100; //TODO cleanup (should be a function of the max range)
-				node->duration = half_blink_accept_window*2;
-				node->time = portGetTickCnt() + instance_data[instance].rx_scheduler.blink_period - half_blink_accept_window;
-				node->type = RX_ACCEPT;
+				//only accept BLINK if in DISCOVERY mode and no other active neighbors exist
+				//and not waiting for inf or rng_init
+				if(instance_data[instance].mode == DISCOVERY)
+				{
+					if(tdma_handler.discovery_mode == WAIT_INF_REG)
+					{
+						int num_neighbors = instfindnumactiveneighbors(&instance_data[instance]);
+//						uint8 debug_msg[100];
+//						int n = sprintf((char*)&debug_msg[0], "num_neighbors %d", num_neighbors);
+//						send_usbmessage(&debug_msg[0], n);
+//						usb_run();
 
-				instance_data[instance].rx_scheduler.add_node(&instance_data[instance].rx_scheduler, node);
-
-				uint8 debug_msg[100];
-				int n = sprintf((char *)&debug_msg, "RX_ACCEPT-add_node, time_now %lu, index %u", portGetTickCnt(), node->index);
-				send_usbmessage(&debug_msg[0], n);
-				usb_run();
+						if(num_neighbors <= 1)
+						{
+							instance_data[instance].uwbToRangeWith = uwb_index;
+						}
+					}
+				}
 			}
 		}
 	}
-//	else{
-//		n = sprintf((char*)&debug_msg[0], "SIG_RX_UNKNOWN");
-//		send_usbmessage(&debug_msg[0], n);
-//		usb_run();
-//	}
 
-	n = sprintf((char*)&debug_msg[0], "uwb_index %d, uwbToRangeWith %d", uwb_index, instance_data[instance].uwbToRangeWith);
-	send_usbmessage(&debug_msg[0], n);
-	usb_run();
 
-	int event_placed = 0; 
-	if(uwb_index != 255 && instance_data[instance].uwbToRangeWith == uwb_index)
+//	n = sprintf((char*)&debug_msg[0], "uwb_index %d, uwbToRangeWith %d", uwb_index, instance_data[instance].uwbToRangeWith);
+//	send_usbmessage(&debug_msg[0], n);
+//	usb_run();
+
+
+	int place_event = 0;
+
+
+	if(rxd_event == DWT_SIG_RX_OKAY && uwb_index != 255)
+	{
+		//always accept.
+		if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_REPORT)
+		{
+//			uint8 debug_msg[100];
+//			 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: RNG_REPORT <- uwb_index %d", uwb_index);
+//			 send_usbmessage(&debug_msg[0], n);
+//			 usb_run();
+			instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
+			instance_data[instance].uwbTimeout[uwb_index] = 0;
+			place_event = 1;
+		}
+	}
+
+	if(accept_inf == TRUE)
+	{
+		//NOTE: these could get messed up if other messages trigger rxcallback before being processed by frame sync...
+		//should these be folded into the dw_event?
+		//TODO only do this when we need to (we are accepting and INF message)
+		instance_data[instance].timeofRxCallback = time_now;
+
+		//TODO only do this when we need to (we are accepting and INF message)
+		uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
+		dwt_readsystime(sys_time_arr);
+		instance_data[instance].timeofRxCallback_dwtime = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
+
+
+		instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
+		instance_data[instance].uwbTimeout[uwb_index] = 0;
+		place_event = 1;
+	}
+	else if(uwb_index != 255 && instance_data[instance].uwbToRangeWith == uwb_index)
 	{
 		
 		if(rxd_event == DWT_SIG_RX_OKAY)
@@ -1518,7 +1402,12 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 			//process RTLS_DEMO_MSG_TAG_POLL immediately.
 			if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL)
 			{
-				instance_data[instance].lastCommTimeStamp[uwb_index] = portGetTickCnt();
+//				uint8 debug_msg[100];
+//				int n = sprintf((char *)&debug_msg, "RX_POLL");
+//				send_usbmessage(&debug_msg[0], n);
+//				usb_run();
+
+				instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
 				instance_data[instance].uwbTimeout[uwb_index] = 0;
 
 				uint16 frameLength = 0;
@@ -1537,40 +1426,54 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				frameLength = ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
 #endif
 
-				memcpy(&instance_data[instance].msg[uwb_index].destAddr[0], &dw_event.msgu.frame[srcAddr_index], instance_data[instance].addrByteSize); //remember who to send the reply to (set destination address)
-				
-				//if tof not zero, set tof, else memset 0
-				//also include next TX_ACCEPT node time (offset from now)
-				// Write calculated TOF into response message
-				memcpy(&instance_data[instance].msg[uwb_index].messageData[TOFR], &instance_data[instance].tof[uwb_index], 6); //TODO fix number of bytes...
-
-				uint8 num_active = 0;
-				for(int i = 0; i < instance_data[instance].uwbListLen; i++){
-					if(!instance_data[instance].uwbTimeout[i]){
-						num_active++;
-					}
-				}
-				memcpy(&instance_data[instance].msg[uwb_index].messageData[NTAG], &num_active, 1);
-
-				//get time till the next RX_ACCEPT
-				uint32 time_till = 0;
-				if(instance_data[instance].time_till_next_reported[uwb_index] == 0){
-					time_till =	instance_data[instance].rx_scheduler.get_time_till_next_rx_accept(&instance_data[instance].rx_scheduler);
-					instance_data[instance].time_till_next_reported[uwb_index] = 1;
-				}
-				memcpy(&instance_data[instance].msg[uwb_index].messageData[TIME_TILL], &time_till, 4);
-
-
-//				uint8 debug_msg[100];
-//				uint64 mtof = instance_data[instance].msg[uwb_index].messageData[TOFR];
-//				int n = sprintf((char *)&debug_msg, "TOF in resp %llu", mtof);
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-
-
-//				instance_data[instance].tof[uwb_index] = 0; //clear ToF ..
+//				instance_data[instance].msg[uwb_index].messageData[FCODE] = RTLS_DEMO_MSG_ANCH_RESP; //message function code (specifies if message is a poll, response or other...)
+//				//program option octet and parameters (not used currently)
+//				instance_data[instance].msg[uwb_index].messageData[RES_R1] = 0x2; // "activity"
+//				instance_data[instance].msg[uwb_index].messageData[RES_R2] = 0x0; //
+//				instance_data[instance].msg[uwb_index].messageData[RES_R3] = 0x0;
 //
-				instance_data[instance].msg[uwb_index].seqNum = instance_data[instance].frameSN++;
+//
+//				memcpy(&instance_data[instance].msg[uwb_index].destAddr[0], &dw_event.msgu.frame[srcAddr_index], instance_data[instance].addrByteSize); //remember who to send the reply to (set destination address)
+//
+//				//if tof not zero, set tof, else memset 0
+//				//also include next TX_ACCEPT node time (offset from now)
+//				// Write calculated TOF into response message
+//				memcpy(&instance_data[instance].msg[uwb_index].messageData[TOFR], &instance_data[instance].tof[uwb_index], 6); //TODO fix number of bytes...
+//
+//				uint8 num_active = 0;
+//				for(int i = 0; i < instance_data[instance].uwbListLen; i++){
+//					if(!instance_data[instance].uwbTimeout[i]){
+//						num_active++;
+//					}
+//				}
+//				memcpy(&instance_data[instance].msg[uwb_index].messageData[NTAG], &num_active, 1);
+//
+//				//get time till the next RX_ACCEPT
+////				uint32 time_till = 0;
+////				if(instance_data[instance].time_till_next_reported[uwb_index] == 0){
+////					time_till =	instance_data[instance].rx_scheduler.get_time_till_next_rx_accept(&instance_data[instance].rx_scheduler);
+////					instance_data[instance].time_till_next_reported[uwb_index] = 1;
+////				}
+////				memcpy(&instance_data[instance].msg[uwb_index].messageData[TIME_TILL], &time_till, 4);
+//
+//
+////				uint8 debug_msg[100];
+////				uint64 mtof = instance_data[instance].msg[uwb_index].messageData[TOFR];
+////				int n = sprintf((char *)&debug_msg, "TOF in resp %llu", mtof);
+////				send_usbmessage(&debug_msg[0], n);
+////				usb_run();
+//
+//
+////				instance_data[instance].tof[uwb_index] = 0; //clear ToF ..
+////
+//				instance_data[instance].msg[uwb_index].seqNum = instance_data[instance].frameSN++;
+
+				instance_data[instance].msg.messageData[FCODE] = RTLS_DEMO_MSG_ANCH_RESP; //message function code (specifies if message is a poll, response or other...)
+
+				memcpy(&instance_data[instance].msg.destAddr[0], &dw_event.msgu.frame[srcAddr_index], instance_data[instance].addrByteSize); //remember who to send the reply to (set destination address)
+				
+				instance_data[instance].msg.seqNum = instance_data[instance].frameSN++;
+
 
 				//set the delayed rx on time (the final message will be sent after this delay)
 //				dwt_setrxaftertxdelay((uint32)instance_data[instance].txToRxDelayAnc_sy);  //units are 1.0256us - wait for wait4respTIM before RX on (delay RX)
@@ -1580,7 +1483,8 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				instance_data[instance].wait4ack = DWT_RESPONSE_EXPECTED;
 
 				dwt_writetxfctrl(frameLength, 0, 1);
-				dwt_writetxdata(frameLength, (uint8 *)  &instance_data[instance].msg[uwb_index], 0) ;	// write the frame data
+//				dwt_writetxdata(frameLength, (uint8 *)  &instance_data[instance].msg[uwb_index], 0) ;	// write the frame data
+				dwt_writetxdata(frameLength, (uint8 *)  &instance_data[instance].msg, 0) ;	// write the frame data
 
 #if (IMMEDIATE_RESPONSE == 1)
 				dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
@@ -1596,7 +1500,7 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 #endif
 				{
 					dw_event.typePend = DWT_SIG_TX_PENDING ; // exit this interrupt and notify the application/instance that TX is in progress.
-					instance_data[instance].timeofTx = portGetTickCnt();
+					instance_data[instance].timeofTx = time_now;
 				}
 				//report out which message is being sent!
 //				send_txmsgtousb(get_msg_fcode_string((int)instance_data[instance].msg[uwb_index].messageData[FCODE]));
@@ -1623,73 +1527,67 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				instance_data[instance].tof[uwb_index] = 0; //clear ToF ..
 
 
-				uint8 debug_msg[100];
-				 int n = sprintf((char*)&debug_msg[0], "RX TAG_POLL ACCEPTED ANCH_RESP sent <- uwb %d", uwb_index);
-				 send_usbmessage(&debug_msg[0], n);
-				 usb_run();
+//				uint8 debug_msg[100];
+//				 n = sprintf((char*)&debug_msg[0], "RX TAG_POLL ACCEPTED ANCH_RESP sent <- uwb %d", uwb_index);
+//				 send_usbmessage(&debug_msg[0], n);
+//				 usb_run();
 			}
 			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_ANCH_RESP)
 			{
 //				uint32 response_time = portGetTickCnt() - instance_data[instance].range_start;
-				instance_data[instance].lastCommTimeStamp[uwb_index] = portGetTickCnt();
+				instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
 				instance_data[instance].uwbTimeout[uwb_index] = 0;
-				uint8 debug_msg[100];
-				 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: ANCH_RESP <- uwb_index %d", uwb_index);
-				 send_usbmessage(&debug_msg[0], n);
-				 usb_run();
+//				uint8 debug_msg[100];
+//				 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: ANCH_RESP <- uwb_index %d", uwb_index);
+//				 send_usbmessage(&debug_msg[0], n);
+//				 usb_run();
 			}
 			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT)
 			{
-				instance_data[instance].lastCommTimeStamp[uwb_index] = portGetTickCnt();
+				instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
 				instance_data[instance].uwbTimeout[uwb_index] = 0;
-				uint8 debug_msg[100];
-				 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: RNG_INIT <- uwb_index %d", uwb_index);
-				 send_usbmessage(&debug_msg[0], n);
-				 usb_run();
+//				uint8 debug_msg[100];
+//				 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: RNG_INIT <- uwb_index %d", uwb_index);
+//				 send_usbmessage(&debug_msg[0], n);
+//				 usb_run();
 			}
 			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_FINAL)
 			{
-				instance_data[instance].lastCommTimeStamp[uwb_index] = portGetTickCnt();
+				instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
 				instance_data[instance].uwbTimeout[uwb_index] = 0;
-				uint8 debug_msg[100];
-				 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: TAG_FINAL <- uwb_index %d", uwb_index);
-				 send_usbmessage(&debug_msg[0], n);
-				 usb_run();
+//				uint8 debug_msg[100];
+//				 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: TAG_FINAL <- uwb_index %d", uwb_index);
+//				 send_usbmessage(&debug_msg[0], n);
+//				 usb_run();
 			}
-			
-			instance_putevent(dw_event);
-			event_placed = 1;
+//			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_REPORT)
+//			{
+//				instance_data[instance].lastCommTimeStamp[uwb_index] = portGetTickCnt();
+//				instance_data[instance].uwbTimeout[uwb_index] = 0;
+//				uint8 debug_msg[100];
+//				 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: RNG_REPORT <- uwb_index %d", uwb_index);
+//				 send_usbmessage(&debug_msg[0], n);
+//				 usb_run();
+//			}
 
-#if (DEEP_SLEEP == 1)
-			if (instance_data[instance].sleepingEabled)
-			{
-				instance_data[instance].rxmsgcount++;
-			}
-#endif
+
+			place_event = 1;
 		}
 		else if (rxd_event == DWT_SIG_RX_BLINK)
 		{
-			uint8 debug_msg[100];
-			 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: BLINK <- uwb %d", uwb_index);
-			 send_usbmessage(&debug_msg[0], n);
-			 usb_run();
+//			uint8 debug_msg[100];
+//			 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: BLINK <- uwb %d", uwb_index);
+//			 send_usbmessage(&debug_msg[0], n);
+//			 usb_run();
 			
-			instance_putevent(dw_event);
-			event_placed = 1;
-			
-#if (DEEP_SLEEP == 1)
-			if (instance_data[instance].sleepingEabled)
-			{
-				instance_data[instance].rxmsgcount++;
-			}
-#endif
+			place_event = 1;
 		}
 	}
 
 	// TODO figure out a better way to do this, I'd like to keep it where it was if possible
 	// doing it here because it needs to be toggled before toggling the rx buffer pointer
 	// Toggle the Host side Receive Buffer Pointer
-	dwt_write8bitoffsetreg(SYS_CTRL_ID, SYS_CTRL_HRBT_OFFSET, 1);
+//	dwt_write8bitoffsetreg(SYS_CTRL_ID, SYS_CTRL_HRBT_OFFSET, 1);
         
 //	uint8 buff = dwt_read8bitoffsetreg(SYS_STATUS_ID, 3);
 //	uint8 debug_msg[100];
@@ -1697,19 +1595,33 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 //	 send_usbmessage(&debug_msg[0], n);
 //	 usb_run();
 
+	if(place_event)
+	{
+		instance_putevent(dw_event);
 
-	if(!event_placed)
+#if (DEEP_SLEEP == 1)
+		if (instance_data[instance].sleepingEabled)
+		{
+			instance_data[instance].rxmsgcount++;
+		}
+#endif
+	}
+	else
 	{
 		// instance_rxerrorcallback(rxd);
 		
-		uint8 debug_msg[100];
-		 int n = sprintf((char*)&debug_msg[0], "instancerxon called from !event_placed :");
-		 send_usbmessage(&debug_msg[0], n);
-		 usb_run();
+//		uint8 debug_msg[100];
+//		 int n = sprintf((char*)&debug_msg[0], "instancerxon called from !event_placed :");
+//		 send_usbmessage(&debug_msg[0], n);
+//		 usb_run();
 
 		instancerxon(&instance_data[instance], 0, 0); //immediately reenable RX
 	}
 }
+
+
+
+
 
 int instance_peekevent(void)
 {
@@ -1801,32 +1713,67 @@ int instance_run(void)
 
 	while(done == INST_NOT_DONE_YET)
 	{
-		//int state = instance_data[instance].testAppState;
-		done = testapprun(&instance_data[instance], message) ; // run the communications application
+		done = testapprun(&instance_data[instance], &tdma_handler, message) ; // run the communications application
 
 		//we've processed message
 		message = 0;
 	}
 
 	//check if lastCommTimeStamp has expired for any of the uwbs in our list
-	for(int i=0; i < instance_data[instance].uwbListLen; i++)
+	for(int i=1; i < instance_data[instance].uwbListLen; i++)//0 reserved for self, timeout not applicable
 	{
-		if(instance_data[instance].lastCommTimeStamp[i] + UWB_COMM_TIMEOUT < portGetTickCnt())
+		//TODO could also have a timer to put into DISCOVERY if we haven't spoken to anyone in a while
+
+		if(instance_data[instance].lastCommTimeStamp[i] + UWB_COMM_TIMEOUT < portGetTickCnt()) //TODO handle number wrapping
 		{
-			if(instance_data[instance].uwbTimeout[i] == 0)
+//			if(instance_data[instance].uwbTimeout[i] == 0)
+			if(instance_data[instance].uwbListType[i] == UWB_LIST_NEIGHBOR) //what about hidden?
 			{
+				instance_data[instance].uwbListType[i] = UWB_LIST_INACTIVE; //TODO release TDMA slots as well
 				instance_data[instance].uwbTimeout[i] = 1;
 				
+
+
+				//NEW
+				//if no more active neighbors exist, transition to DISCOVERY
+				uint8 numNeighbors = instfindnumactiveneighbors(&instance_data[instance]);
+				if(numNeighbors <= 0)
+				{
+					tdma_handler.tdma_free_all_slots(&tdma_handler);
+
+
+
+//					uint8 debug_msg[100];
+//					int n = sprintf((char *)&debug_msg, "inst_processtxrxtimeout(inst) after free_all_slots");
+//					send_usbmessage(&debug_msg[0], n);
+//					usb_run();
+
+					instance_data[instance].mode = DISCOVERY;						//TODO clear the TDMA slot information!
+					tdma_handler.discoveryStartTime = portGetTickCnt();
+					tdma_handler.enter_discovery_mode(&tdma_handler);
+					inst_processtxrxtimeout(&instance_data[instance]);
+
+					instance_data[instance].canPrintInfo = 0;
+					instance_data[instance].ranging = 0;
+				}
+				else
+				{
+					//TODO check if able to reconfigure tdma assignements. shrink frame size, reassign emptied slots, etc
+					tdma_handler.uwblist_free_slots(&tdma_handler, i);
+				}
+
+
 //				 uint8 debug_msg[100];
 //				 int n = sprintf((char*)&debug_msg[0], "TIMEOUT: uwb %i", i);
 //				 send_usbmessage(&debug_msg[0], n);
 //				 usb_run();
 			}
+
 			if(instance_data[instance].uwbToRangeWith == i)
 			{	
 				instance_data[instance].uwbToRangeWith = 255;	
 				//NOTE this might need to be changed for TAG operations
-				if(instance_data[instance].mode == ANCHOR)
+				if(instance_data[instance].mode == ANCHOR || instance_data[instance].mode == DISCOVERY) //TODO maybe send to TA_MODE_SELECT?
 				{
 					instance_data[instance].testAppState = TA_RXE_WAIT;
 				}
@@ -1843,23 +1790,21 @@ int instance_run(void)
 		
 	}
 
-	
-
-
     if(done == INST_DONE_WAIT_FOR_NEXT_EVENT_TO) //we are in RX and need to timeout (Tag needs to send another poll if no Rx frame)
     {
-        if(instance_data[instance].mode == TAG) //Tag (is either in RX or sleeping)
-        {
-			if(instance_data[instance].previousState == TA_TXBLINK_WAIT_SEND)
+    	if(instance_data[instance].mode == DISCOVERY)
+    	{
+    		if(instance_data[instance].previousState == TA_TXBLINK_WAIT_SEND)
 			{
 				instance_data[instance].instanceTimerTime += instance_data[instance].tagBlinkSleepTime_ms; //set timeout time
-            	instance_data[instance].instanceTimerEnabled = 1; //start timer
+				instance_data[instance].instanceTimerEnabled = 1; //start timer
 			}
-			else
-			{
-				instance_data[instance].instanceTimerTime = instance_data[instance].instanceTimerTimeSaved + instance_data[instance].tagSleepTime_ms; //set timeout time
-            	instance_data[instance].instanceTimerEnabled = 1; //start timer
-			}
+    	}
+
+        if(instance_data[instance].mode == TAG) //Tag (is either in RX or sleeping)
+        {
+			instance_data[instance].instanceTimerTime = instance_data[instance].instanceTimerTimeSaved + instance_data[instance].tagSleepTime_ms; //set timeout time
+			instance_data[instance].instanceTimerEnabled = 1; //start timer
         }
     }
 
@@ -1868,11 +1813,11 @@ int instance_run(void)
     {
         if(instance_data[instance].instanceTimerTime < portGetTickCnt())
         {
-        	uint8 debug_msg[200];
-			int n = 0;
-			n = sprintf((char*)&debug_msg[0], "instance timer expired");
-			send_usbmessage(&debug_msg[0], n);
-			usb_run();
+//        	uint8 debug_msg[200];
+//			int n = 0;
+//			n = sprintf((char*)&debug_msg[0], "instance timer expired");
+//			send_usbmessage(&debug_msg[0], n);
+//			usb_run();
 
 			event_data_t dw_event;
             instance_data[instance].instanceTimerEnabled = 0;

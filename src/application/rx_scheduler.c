@@ -63,7 +63,7 @@ static bool rx_accept(struct RXScheduler *this, uint8 index, RX_MESSAGE_TYPE mes
 	uint8 debug_msg[500];
 	int n = 0;
 	int n_char = 0;
-	bool debug = true;
+	bool debug = false;
 	if(debug){
 		n = sprintf((char*)&debug_msg[0], "rx_accept, time_now %lu, index %u \n", time_now, index);
 		n_char = n;

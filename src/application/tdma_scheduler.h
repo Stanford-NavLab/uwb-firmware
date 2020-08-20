@@ -1,5 +1,5 @@
-#ifndef TDMA_SCHEDULER_H_
-#define TDMA_SCHEDULER_H_
+#ifndef TDMA_HANDLER_H_
+#define TDMA_HANDLER_H_
 
 #include "llist.h"
 #include "deca_types.h"
@@ -14,16 +14,17 @@ typedef struct
 } tdma_timing_node;
 
 
-struct TDMAScheduler
+struct TDMASHandler
 {
 
 	llist list;					//list of tdma_timing_nodes
 
 	//instance variables
-	uint8 uwb_max_list_length;
-	uint8 *uwb_list_length;
+	instance_data_t *inst;
+//	uint8 uwb_max_list_length;
+//	uint8 *uwb_list_length;
 
-	uint8 (*uwb_list)[][8];             //pointer to uwbList
+//	uint8 (*uwb_list)[][8];             //pointer to uwbList
 //	uint8 *uwb_timeout_list;          //pointer to uwbTimeout
 	//might need uwbliststate pointer here
 
@@ -39,22 +40,23 @@ struct TDMAScheduler
 	uint32 discoveryStartTime; //time that we started listening for other UWBs
 
 	//discovery variables
-	uint32 blink_period;
+//	uint32 blink_period;
 	uint32 last_blink_time;	   //timestamp of most recent blink
 
 
     //class functions
-	void (*set_slot)(struct TDMAScheduler *this);
-    bool (*add_node)(struct TDMAScheduler *this, tdma_timing_node *node);
+	void (*set_slot)(struct TDMAHandler *this);
+    bool (*add_node)(struct TDMAHandler *this, tdma_timing_node *node);
 
 };
 
 
-extern const struct TDMASchedulerClass
+extern const struct TDMAHandlerClass
 {
-	struct TDMAScheduler (*new)(float blink_frequency, uint32 blink_duration, uint32 range_duration, uint8 (*uwb_list)[][8], uint8 *uwb_list_length, uint8 uwb_max_list_length, uint8 uwb_timeout_list[]);
+//	struct TDMAScheduler (*new)(float blink_frequency, uint32 blink_duration, uint32 range_duration, uint8 (*uwb_list)[][8], uint8 *uwb_list_length, uint8 uwb_max_list_length, uint8 uwb_timeout_list[]);
+	struct TDMAHandler (*new)(instance_data_t *inst);
 
-} TDMAScheduler;
+} TDMAHandler;
 
 
 #endif
