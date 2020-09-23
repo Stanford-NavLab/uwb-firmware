@@ -4,9 +4,9 @@
     <Device manufacturerId="9" manufacturerName="ST" chipId="334" chipName="STM32F105RC" boardId="" boardName=""/>
     <BuildOption>
       <Compile>
-        <Option name="OptimizationLevel" value="4"/>
+        <Option name="OptimizationLevel" value="0"/>
         <Option name="UseFPU" value="0"/>
-        <Option name="UserEditCompiler" value="-ffunction-sections; -fdata-sections; -c; -fmessage-length=0;"/>
+        <Option name="UserEditCompiler" value="-ffunction-sections; -fdata-sections; -c; -fmessage-length=0"/>
         <Includepaths>
           <Includepath path="."/>
           <Includepath path="Libraries/CMSIS/CM3/CoreSupport"/>

@@ -35,17 +35,23 @@ struct TDMAHandler
     uint8 maxFramelength;
 	uint8 slotAssingmentSelfIndex;
 
-//	struct TDMAInfo myTDMAInfo;
-
 	struct TDMAInfo uwbListTDMAInfo[UWB_LIST_SIZE];
 
-	uint32 uwbFrameStartTimes[UWB_LIST_SIZE]; //TODO propagate the use of this
-//	uint32 frameStartTime;
-	uint32 lastSlotStartTime;
-	uint32 slotDuration;   //TODO make variable in duration based on UWB_LIST_SIZE
+	//TODO use smaller data types where possible
+
+	uint64 lastINFtx;
+	uint64 lastINFrx;
+
+
+	uint64 uwbFrameStartTimes64[UWB_LIST_SIZE];
+	uint64 lastFST;
+	uint64 lastSlotStartTime64;
+	uint32 slotDuration_ms;   //TODO make variable in duration based on UWB_LIST_SIZE
+	uint32 slotDuration_us;   //TODO make variable in duration based on UWB_LIST_SIZE
 	bool infPollSentThisSlot;
 
-	uint32 slotStartDelay; //time between slot start and transmission within that slot
+	//TODO can probably use a smaller data type...
+	uint64 slotStartDelay_us; //time between slot start and transmission within that slot
 
 	//discovery variables
 	DISCOVERY_MODE discovery_mode;
@@ -60,26 +66,15 @@ struct TDMAHandler
 
 	uint16 infMessageLength;
 
-//	bool waitForRngInit;
-//	bool waitForInf;
-//	uint32 waitForInfStart;
-//	uint32 waitForRngInitStart;
-
     //class functions
 	bool (*slot_transition)(struct TDMAHandler *this);
-//	void (*frame_sync)(struct TDMAHandler *this, uint8 *messageData, uint16 rxLength, uint8 srcIndex, FRAME_SYNC_MODE mode);
 	void (*frame_sync)(struct TDMAHandler *this, event_data_t *dw_event, uint8 *messageData, uint8 srcIndex, FRAME_SYNC_MODE mode);
 	void (*update_inf_tsfs)(struct TDMAHandler *this);
 	bool (*tx_select)(struct TDMAHandler *this);
-//	bool (*rx_accept)(struct TDMAHandler *this, uint8 uwb_index, uint8 *rxd_event, uint8 *msgu, uint8 fcode_index);
     bool (*check_blink)(struct TDMAHandler *this);
-//    void (*rebuild_slot_assignments)(struct TDMAHandler *this);
     void (*populate_inf_msg)(struct TDMAHandler *this, uint8 inf_msg_type);
-//    void (*process_inf_msg)(struct TDMAHandler *this); //TODO implement
     bool (*process_inf_msg)(struct TDMAHandler *this, uint8 *messageData, uint8 srcIndex, INF_PROCESS_MODE mode);
     bool (*check_tdma_diff)(struct TDMAHandler *this, uint8 *messageData, uint8 *srcAddr);
-//    void (*populate_sug_msg)(struct TDMAHandler *this);//TODO remove this
-//    void (*process_sug_msg)(struct TDMAHandler *this, uint8 *messageData, uint8 *srcAddr);//TODO remove this
     bool (*poll_delay)(struct TDMAHandler *this, uint32 time_now_offset, uint32 offset);
     void (*enter_discovery_mode)(struct TDMAHandler *this);
     void (*set_discovery_mode)(struct TDMAHandler *this, DISCOVERY_MODE mode, uint32 time_now);
@@ -89,7 +84,7 @@ struct TDMAHandler
     //TODO left off here. updating messageData as well as
     //TODO revisit anything that works with messageData!!!
     bool (*slot_assigned)(struct TDMAInfo *info, uint8 slot);
-    bool (*assign_slot)(struct TDMAInfo *info, uint8 slot);
+    bool (*assign_slot)(struct TDMAInfo *info, uint8 slot, bool safeAssign);
     void (*free_slot)(struct TDMAInfo *info, uint8 slot);
     void (*free_slots)(struct TDMAInfo *info);
     void (*uwblist_free_slots)(struct TDMAHandler *this, uint8 uwb_index);
@@ -97,7 +92,6 @@ struct TDMAHandler
 	void (*find_assign_slot)(struct TDMAHandler *this);
 	void (*build_new_network)(struct TDMAHandler *this);
 
-//    void (*uwblist_collect_slot_assignment)(struct TDMAHandler *this, uint8 uwb_index, uint8 slot_index);
 
 	//run through all uwb pairs
     bool (*deconflict_slot_assignments)(struct TDMAHandler *this); //TODO implement

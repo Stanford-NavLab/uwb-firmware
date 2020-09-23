@@ -68,25 +68,19 @@ typedef struct
     // in microseconds.
     uint32 frameLengths_us[FRAME_TYPE_NB];
     uint32 storedPreLen;           //precomputed conversion of preamble and sfd
+    uint64 storePreLen_us;		   //precomputed conversion of preamble and sfd in microseconds
 
 	//message structures used for transmitted messages
 #if (USING_64BIT_ADDR == 1)
 	srd_msg_dlsl rng_initmsg ;	// ranging init message (destination long, source long)
-//    srd_msg_dlsl msg[UWB_LIST_SIZE] ; // simple 802.15.4 frame structure (used for tx message) - using long addresses
-//    srd_ext_msg_dlsl msg[UWB_LIST_SIZE] ; // simple 802.15.4 frame structure (used for tx message) - using long addresses
     srd_ext_msg_dlsl msg; // simple 802.15.4 frame structure (used for tx message) - using long addresses
 	srd_ext_msg_dssl inf_msg;         	  // extended inf message containing frame lengths and slot assignments
     srd_ext_msg_dssl report_msg;          // extended report message containing the calculated range
-//    srd_ext_msg_dlsl ranging_msg; //extended frame structure
 #else
 	srd_msg_dlss rng_initmsg ;  // ranging init message (destination long, source short)
-//    srd_msg_dsss msg[UWB_LIST_SIZE] ; // simple 802.15.4 frame structure (used for tx message) - using short addresses
-//    srd_ext_msg_dsss msg[UWB_LIST_SIZE] ; // simple 802.15.4 frame structure (used for tx message) - using short addresses
     srd_ext_msg_dsss msg; // simple 802.15.4 frame structure (used for tx message) - using short addresses
-//    srd_ext_msg_dlss rng_initmsg ;  //extended ranging init message (destination long, source short)
     srd_ext_msg_dsss inf_msg;         	  // extended inf message containing frame lengths and slot assignments
     srd_ext_msg_dsss report_msg;			// extended report message containing the calculated range
-    //    srd_ext_msg_dsss ranging_msg; //extended frame structure
 #endif
 	iso_IEEE_EUI64_blink_msg blinkmsg ; // frame structure (used for tx blink message)
 
@@ -97,6 +91,8 @@ typedef struct
 	uint16  panID ;					// panid used in the frames
 
     uint8 addrByteSize;             // The bytelength used for addresses. 
+
+    uint32 resp_dly[RESP_DLY_NB];
 
 	//64 bit timestamps
 	//union of TX timestamps
@@ -178,7 +174,7 @@ typedef struct
 	uint8 dweventPeek;
 	uint8 monitor;
 	uint32 timeofTx;
-	uint32 timeofRxCallback;
+	uint64 timeofRxCallback;
 	uint64 timeofRxCallback_dwtime;
 	uint8 smartPowerEn;
 
@@ -190,6 +186,10 @@ typedef struct
 	uint32 buildFrameTime;
 
 	uint8 ranging;
+
+	uint64 testTimer;
+	uint16 timerCounter;
+
 
 } instance_data_t ;
 
@@ -316,6 +316,13 @@ const char* get_discovery_modes_string(enum discovery_modes mode);
 instance_data_t* instance_get_local_structure_ptr(unsigned int x);
 
 uint32 get_dt32(uint32 t1, uint32 t2);
+uint32 timestamp_add32(uint32 timestamp, uint32 duration);
+uint32 timestamp_subtract32(uint32 timestamp, uint32 duration);
+uint64 get_dt64(uint64 t1, uint64 t2);
+uint64 timestamp_add64(uint64 timestamp, uint64 duration);
+uint64 timestamp_subtract64(uint64 timestamp, uint64 duration);
+uint16 get_dt16(uint16 t1, uint16 t2);
+
 uint16 address64to16(uint8 *address);
 
 //void send_statetousb(instance_data_t *inst);

@@ -12,58 +12,56 @@ static bool slot_transition(struct TDMAHandler *this)
 	bool transition = FALSE;
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
 
-	if(inst->mode == TAG || inst->mode == ANCHOR || (inst->mode == DISCOVERY && this->discovery_mode == WAIT_SEND_SUG))
+	if(inst->mode == TAG ||
+	   inst->mode == ANCHOR ||
+	   (inst->mode == DISCOVERY && (this->discovery_mode == WAIT_SEND_SUG || this->discovery_mode == COLLECT_INF_REG)))
 	{
-		uint32 time_now = portGetTickCnt();
+		uint64 time_now_us = portGetTickCntMicro();
+		uint64 timeSinceSlotStart64 = get_dt64(this->lastSlotStartTime64, time_now_us);
 
-		uint32 timeSinceSlotStart = get_dt32(this->lastSlotStartTime, time_now);
-		if(timeSinceSlotStart > this->slotDuration)
+		if(timeSinceSlotStart64 >= this->slotDuration_us) //TODO should i check frame separate from slot?
 		{
 			transition = TRUE;
 			this->infPollSentThisSlot = FALSE;
 
 			//we have transitioned into the next slot.
 			//get the slot number and set the start time appropriately
-			uint32 timeSinceFrameStart = get_dt32(this->uwbFrameStartTimes[0], time_now);
-			if(timeSinceFrameStart > this->slotDuration*this->uwbListTDMAInfo[0].framelength)
+
+			uint64 timeSinceFrameStart64 = get_dt64(this->uwbFrameStartTimes64[0], time_now_us);
+
+			uint64 frameDuration64 = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
+			if(timeSinceFrameStart64 >= frameDuration64)
 			{
-				uint8 debug_msg[100];
-//				 int n = sprintf((char*)&debug_msg[0], "NEW FRAME, %llX,  this->frameStartTime: %lu, this->slotDuration*this->framelength: %lu", instance_get_addr(), this->frameStartTime, (this->slotDuration*this->framelength));
-				int n = sprintf((char*)&debug_msg[0], "NEW FRAME, %llX, xxxx", instance_get_addr());
-				send_usbmessage(&debug_msg[0], n);
-				usb_run();
+//				uint8 debug_msg[100];
+//////				 int n = sprintf((char*)&debug_msg[0], "NEW FRAME, %llX,  this->frameStartTime: %lu, this->slotDuration*this->framelength: %lu", instance_get_addr(), this->frameStartTime, (this->slotDuration*this->framelength));
+//				int n = sprintf((char*)&debug_msg[0], "%llX, %llu, %llu", instance_get_addr(), this->lastFST, time_now_us);
+//				send_usbmessage(&debug_msg[0], n);
+//				usb_run();
 
-				struct TDMAInfo *info = &this->uwbListTDMAInfo[0];
-				bool assigned0 = this->slot_assigned(info, 0);
-				bool assigned1 = this->slot_assigned(info, 1);
-				bool assigned2 = this->slot_assigned(info, 2);
-				bool assigned3 = this->slot_assigned(info, 3);
-
-				n = sprintf((char*)&debug_msg[0], "ass0: %u ass1: %u ass2: %u ass3: %u,", assigned0, assigned1, assigned2, assigned3);
-				send_usbmessage(&debug_msg[0], n);
-				usb_run();
 			}
 
-			while(timeSinceFrameStart > this->slotDuration*this->uwbListTDMAInfo[0].framelength)
+			while(timeSinceFrameStart64 >= frameDuration64)
 			{
-				this->uwbFrameStartTimes[0] += this->slotDuration*this->uwbListTDMAInfo[0].framelength;
-				timeSinceFrameStart -= this->slotDuration*this->uwbListTDMAInfo[0].framelength;
+				this->uwbFrameStartTimes64[0] = timestamp_add64(this->uwbFrameStartTimes64[0], frameDuration64);
+				timeSinceFrameStart64 -= frameDuration64;
 			}
 
-			uint8 slot = timeSinceFrameStart/this->slotDuration; //integer division rounded down
-			this->lastSlotStartTime = this->uwbFrameStartTimes[0] + this->slotDuration*(uint32)slot;
+			this->lastFST = this->uwbFrameStartTimes64[0];
+
+			uint8 slot = timeSinceFrameStart64/(this->slotDuration_us); //integer division rounded down
+			this->lastSlotStartTime64 = this->uwbFrameStartTimes64[0] + (uint64)(this->slotDuration_us*slot);
 
 
-			uint8 debug_msg[100];
-			int n = sprintf((char*)&debug_msg[0], "NEW SLOT %u, time_now %lu", slot, time_now);
-			 send_usbmessage(&debug_msg[0], n);
-			 usb_run();
+//				uint8 debug_msg[100];
+//				int n = sprintf((char*)&debug_msg[0], "NEW SLOT %u, time_now %llu", slot, time_now_us);
+//				 send_usbmessage(&debug_msg[0], n);
+//				 usb_run();
 
 
 //			n = sprintf((char*)&debug_msg[0], "&this->slotAssignments[slot]: %u, &inst->uwbShortAdd %u :", this->slotAssignments[slot], inst->uwbShortAdd);
 //			 send_usbmessage(&debug_msg[0], n);
 //			 usb_run();
-
+//
 //			if(this->slot_assigned(this, slot) == TRUE)
 //			{
 //
@@ -106,10 +104,6 @@ static bool slot_transition(struct TDMAHandler *this)
 				}
 			}
 
-//			uint8 debug_msg[100];
-//			n = sprintf((char *)&debug_msg, "inst_processtxrxtimeout(inst) after slot transition");
-//			send_usbmessage(&debug_msg[0], n);
-//			usb_run();
 			instance_getevent(17); //get and clear this event
 			inst_processtxrxtimeout(inst);
 		}
@@ -122,128 +116,116 @@ static bool slot_transition(struct TDMAHandler *this)
 	return transition;
 }
 
-//TODO pass in dw_event..
 //static void frame_sync(struct TDMAHandler *this, uint8 *messageData, uint16 rxLength, uint8 srcIndex, FRAME_SYNC_MODE mode)
 static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 *messageData, uint8 srcIndex, FRAME_SYNC_MODE mode)
 {
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
 
-	uint32 time_now = portGetTickCnt();
+	uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
+	dwt_readsystime(sys_time_arr);
+	uint64 dwt_time_now = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
+	uint64 time_now_us = portGetTickCntMicro();
+
 	uint8 framelength;
-	uint32 timeSinceFrameStart;
+	uint32 timeSinceFrameStart64 = 0;
 
 	memcpy(&framelength, &messageData[TDMA_FRAMELENGTH], 1);
 	//timeSinceFrameStart in message
-	memcpy(&timeSinceFrameStart, &messageData[TDMA_TSFS], sizeof(timeSinceFrameStart));
+	memcpy(&timeSinceFrameStart64, &messageData[TDMA_TSFS], 6);
 
-//	uint8 debug_msg[100];
-//	int n = sprintf((char*)&debug_msg[0], "tsfs %lu :", timeSinceFrameStart);
-//	send_usbmessage(&debug_msg[0], n);
-//	usb_run();
-
-
-	//account for the delay between transmission and reception of the INF message
-	//TODO make this a function of the data rate as well!
-	//TODO experimentally found this number to be +- 1 millisecond for some reason. figure out why
-	//experimentally found formula is 0.079667x + 0.85611
-//	uint32 txrx_delay = (uint32)(0.079667*(float)(dw_event->rxLength) + 0.85611); //TODO make this function of xmission frequency!
 
 	//time from message to tx
 	//assuming zero since we use DWT_START_TX_IMMEDIATE
-	//if this is a problem then include the sys_time in the messsage. then the tx_timestamp can be used to figure out this delay
-	//NOTE: if this is done, the timestamp in DWT_START_TX_IMMEDIATE includes the antenna delay, so don't do the next step
 
 	//tx antenna delay
-	//NOTE: this is stored in inst->txAntennaDelay;
-	uint32 tx_antenna_delay = convertdevicetimetosec(inst->txAntennaDelay)*1000;
-
+	uint64 tx_antenna_delay = (uint64)inst->txAntennaDelay;
 
 	//time for xmission (only count once, happens on both sides near simultaneously)
 	//TODO make sure this is correct...
 	//easiest way to check would be to see if it is the same as the defines for other standard messages...
-	inst->frameLengths_us[INF] = instance_getmessageduration_us(dw_event->rxLength);
+	inst->frameLengths_us[INF] = instance_getmessageduration_us(dw_event->rxLength); //TODO should maybe make sure extended framelength cannot overflow a uint32
 
-
-	//time to propogate
+	//time to propagate
 	//NOTE: assuming zero since difference for speed of light travel time over 10cm and 100m is negligible for frame sync purposes
 
 	//rx antenna delay
-	//NOTE: this is stored in inst->rxAntennaDelay
-	//NOTE: we won't use this, becaues the antenna delay is captured by the RX timestamp
+	//NOTE: we won't use this, because the antenna delay is captured by the RX timestamp
 
-	//time from rx to system process rx
-	uint64 delta_t = inst->timeofRxCallback_dwtime - dw_event->timeStamp;
-	double rx_process_delay = convertdevicetimetosec(delta_t)*1000;
+	//time from rx timestamp to now
+	uint64 rxfs_process_delay = dwt_getdt(dw_event->timeStamp, dwt_time_now);
 
-	//time from system process rx to system frame sync
-	uint32 fs_process_delay = get_dt32(time_now, inst->timeofRxCallback);
+	uint64 txrx_delay =  (uint64)(convertdevicetimetosec(tx_antenna_delay + rxfs_process_delay)*1000000.0) + inst->storePreLen_us;
 
-
-	//TODO test with different data rates, should set slot length according to data rate!
-	//NOTE: this is pretty close but can possibly be improved
-	//initial differences are about 1 to 2 ms, but when using FS_AVERAGE, the differences settle to about 20 microseconds
-	uint32 txrx_delay = //this->slotStartDelay //timeSinceFrameStart is now updated after the slotStartDelay
-						+ tx_antenna_delay
-						+ inst->frameLengths_us[INF]/1000
-						+ (uint32)rx_process_delay
-						+ fs_process_delay;
-
-	//NOTE: treat each port tick as about a millisecond.
-	//TODO handle number wrapping
-	this->uwbFrameStartTimes[srcIndex] = time_now - timeSinceFrameStart - txrx_delay;
-
-
-	uint32 less = timeSinceFrameStart
-			      //+ this->slotStartDelay
-			      + tx_antenna_delay
-			      + inst->frameLengths_us[INF]/1000
-			      + (uint32)rx_process_delay
-			      + fs_process_delay;
-
+	uint64 hisTimeSinceFrameStart_us = timeSinceFrameStart64 + txrx_delay;
+	this->uwbFrameStartTimes64[srcIndex] = timestamp_subtract64(time_now_us, hisTimeSinceFrameStart_us); //TODO consider applying the diff!
 
 	if(mode == FS_ADOPT)
 	{
-		this->uwbFrameStartTimes[0] = this->uwbFrameStartTimes[srcIndex];
-		this->lastSlotStartTime = this->uwbFrameStartTimes[srcIndex] + timeSinceFrameStart; //TODO handle number wrapping...
+		this->uwbFrameStartTimes64[0] = this->uwbFrameStartTimes64[srcIndex];
+		uint8 slot = hisTimeSinceFrameStart_us/this->slotDuration_us; //integer division rounded down
+		this->lastSlotStartTime64 = this->uwbFrameStartTimes64[0] + (uint64)((this->slotDuration_us)*slot);
 	}
-	else if(mode == FS_AVERAGE)
+	else if(mode == FS_AVERAGE) //TODO consider using a weighted average. perhaps use threshholds to determine if instead we should just use the ADOPT logic
 	{
-		uint32 myFramelengthDuration = this->uwbListTDMAInfo[0].framelength*this->slotDuration;
-		uint32 myTimeSinceFrameStart = get_dt32(this->uwbFrameStartTimes[0], time_now);
+		uint64 myFramelengthDuration_us = this->uwbListTDMAInfo[0].framelength*this->slotDuration_us;
+		uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbFrameStartTimes64[0], time_now_us);
+
+		//TODO make sure this can't/doesn't happen
+		//myTimeSinceFrameStart is longer than the FramelengthDuration!!!
+//		if(myTimeSinceFrameStart > myFramelengthDuration)
+//		{
+//			uint8 debug_msg[100];
+//			int n = sprintf((char *)&debug_msg, "myTimeSinceFrameStart > myTimeSinceFrameStart!");//,%llX, psdu: %d ", instance_get_addr(), psduLength);
+//			send_usbmessage(&debug_msg[0], n);
+//			usb_run();
+//		}
 
 		if(this->uwbListTDMAInfo[0].framelength <= framelength)
 		{
-			uint32 hisTimeSinceFrameStartMod = (timeSinceFrameStart + txrx_delay)%myFramelengthDuration;
+			uint64 hisTimeSinceFrameStartMod_us = hisTimeSinceFrameStart_us%myFramelengthDuration_us;
 
-			if(myTimeSinceFrameStart > hisTimeSinceFrameStartMod)
+			if(myTimeSinceFrameStart_us > hisTimeSinceFrameStartMod_us)
 			{
-				uint32 diff = myTimeSinceFrameStart - hisTimeSinceFrameStartMod;
-				this->uwbFrameStartTimes[0] += diff/2;
-				this->lastSlotStartTime += diff/2;
+				uint64 diff_us = myTimeSinceFrameStart_us - hisTimeSinceFrameStartMod_us;
+
+				this->uwbFrameStartTimes64[0] = timestamp_add64(this->uwbFrameStartTimes64[0], diff_us/2);
+				this->lastSlotStartTime64 = timestamp_add64(this->lastSlotStartTime64, diff_us/2);
 			}
 			else
 			{
-				uint32 diff = hisTimeSinceFrameStartMod - myTimeSinceFrameStart;
-				this->uwbFrameStartTimes[0] -= diff/2;
-				this->lastSlotStartTime -= diff/2;
+				uint64 diff_us = hisTimeSinceFrameStartMod_us - myTimeSinceFrameStart_us;
+
+				this->uwbFrameStartTimes64[0] = timestamp_subtract64(this->uwbFrameStartTimes64[0], diff_us/2);
+				this->lastSlotStartTime64 = timestamp_subtract64(this->lastSlotStartTime64, diff_us/2);
 			}
 		}
 		else
 		{
-			uint32 hisFramelengthDuration = framelength*this->slotDuration;
-			uint32 myTimeSinceFrameStartMod = (myTimeSinceFrameStart - txrx_delay)%hisFramelengthDuration;
+			uint64 hisFramelengthDuration_us = framelength*this->slotDuration_us;
+			uint64 myTimeSinceFrameStartMod_us = myTimeSinceFrameStart_us%hisFramelengthDuration_us;
 
-			if(timeSinceFrameStart > myTimeSinceFrameStartMod)
+
+//			if(timeSinceFrameStart > hisFramelengthDuration)
+//			{
+//				uint8 debug_msg[100];
+//				int n = sprintf((char *)&debug_msg, "timeSinceFrameStart > hisFramelengthDuration!");
+//				send_usbmessage(&debug_msg[0], n);
+//				usb_run();
+//			}
+
+			if(hisTimeSinceFrameStart_us > myTimeSinceFrameStartMod_us)
 			{
-				uint32 diff = timeSinceFrameStart - myTimeSinceFrameStartMod;
-				this->uwbFrameStartTimes[0] -= diff/2;
-				this->lastSlotStartTime -= diff/2;
+				uint64 diff_us = hisTimeSinceFrameStart_us - myTimeSinceFrameStartMod_us;
+
+				this->uwbFrameStartTimes64[0] = timestamp_subtract64(this->uwbFrameStartTimes64[0], diff_us/2);
+				this->lastSlotStartTime64 = timestamp_subtract64(this->lastSlotStartTime64, diff_us/2);
 			}
 			else
 			{
-				uint32 diff = myTimeSinceFrameStartMod - timeSinceFrameStart;
-				this->uwbFrameStartTimes[0] += diff/2;
-				this->lastSlotStartTime += diff/2;
+				uint64 diff_us = myTimeSinceFrameStartMod_us - hisTimeSinceFrameStart_us;
+
+				this->uwbFrameStartTimes64[0] = timestamp_add64(this->uwbFrameStartTimes64[0], diff_us/2);
+				this->lastSlotStartTime64 = timestamp_add64(this->lastSlotStartTime64, diff_us/2);
 			}
 		}
 	}
@@ -259,13 +241,14 @@ static bool tx_select(struct TDMAHandler *this) //TODO handle unsuccessful add
 
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
 
-	uint32 time_now = portGetTickCnt();
-	uint32 offset = 0;
-	//force number wrapping in case the timestamp is getting close to wrapping
-	if(time_now > 4000000000){
-		offset = 1000000000;
-	}
-	uint32 time_now_offset = time_now + offset;
+	uint32 time_now = portGetTickCnt(); //TODO come back and perhaps use only one or the other
+	uint32 time_now_us = portGetTickCntMicro(); //TODO see time_now
+//	uint32 offset = 0;
+//	//force number wrapping in case the timestamp is getting close to wrapping
+//	if(time_now > 4000000000){
+//		offset = 1000000000;
+//	}
+//	uint32 time_now_offset = time_now + offset;
 
 	//DISCOVERY pauses for BLINK_DELAY <-added
 //	if(this->waitForInf == TRUE || this->waitForRngInit == TRUE)
@@ -333,11 +316,11 @@ static bool tx_select(struct TDMAHandler *this) //TODO handle unsuccessful add
 //			usb_run();
 
 			//get time since slot start and make sure that's greater than delay
-			uint32 timeSinceSlotStart = get_dt32(this->lastSlotStartTime, time_now);
+			uint64 timeSinceSlotStart = get_dt64(this->lastSlotStartTime64, time_now_us);
 
 			//make sure that we are in slot 0
 
-			if(timeSinceSlotStart <= this->slotStartDelay)
+			if(timeSinceSlotStart <= this->slotStartDelay_us)
 			{
 				uwb_index = -1;
 			}
@@ -345,7 +328,6 @@ static bool tx_select(struct TDMAHandler *this) //TODO handle unsuccessful add
 			{
 				//TODO figure out how to make sure we send our SUG packet at the right time...
 				inst->wait4ack = 0;
-//				inst->testAppState = TA_TXSUG_WAIT_SEND; //TODO fold into INF_WAIT_SEND if possible
 				inst->testAppState = TA_TXINF_WAIT_SEND;
 				inst->uwbToRangeWith = (uint8)255;
 				return TRUE;
@@ -365,12 +347,12 @@ static bool tx_select(struct TDMAHandler *this) //TODO handle unsuccessful add
 //		usb_run();
 
 		//get time since slot start and make sure that's greater than delay
-		uint32 timeSinceSlotStart = get_dt32(this->lastSlotStartTime, time_now);
+		uint64 timeSinceSlotStart = get_dt64(this->lastSlotStartTime64, time_now_us);
 
 
 		//TAG pauses for INF_POLL_DELAY <-added at beginning of slot
 //		if(this->poll_delay(this, time_now_offset, offset) == TRUE)
-		if(timeSinceSlotStart <= this->slotStartDelay)
+		if(timeSinceSlotStart <= this->slotStartDelay_us)
 		{
 			uwb_index = -1;
 		}
@@ -457,7 +439,7 @@ static bool check_blink(struct TDMAHandler *this)
 	{
 		uint32 time_now = portGetTickCnt();
 		uint32 timeSinceDiscoveryStart = get_dt32(this->discoveryStartTime, time_now);
-		if(timeSinceDiscoveryStart > this->maxFramelength*this->slotDuration )
+		if(timeSinceDiscoveryStart > this->maxFramelength*this->slotDuration_ms )
 		{
 //			uint8 debug_msg[100];
 //			int n = sprintf((char *)&debug_msg, "in RX_WAIT_DATA, portGetTickCnt(): %lu, inst->last_blink_time: %lu, BLINK_PERIOD_MS: %lu", portGetTickCnt(), inst->last_blink_time, (uint32)BLINK_PERIOD_MS);
@@ -486,7 +468,7 @@ static void populate_inf_msg(struct TDMAHandler *this, uint8 inf_msg_type)
 
 	int num_neighbors = instfindnumactiveneighbors(inst);
 	int num_hidden = instfindnumactivehidden(inst);
-	uint32 time_now = portGetTickCnt();
+//	uint32 time_now = portGetTickCnt();
 
 	//fcode
 	int msgDataIndex = FCODE;
@@ -507,26 +489,26 @@ static void populate_inf_msg(struct TDMAHandler *this, uint8 inf_msg_type)
 
 	//number of neighbors
 	msgDataIndex = TDMA_NUMN;
-	memcpy(&inst->inf_msg.messageData[msgDataIndex], &num_neighbors, 1);
+	memcpy(&inst->inf_msg.messageData[msgDataIndex], &num_neighbors, sizeof(uint8));
 
 	//number of hidden neighbors
 	msgDataIndex = TDMA_NUMH;
-	memcpy(&inst->inf_msg.messageData[msgDataIndex], &num_hidden, 1);
+	memcpy(&inst->inf_msg.messageData[msgDataIndex], &num_hidden, sizeof(uint8));
 
 
 	//self framelength
 	msgDataIndex = TDMA_FRAMELENGTH;
-	memcpy(&inst->inf_msg.messageData[msgDataIndex], &this->uwbListTDMAInfo[0].framelength, 1);
+	memcpy(&inst->inf_msg.messageData[msgDataIndex], &this->uwbListTDMAInfo[0].framelength, sizeof(uint8));
 
 	//self number of slots
 	msgDataIndex = TDMA_NUMS;
-	memcpy(&inst->inf_msg.messageData[msgDataIndex], &this->uwbListTDMAInfo[0].slotsLength, 1);
+	memcpy(&inst->inf_msg.messageData[msgDataIndex], &this->uwbListTDMAInfo[0].slotsLength, sizeof(uint8));
 	msgDataIndex++;
 
 	//self slot assignments
 	for(int s = 0; s < this->uwbListTDMAInfo[0].slotsLength; s++)
 	{
-		memcpy(&inst->inf_msg.messageData[msgDataIndex], &this->uwbListTDMAInfo[0].slots[s], 1);
+		memcpy(&inst->inf_msg.messageData[msgDataIndex], &this->uwbListTDMAInfo[0].slots[s], sizeof(uint8));
 		msgDataIndex++;
 	}
 
@@ -542,17 +524,17 @@ static void populate_inf_msg(struct TDMAHandler *this, uint8 inf_msg_type)
 			msgDataIndex += inst->addrByteSize;
 
 			//framelength
-			memcpy(&inst->inf_msg.messageData[msgDataIndex], &info->framelength, 1);
+			memcpy(&inst->inf_msg.messageData[msgDataIndex], &info->framelength, sizeof(uint8));
 			msgDataIndex++;
 
 			//number of slots
-			memcpy(&inst->inf_msg.messageData[msgDataIndex], &info->slotsLength, 1);
+			memcpy(&inst->inf_msg.messageData[msgDataIndex], &info->slotsLength, sizeof(uint8));
 			msgDataIndex++;
 
 			//slot assignments
 			for(int s = 0; s < info->slotsLength; s++)
 			{
-				memcpy(&inst->inf_msg.messageData[msgDataIndex], &info->slots[s], 1);
+				memcpy(&inst->inf_msg.messageData[msgDataIndex], &info->slots[s], sizeof(uint8));
 				msgDataIndex++;
 			}
 		}
@@ -570,17 +552,17 @@ static void populate_inf_msg(struct TDMAHandler *this, uint8 inf_msg_type)
 			msgDataIndex += inst->addrByteSize;
 
 			//framelength
-			memcpy(&inst->inf_msg.messageData[msgDataIndex], &info->framelength, 1);
+			memcpy(&inst->inf_msg.messageData[msgDataIndex], &info->framelength, sizeof(uint8));
 			msgDataIndex++;
 
 			//number of slots
-			memcpy(&inst->inf_msg.messageData[msgDataIndex], &info->slotsLength, 1);
+			memcpy(&inst->inf_msg.messageData[msgDataIndex], &info->slotsLength, sizeof(uint8));
 			msgDataIndex++;
 
 			//slot assignments
 			for(int s = 0; s < info->slotsLength; s++)
 			{
-				memcpy(&inst->inf_msg.messageData[msgDataIndex], &info->slots[s], 1);
+				memcpy(&inst->inf_msg.messageData[msgDataIndex], &info->slots[s], sizeof(uint8));
 				msgDataIndex++;
 			}
 		}
@@ -598,166 +580,38 @@ static void populate_inf_msg(struct TDMAHandler *this, uint8 inf_msg_type)
 
 static void update_inf_tsfs(struct TDMAHandler *this)
 {
+	//TODO check if tsfs is greater than frameDuration, update if so
+
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
-	uint32 time_now = portGetTickCnt();
+	uint64 time_now_us = portGetTickCntMicro();
 	int msgDataIndex = TDMA_TSFS;
-	uint32 timeSinceFrameStart = get_dt32(this->uwbFrameStartTimes[0], time_now); //TODO handle number wrapping
-	memcpy(&inst->inf_msg.messageData[msgDataIndex], &timeSinceFrameStart, sizeof(uint32));
+	uint64 timeSinceFrameStart64 = get_dt64(this->uwbFrameStartTimes64[0], time_now_us);
+	uint64 frameDuration = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
+	while(timeSinceFrameStart64 > frameDuration)
+	{
+		this->uwbFrameStartTimes64[0] = timestamp_add64(this->uwbFrameStartTimes64[0], frameDuration);
+		timeSinceFrameStart64 -= frameDuration;
+	}
+
+	memcpy(&inst->inf_msg.messageData[msgDataIndex], &timeSinceFrameStart64, 6);
+
+
+	uint64 tsinf = get_dt64(this->lastINFtx, time_now_us);
+	memcpy(&inst->inf_msg.messageData[1], &tsinf, 6);
+	this->lastINFtx = time_now_us;
+
+
+//	uint8 debug_msg[100];
+//	int n = sprintf((char *)&debug_msg, "TSFS %llu", timeSinceFrameStart64	);
+//	send_usbmessage(&debug_msg[0], n);
+//	usb_run();
+
+//	uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
+//	dwt_readsystime(sys_time_arr);
+//	uint64 dwt_time_now = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
+//	uint64 timeSinceFrameStart_dwt = dwt_getdt(this->uwbFrameStartTimes_dwt[0], dwt_time_now);
+//	memcpy(&inst->inf_msg.messageData[100], &timeSinceFrameStart_dwt, 5);
 }
-
-
-////TODO
-////while collecting, build/deconflict slotAssignments...
-////when receive a INF_UPDATE or INF_SUG, rebuild/deconflict slotAssignments
-////when timeout, rebuild/deconflict slotAssignments
-//static void rebuild_slot_assignments(struct TDMAHandler *this)
-//{
-//	uint8 unassigned = 255;
-//	for(int i = 0; i < this->maxFramelength; i++)
-//	{
-//		memcpy(&this->slotAssignments[i], &unassigned, sizeof(uint8));
-//	}
-//	this->framelength = MIN_FRAMELENGTH;
-//
-//
-//	//dont forget to include my own assignments...
-//	for(int i = 0; i < this->mySlotsLength; i++)
-//	{
-//		bool double_frame = FALSE;
-//		uint8 slot = this->mySlots[i];
-//
-//		//check if slot is taken
-//		if(slot >= this->framelength)
-//		{
-//			uint8 mod_slot = slot%this->framelength;
-//			if(mod_slot == 0)
-//			{
-//				//slots not allowed to be assigned to the zeroth slot
-//				double_frame = TRUE;
-//			}
-//			else
-//			{
-//				if(memcmp(&this->slotAssignments[mod_slot], &unassigned, sizeof(uint8)) == 0)
-//				{
-//					//slot not assigned
-//					memcpy(&this->slotAssignments[mod_slot], &i, sizeof(uint8));
-//				}
-//				else if(memcmp(&this->slotAssignments[mod_slot], &i, sizeof(uint8)) != 0)
-//				{
-//					//already assigned to another UWB,
-//					//double the frame and start over!(?) should I instead consider framelengths and such?
-//					double_frame = TRUE;
-//				}
-//			}
-//
-//		}
-//		else if(slot_j < this->framelength)
-//		{
-//			while(slot_j < this->framelength)
-//			{
-//				if(memcmp(&this->slotAssignments[slot_j], &unassigned, sizeof(uint8)) == 0)
-//				{
-//					//slot not assigned
-//					memcpy(&this->slotAssignments[slot_j], &i, sizeof(uint8));
-//				}
-//				else if(memcmp(&this->slotAssignments[slot_j], &i, sizeof(uint8)) != 0)
-//				{
-//					//already assigned to another UWB,
-//					//double the frame and start over!(?) should I instead consider framelengths and such?
-//					double_frame = TRUE;
-//					break;
-//				}
-//				slot_j += framelength_i;
-//			}
-//		}
-//
-//		if(double_frame == TRUE)
-//		{
-//			this->framelength *= 2;
-//			i = 0;
-//			j = 0;
-//		}
-//
-//
-//	}
-//
-//	//getting stuck in here. this->framelength sometimes increases till overflow and gets set to 0
-//	for(int i = 0; i < inst->uwbListLen; i++)
-//	{
-//		if(inst->uwbListType[i] != UWB_LIST_INACTIVE)
-//		{
-//			uint8 framelength_i = this->uwbFramelengths[i];
-//			for(int j = 0; j < this->uwbListSlotsLengths[i]; j++)
-//			{
-//				//get slot
-//				uint8 slot_j;
-//				bool double_frame = FALSE;
-//				memcpy(&slot_j, &this->uwbListSlots[i][j], 1);
-//
-//
-//				//check if slot is taken
-//				if(slot_j >= this->framelength)
-//				{
-//					uint8 mod_slot = slot_j%this->framelength;
-//					if(mod_slot == 0)
-//					{
-//						//slots not allowed to be assigned to the zeroth slot
-//						double_frame = TRUE;
-//					}
-//					else
-//					{
-////						if(memcmp(&this->slotAssignments[mod_slot], &zero, sizeof(uint8)) == 0)
-//						if(memcmp(&this->slotAssignments[mod_slot], &unassigned, sizeof(uint8)) == 0)
-//						{
-//							//slot not assigned
-//							memcpy(&this->slotAssignments[mod_slot], &i, sizeof(uint8));
-//						}
-//						else if(memcmp(&this->slotAssignments[mod_slot], &i, sizeof(uint8)) != 0)
-//						{
-//							//already assigned to another UWB,
-//							//double the frame and start over!(?) should I instead consider framelengths and such?
-//							double_frame = TRUE;
-//						}
-//					}
-//
-//				}
-//				else if(slot_j < this->framelength)
-//				{
-//					while(slot_j < this->framelength)
-//					{
-//						if(memcmp(&this->slotAssignments[slot_j], &unassigned, sizeof(uint8)) == 0)
-//						{
-//							//slot not assigned
-//							memcpy(&this->slotAssignments[slot_j], &i, sizeof(uint8));
-//						}
-//						else if(memcmp(&this->slotAssignments[slot_j], &i, sizeof(uint8)) != 0)
-//						{
-//							//already assigned to another UWB,
-//							//double the frame and start over!(?) should I instead consider framelengths and such?
-//							double_frame = TRUE;
-//							break;
-//						}
-//						slot_j += framelength_i;
-//					}
-//				}
-//
-//				if(double_frame == TRUE)
-//				{
-//					this->framelength *= 2;
-//					i = 0;
-//					j = 0;
-//				}
-//
-//	//			uint16 uwbShortAdd = address64to16(&inst->uwbList[i][0]);
-//	//			uint8 index = msgDataIndex + 2*this->uwbListSlots[i][j];
-//	//			memcpy(&inst->inf_msg.messageData[msgDataIndex + (int)(inst->addrByteSize*this->uwbListSlots[i][j])], &uwbShortAdd, 2);
-//			}
-//		}
-//
-//	}
-//
-//
-//}
 
 
 //Procedure for processing INF SUG, INF REG, and INF UPDATE
@@ -782,16 +636,26 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 
 	bool tdma_modified = FALSE;
 
+
+	uint32 t_start = portGetTickCnt();
+
 	if((mode != CLEAR_ALL_COPY)     && //happens when we creat a new network
 	   (mode != CLEAR_LISTED_COPY)	&& //happens most of the time while processing
 	   (mode != COPY))				   //happens when collecting inf messages
 	{
 		//only process if valid mode supplied
-		return FALSE;
+		return tdma_modified;
 	}
 
+	bool safeAssign = FALSE;
+	if(mode == COPY)
+	{
+		safeAssign = TRUE;
+	}
+
+
 	uint8 inf_msg_type;
-	memcpy(&inf_msg_type, &messageData[FCODE], 1);
+	memcpy(&inf_msg_type, &messageData[FCODE], sizeof(uint8));
 
 	if((inf_msg_type != RTLS_DEMO_MSG_INF_REG)	  &&
 	   (inf_msg_type != RTLS_DEMO_MSG_INF_UPDATE) &&
@@ -803,24 +667,19 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 	}
 
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
-//	uint8 srcIndex = instgetuwblistindex(inst, &srcAddr[0], inst->addrByteSize);
 	inst->uwbListType[srcIndex] = UWB_LIST_NEIGHBOR;
 
-	uint32 timeSinceFrameStart;
 	uint8 numNeighbors;
 	uint8 numHidden;
 	uint8 framelength;
 	uint8 numSlots;
 	uint8 slot;
 	struct TDMAInfo *info;
-	uint8 address[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-//	uint8 uwb_index;
 
-	memcpy(&timeSinceFrameStart, &messageData[TDMA_TSFS], sizeof(timeSinceFrameStart));
-	memcpy(&numNeighbors, &messageData[TDMA_NUMN], 1);
-	memcpy(&numHidden, &messageData[TDMA_NUMH], 1);
-	memcpy(&framelength, &messageData[TDMA_FRAMELENGTH], 1);
-	memcpy(&numSlots, &messageData[TDMA_NUMS], 1);
+	memcpy(&numNeighbors, &messageData[TDMA_NUMN], sizeof(uint8));
+	memcpy(&numHidden, &messageData[TDMA_NUMH], sizeof(uint8));
+	memcpy(&framelength, &messageData[TDMA_FRAMELENGTH], sizeof(uint8));
+	memcpy(&numSlots, &messageData[TDMA_NUMS], sizeof(uint8));
 
 	int msgDataIndex = TDMA_NUMS + 1;
 
@@ -830,23 +689,16 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 	{
 		uwbListInMsg[i] = FALSE;
 	}
+	uwbListInMsg[srcIndex] = TRUE;
 
 	if(mode == CLEAR_ALL_COPY)
 	{
-		//clear all TDMA assignments
+		//clear all TDMA assignments and reset framelength to MIN
 		this->tdma_free_all_slots(this);
 		tdma_modified = TRUE;
 	}
-//	else if(mode == CLEAR_LISTED_COPY)
-//	{
-//		//first check for differences and exit if none exist...
-//		if(this->check_tdma_diff(this, messageData, srcIndex) == FALSE)
-//		{
-//			return FALSE;
-//		}
-//	}
 
-	msgDataIndex = TDMA_NUMS + 1;
+//	msgDataIndex = TDMA_NUMS + 1;
 	//copy slot assignments for source UWB
 	info = &this->uwbListTDMAInfo[srcIndex];
 	if(framelength != info->framelength)
@@ -854,31 +706,61 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 		tdma_modified = TRUE;
 	}
 
-	if(mode == CLEAR_LISTED_COPY)
+	//check if the tdma has been modified
+	if(tdma_modified == FALSE) //dont look for any more differences if we already know one exists
 	{
-		this->free_slots(info); //do after cheking framelength because framelength will be reset
-	}
-	info->framelength = MAX(framelength, info->framelength);
+		//frist check if same number of slots
+		if(numSlots == info->slotsLength)
+		{
+			//then check if each incoming slot is already assigned
+			for(int i = 0; i < numSlots; i++)
+			{
+				memcpy(&slot, &messageData[msgDataIndex], sizeof(uint8));
+				msgDataIndex++;
 
-	for(int s = 0; s < numSlots; s++)
-	{
-		memcpy(&slot, &messageData[msgDataIndex], 1);
-		msgDataIndex++;
-
-		if(this->assign_slot(info, slot) == TRUE)
+				if(this->slot_assigned(info, slot) == FALSE)
+				{
+					tdma_modified = TRUE;
+					break;
+				}
+			}
+		}
+		else
 		{
 			tdma_modified = TRUE;
 		}
 	}
-	uwbListInMsg[srcIndex] = TRUE;
+
+	if(mode == CLEAR_LISTED_COPY)
+	{
+		this->free_slots(info); //do after cheking framelength because framelength will be reset
+	}
+
+	info->framelength = MAX(framelength, info->framelength);
+
+	msgDataIndex = TDMA_NUMS + 1;
+	for(int s = 0; s < numSlots; s++)
+	{
+		memcpy(&slot, &messageData[msgDataIndex], sizeof(uint8));
+		msgDataIndex++;
+
+		this->assign_slot(info, slot, safeAssign);
+
+//		if(this->assign_slot(info, slot) == TRUE)
+//		{
+//			tdma_modified = TRUE;  //TODO this is not right, it should somehow compare before and after...
+//		}
+	}
+
 
 	for(int i = 0; i < numNeighbors; i++)
 	{
-		memcpy(&address, &messageData[msgDataIndex], inst->addrByteSize);
+		uint8 address[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+		memcpy(&address[0], &messageData[msgDataIndex], inst->addrByteSize);
 		msgDataIndex += inst->addrByteSize;
 
 		uint8 uwb_index = instgetuwblistindex(inst, &address[0], inst->addrByteSize);
-		if(uwb_index != 0) //0 reserved for self
+		if(uwb_index != 0)
 		{
 			if(inst->uwbListType[uwb_index] == UWB_LIST_INACTIVE || inst->uwbListType[uwb_index] == UWB_LIST_TWICE_HIDDEN)
 			{
@@ -892,12 +774,36 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 
 
 
-		memcpy(&framelength, &messageData[msgDataIndex], 1);
-		if(framelength != info->framelength)
-		{
-			tdma_modified = TRUE;
-		}
+		memcpy(&framelength, &messageData[msgDataIndex], sizeof(uint8));
 		msgDataIndex++;
+		memcpy(&numSlots, &messageData[msgDataIndex], sizeof(uint8));
+		msgDataIndex++;
+		int msgDataIndexSave = msgDataIndex;
+
+		//check if the tdma has been modified
+		if(tdma_modified == FALSE) //dont look for any more differences if we already know one exists
+		{
+			//frist check if same framelength and number of slots
+			if(framelength == info->framelength && numSlots == info->slotsLength)
+			{
+				//then check if each incoming slot is already assigned
+				for(int i = 0; i < numSlots; i++)
+				{
+					memcpy(&slot, &messageData[msgDataIndex], sizeof(uint8));
+					msgDataIndex++;
+
+					if(this->slot_assigned(info, slot) == FALSE)
+					{
+						tdma_modified = TRUE;
+						break;
+					}
+				}
+			}
+			else
+			{
+				tdma_modified = TRUE;
+			}
+		}
 
 		if(mode == CLEAR_LISTED_COPY)
 		{
@@ -906,24 +812,24 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 		info->framelength = MAX(framelength, info->framelength);
 
 
-		memcpy(&numSlots, &messageData[msgDataIndex], 1);
-		msgDataIndex++;
-
+		msgDataIndex = msgDataIndexSave;
 		for(int s = 0; s < numSlots; s++)
 		{
-			memcpy(&slot, &messageData[msgDataIndex], 1);
+			memcpy(&slot, &messageData[msgDataIndex], sizeof(uint8));
 			msgDataIndex++;
 
-			if(this->assign_slot(info, slot) == TRUE)
-			{
-				tdma_modified = TRUE;
-			}
+			this->assign_slot(info, slot, safeAssign);
+//			if(this->assign_slot(info, slot) == TRUE)
+//			{
+//				tdma_modified = TRUE; //TODO also not right! need to check modification
+//			}
 		}
 	}
 
 	for(int i = 0; i < numHidden; i++)
 	{
-		memcpy(&address, &messageData[msgDataIndex], inst->addrByteSize);
+		uint8 address[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+		memcpy(&address[0], &messageData[msgDataIndex], inst->addrByteSize);
 		msgDataIndex += inst->addrByteSize;
 
 		uint8 uwb_index = instgetuwblistindex(inst, &address[0], inst->addrByteSize);
@@ -938,32 +844,55 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 		uwbListInMsg[uwb_index] = TRUE;
 		info = &this->uwbListTDMAInfo[uwb_index];
 
-		memcpy(&framelength, &messageData[msgDataIndex], 1);
-		if(framelength != info->framelength)
+		memcpy(&framelength, &messageData[msgDataIndex], sizeof(uint8));
+		msgDataIndex++;
+		memcpy(&numSlots, &messageData[msgDataIndex], sizeof(uint8));
+		msgDataIndex++;
+		int msgDataIndexSave = msgDataIndex;
+
+		//check if the tdma has been modified
+		if(tdma_modified == FALSE) //dont look for any more differences if we already know one exists
 		{
-			tdma_modified = TRUE;
+			//frist check if same framelength and number of slots
+			if(framelength == info->framelength && numSlots == info->slotsLength)
+			{
+				//then check if each incoming slot is already assigned
+				for(int i = 0; i < numSlots; i++)
+				{
+					memcpy(&slot, &messageData[msgDataIndex], sizeof(uint8));
+					msgDataIndex++;
+
+					if(this->slot_assigned(info, slot) == FALSE)
+					{
+						tdma_modified = TRUE;
+						break;
+					}
+				}
+			}
+			else
+			{
+				tdma_modified = TRUE;
+			}
 		}
 
 		if(mode == CLEAR_LISTED_COPY)
 		{
 			this->free_slots(info); //do after checking for difference because will reset framelength as well
 		}
-
 		info->framelength = MAX(framelength, info->framelength);
-		msgDataIndex++;
 
-		memcpy(&numSlots, &messageData[msgDataIndex], 1);
-		msgDataIndex++;
-
+		msgDataIndex = msgDataIndexSave;
+//		int msgDataIndex = msgDataIndexSave;
 		for(int s = 0; s < numSlots; s++)
 		{
-			memcpy(&slot, &messageData[msgDataIndex], 1);
+			memcpy(&slot, &messageData[msgDataIndex], sizeof(uint8));
 			msgDataIndex++;
 
-			if(this->assign_slot(info, slot) == TRUE) //the only problem i see with this is that it does not give me a good way to isolate which ones were or weren't modified, this is a problem for deconflict logic...
-			{
-				tdma_modified = TRUE;
-			}
+			this->assign_slot(info, slot, safeAssign);
+//			if(this->assign_slot(info, slot) == TRUE) //the only problem i see with this is that it does not give me a good way to isolate which ones were or weren't modified, this is a problem for deconflict logic...
+//			{
+//				tdma_modified = TRUE;
+//			}
 		}
 	}
 
@@ -976,7 +905,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 		{
 			for(int j = i + 1; j < inst->uwbListLen; j++)
 			{
-				if(uwbListInMsg[i] == FALSE && uwbListInMsg[j] == TRUE)
+				if((uwbListInMsg[i] == FALSE && uwbListInMsg[j] == TRUE) || (uwbListInMsg[i] == TRUE && uwbListInMsg[j] == FALSE))
 				{
 
 					if((inst->uwbListType[i] == UWB_LIST_NEIGHBOR && inst->uwbListType[j] == UWB_LIST_NEIGHBOR) ||
@@ -985,7 +914,10 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 					   (inst->uwbListType[j] == UWB_LIST_NEIGHBOR && inst->uwbListType[i] == UWB_LIST_HIDDEN))
 					{
 						//TODO make sure this is okay. will i need to ensure the assignments from the message are maintained?
-						this->deconflict_uwb_pair(this, &this->uwbListTDMAInfo[i], &this->uwbListTDMAInfo[j]);
+						if(this->deconflict_uwb_pair(this, &this->uwbListTDMAInfo[i], &this->uwbListTDMAInfo[j]) == TRUE)
+						{
+							tdma_modified = TRUE;
+						}
 					}
 				}
 			}
@@ -1004,6 +936,12 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 		}
 	}
 
+	uint32 deltat = get_dt32(t_start, portGetTickCnt());
+
+//	uint8 debug_msg[100];
+//	int n = sprintf((char *)&debug_msg, "process_inf_time,%X,%lu", inst->uwbShortAdd, deltat);
+//	send_usbmessage(&debug_msg[0], n);
+//	usb_run();
 
 	return tdma_modified;
 
@@ -1582,9 +1520,9 @@ static bool poll_delay(struct TDMAHandler *this, uint32 time_now_offset, uint32 
 {
 	bool delay = FALSE;
 
-	uint32 time_now = portGetTickCnt();
-	uint32 timeSinceSlotStart = get_dt32(this->lastSlotStartTime, time_now);
-	if(timeSinceSlotStart > this->slotStartDelay)
+	uint64 time_now_us = portGetTickCntMicro();
+	uint64 timeSinceSlotStart = get_dt64(this->lastSlotStartTime64, time_now_us);
+	if(timeSinceSlotStart >= this->slotStartDelay_us)
 	{
 		delay = FALSE;
 	}
@@ -1610,13 +1548,29 @@ static bool slot_assigned(struct TDMAInfo *info, uint8 slot)
 	return assigned;
 }
 
-static bool assign_slot(struct TDMAInfo *info, uint8 slot)
+static bool assign_slot(struct TDMAInfo *info, uint8 slot, bool safeAssign)
 {
 	//NOTE: deconflicting happens elsewhere
 	bool retval = FALSE;
 
-	//if not assigned, increase slots size and add slot index to end of array (array is unsorted)
-	if(slot_assigned(info, slot) == FALSE)
+	if(safeAssign == TRUE)//when using safeAssign, first check if the slot is assigned
+	{
+		//if not assigned, increase slots size and add slot index to end of array (array is unsorted)
+		if(slot_assigned(info, slot) == FALSE)
+		{
+			uint8 *newSlots = malloc(sizeof(uint8)*(info->slotsLength + 1));
+			memcpy(&newSlots[0], &info->slots[0], sizeof(uint8)*info->slotsLength);
+			memcpy(&newSlots[info->slotsLength], &slot, 1);
+
+			free(info->slots);
+			info->slots = NULL;
+			info->slots = newSlots;
+			info->slotsLength += 1;
+
+			retval = TRUE;
+		}
+	}
+	else
 	{
 		uint8 *newSlots = malloc(sizeof(uint8)*(info->slotsLength + 1));
 		memcpy(&newSlots[0], &info->slots[0], sizeof(uint8)*info->slotsLength);
@@ -1629,6 +1583,7 @@ static bool assign_slot(struct TDMAInfo *info, uint8 slot)
 
 		retval = TRUE;
 	}
+
 
 	return retval;
 }
@@ -1645,12 +1600,23 @@ static bool assign_slot(struct TDMAInfo *info, uint8 slot)
 //4.) Double the Frame (DF)
 //		applicable if 2.) and 3.) not applicable
 //		double own framelength and go back to 2.)
+
+//procedure above doesn't seem to alwasy work, even for 3 UWBs... each assigned a slot out of four
+//1,2,3 find no slots to assign and 4 wont change that... will just double the frame forever...
+//actually it should work, because when we have double the framelength, the other uwbs virtually have two slots...
 static void find_assign_slot(struct TDMAHandler *this)
 {
 
 	//NOTE: this assumes that all other TDMAInfo stored in the TDMAHandler are not in conflict with each other
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
 	struct TDMAInfo *info = &this->uwbListTDMAInfo[0];
+
+	//if this UWB was somehow reset, recover its prior slot assignment info from the network traffic
+	if(info->slotsLength > 0)
+	{
+		return;
+	}
+
 	bool assignment_made = FALSE;
 
 	//set framelength
@@ -1660,22 +1626,49 @@ static void find_assign_slot(struct TDMAHandler *this)
 	while(TRUE)
 	{
 		//GU
-		for(int i = 1; i < info->framelength; i++) //TODO make sure we dont accidentally assign to slot 0
+		for(uint8 i = 1; i < info->framelength; i++) //TODO make sure we don't accidentally assign to slot 0
 		{
 			bool assigned = FALSE;
 
-			for(int u = 1; u < inst->uwbListLen; u++)//0 reserved for self
+			for(uint8 u = 1; u < inst->uwbListLen; u++)//0 reserved for self
 			{
-				for(int su = 0; su < this->uwbListTDMAInfo[u].slotsLength; su++)
+				for(uint8 su = 0; su < this->uwbListTDMAInfo[u].slotsLength; su++)
 				{
 					uint8 slot_su;
 					memcpy(&slot_su, &this->uwbListTDMAInfo[u].slots[su], sizeof(uint8));
-					uint8 mod_slot_su = slot_su % info->framelength;
 
-					if(slot_su == i || mod_slot_su == i)
+					if(info->framelength > this->uwbListTDMAInfo[u].framelength)
 					{
-						//slot assigned to this uwb
-						assigned = TRUE;
+						uint8 mod_i = i%this->uwbListTDMAInfo[u].framelength;
+
+						if(slot_su == mod_i)
+						{
+							//slot assigned to this uwb
+							assigned = TRUE;
+						}
+					}
+					else if(info->framelength < this->uwbListTDMAInfo[u].framelength)
+					{
+						uint8 mod_slot_su = slot_su % info->framelength;
+
+						if(mod_slot_su == i)
+						{
+							//slot assigned to this uwb
+							assigned = TRUE;
+						}
+					}
+					else //same framelength
+					{
+						if(slot_su == i)
+						{
+							//slot assigned to this uwb
+							assigned = TRUE;
+						}
+					}
+
+
+					if(assigned == TRUE)
+					{
 						break;
 					}
 				}
@@ -1689,8 +1682,8 @@ static void find_assign_slot(struct TDMAHandler *this)
 			//slot not assigned, assign to self
 			if(assigned == FALSE)
 			{
-				this->assign_slot(info, i);
-				assignment_made = TRUE;
+				this->assign_slot(info, i, FALSE);
+				assignment_made = TRUE; //TODO just stop here? or get all unassigned slots?
 			}
 		}
 
@@ -1701,25 +1694,31 @@ static void find_assign_slot(struct TDMAHandler *this)
 
 		//RMA
 		//find UWB with greatest number of slot assignments
-		uint8 max_assignments = 0;
+		uint8 max_assignments = 0; //TODO may need uint16?
 		uint8 max_uwb_index = 255;
-		for(int u = 1; u < inst->uwbListLen; u++)//0 reserved for self
+		for(uint8 u = 1; u < inst->uwbListLen; u++)//0 reserved for self
 		{
-			if(this->uwbListTDMAInfo[u].slotsLength > max_assignments)
+			uint8 slotsLength = this->uwbListTDMAInfo[u].slotsLength; //TODO may need uint16?
+			if(info->framelength > this->uwbListTDMAInfo[u].framelength && this->uwbListTDMAInfo[u].slotsLength != 0)
 			{
-				max_assignments = this->uwbListTDMAInfo[u].slotsLength;
+				slotsLength *= info->framelength/this->uwbListTDMAInfo[u].framelength;
+			}
+
+			if(slotsLength > max_assignments)
+			{
+				max_assignments = slotsLength;
 				max_uwb_index = u;
 			}
 		}
 
-		if(max_uwb_index != 255)
+		if(max_uwb_index != 255 && max_assignments > 1)
 		{
 			uint8 slot;
 			memcpy(&slot, &this->uwbListTDMAInfo[max_uwb_index].slots[0], sizeof(uint8));
 			uint8 mod_slot = slot % info->framelength;
 
-			this->free_slot(&this->uwbListTDMAInfo[max_uwb_index], slot);
-			this->assign_slot(info, mod_slot);
+			this->assign_slot(info, mod_slot, TRUE);
+			this->deconflict_uwb_pair(this, info, &this->uwbListTDMAInfo[max_uwb_index]); //TODO consider handling differently (could maybe be more efficient?)
 			assignment_made = TRUE;
 		}
 
@@ -1736,20 +1735,28 @@ static void find_assign_slot(struct TDMAHandler *this)
 static void build_new_network(struct TDMAHandler *this)
 {
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
-	uint32 time_now = portGetTickCnt();
+//	uint32 time_now = portGetTickCnt();
+	uint32 time_now_us = portGetTickCntMicro();
+	bool safeAssign = FALSE;
 
 	//clear all tdma information
 	this->tdma_free_all_slots(this);
 
 	//build the initial TDMA
-	this->uwbFrameStartTimes[0] = time_now - this->slotDuration;//TODO handle timer wrapping...
-	this->lastSlotStartTime = time_now;
+//	this->uwbFrameStartTimes_stm32[0] = time_now - this->slotDuration_ms;//TODO handle timer wrapping...
+//	this->lastSlotStartTime_stm32 = time_now;
+
+	//build the initial TDMA
+	this->uwbFrameStartTimes64[0] = timestamp_subtract64(time_now_us, this->slotDuration_us);
+	this->lastSlotStartTime64 = time_now_us;
+
+
 	this->uwbListTDMAInfo[0].framelength = (uint8)MIN_FRAMELENGTH;
 	this->uwbListTDMAInfo[inst->uwbToRangeWith].framelength = (uint8)MIN_FRAMELENGTH;
 
-	this->assign_slot(&this->uwbListTDMAInfo[0], 1);
-	this->assign_slot(&this->uwbListTDMAInfo[inst->uwbToRangeWith],  2);
-	this->assign_slot(&this->uwbListTDMAInfo[0], 3);
+	this->assign_slot(&this->uwbListTDMAInfo[0], 1, safeAssign);
+	this->assign_slot(&this->uwbListTDMAInfo[inst->uwbToRangeWith],  2, safeAssign);
+	this->assign_slot(&this->uwbListTDMAInfo[0], 3, safeAssign);
 }
 
 
@@ -1924,7 +1931,7 @@ static bool deconflict_uwb_pair(struct TDMAHandler *this, struct TDMAInfo *info_
 			for(int sb = 0; sb < info_b->slotsLength; sb++)
 			{
 				uint8 slot_sb;
-				memcpy(&slot_sb, &info_a->slots[sb], 1);
+				memcpy(&slot_sb, &info_b->slots[sb], 1);
 
 
 				//check if slot is taken
@@ -2087,12 +2094,12 @@ static bool self_conflict(struct TDMAHandler *this)
 			for(int sa = 0; sa < info_a->slotsLength; sa++)
 			{
 				uint8 slot_sa;
-				memcpy(&slot_sa, &info_a->slots[sa], 1);
+				memcpy(&slot_sa, &info_a->slots[sa], sizeof(uint8));
 
 				for(int sb = 0; sb < info_b->slotsLength; sb++)
 				{
 					uint8 slot_sb;
-					memcpy(&slot_sb, &info_a->slots[sb], 1);
+					memcpy(&slot_sb, &info_b->slots[sb], sizeof(uint8));
 
 
 					//check if slot is taken
@@ -2276,29 +2283,37 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 			instance_data_t *inst = instance_get_local_structure_ptr(0);
 
 			//TODO handle number wrapping
-			uint32 tcommon;
-			uint32 shortestFrameDuration = this->maxFramelength*this->slotDuration;
+			uint64 time_now_us = portGetTickCntMicro();
+			uint64 tcommon;
+			uint64 shortestFrameDuration = this->maxFramelength*this->slotDuration_us;
+//			uint32 tcommon;
+//			uint32 shortestFrameDuration = this->maxFramelength*this->slotDuration_ms;
 			uint8 numNeighbors = instfindnumactiveneighbors(inst);
-			uint32 tnext[numNeighbors];
-			uint32 latest_tnext;
+//			uint32 tnext[numNeighbors];
+//			uint32 latest_tnext;
+			uint64 tnext[numNeighbors];
+			uint64 latest_tnext;
 			uint8 neighborIndices[numNeighbors];
 			uint8 nidx = 0;
+			uint64 slotDuration_us = this->slotDuration_us;
 
 			for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
 			{
 				if(inst->uwbListType[i] == UWB_LIST_NEIGHBOR)
 				{
 					neighborIndices[nidx] = i;
-					tnext[nidx] = this->uwbFrameStartTimes[i];
-					while(time_now > tnext[nidx]) //TODO handle number wrapping...
+//					tnext[nidx] = this->uwbFrameStartTimes_stm32[i];
+					tnext[nidx] = this->uwbFrameStartTimes64[i];
+					while(time_now_us > tnext[nidx]) //TODO handle number wrapping...
 					{
-						tnext[nidx] += this->uwbListTDMAInfo[i].framelength*this->slotDuration;
+						tnext[nidx] += this->uwbListTDMAInfo[i].framelength*slotDuration_us;
 					}
 					nidx++;
 
-					if(this->uwbListTDMAInfo[i].framelength*this->slotDuration < shortestFrameDuration)
+//					if(this->uwbListTDMAInfo[i].framelength*this->slotDuration_ms < shortestFrameDuration)
+					if(this->uwbListTDMAInfo[i].framelength*slotDuration_us < shortestFrameDuration)
 					{
-						shortestFrameDuration = this->uwbListTDMAInfo[i].framelength*this->slotDuration;
+						shortestFrameDuration = this->uwbListTDMAInfo[i].framelength*slotDuration_us;
 					}
 				}
 			}
@@ -2311,7 +2326,8 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 				converged = TRUE;
 				for(int i = 0; i < nidx; i++)
 				{
-					uint32 frameduration = this->uwbListTDMAInfo[neighborIndices[i]].framelength*this->slotDuration;
+//					uint32 frameduration = this->uwbListTDMAInfo[neighborIndices[i]].framelength*this->slotDuration_ms;
+					uint64 frameduration = this->uwbListTDMAInfo[neighborIndices[i]].framelength*slotDuration_us;
 					while(tnext[i] < tcommon && tcommon - tnext[i] >= frameduration) //include small buffer
 					{
 						tnext[i] += frameduration;
@@ -2333,7 +2349,8 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 
 
 			//expire as the beginning of the common frame start time
-			this->discovery_mode_duration = get_dt32(time_now, latest_tnext);
+//			this->discovery_mode_duration = get_dt32(time_now, latest_tnext);
+			this->discovery_mode_duration = (uint32)(get_dt64(time_now_us, latest_tnext)/1000); //TODO make duration in us?
 			this->discovery_mode_expires = TRUE;
 			break;
 		}
@@ -2486,21 +2503,18 @@ static void usb_dump_tdma(struct TDMAHandler *this)
 static struct TDMAHandler new(){
 	struct TDMAHandler ret = {};
 
-	ret.slotDuration = 50; //TODO should be a function of the data rate and the max number of UWBs
+	ret.slotDuration_ms = 50; //TODO should be a function of the data rate and the max number of UWBs
+	ret.slotDuration_us = ret.slotDuration_ms*1000;
 
 	ret.slot_transition = &slot_transition;
 	ret.frame_sync = &frame_sync;
 	ret.tx_select  = &tx_select;
 	ret.check_blink  = &check_blink;
 
-	//	ret.rebuild_slot_assignments = &rebuild_slot_assignments;
-
 	ret.populate_inf_msg = &populate_inf_msg;
 	ret.update_inf_tsfs = &update_inf_tsfs;
 	ret.process_inf_msg = &process_inf_msg;
 	ret.check_tdma_diff = &check_tdma_diff;
-//	ret.populate_sug_msg = &populate_sug_msg;	//TODO remove
-//	ret.process_sug_msg = &process_sug_msg;		//TODO remove
 
 	ret.poll_delay = &poll_delay;
 	ret.slot_assigned = &slot_assigned;
@@ -2516,14 +2530,13 @@ static struct TDMAHandler new(){
 	ret.set_discovery_mode = &set_discovery_mode;
 	ret.check_discovery_mode_expiration = &check_discovery_mode_expiration;
 	ret.usb_dump_tdma = &usb_dump_tdma;
-//	ret.get_largest_framelength = &get_largest_framelength;
 
 	ret.deconflict_slot_assignments = &deconflict_slot_assignments;
 	ret.deconflict_uwb_pair = &deconflict_uwb_pair;
 	ret.deconflict_slot_pair = &deconflict_slot_pair;
 	ret.self_conflict = &self_conflict;
 
-	uint32 time_now = portGetTickCnt();
+	uint32 time_now_us = portGetTickCntMicro();
 
 	//TODO create a function to clear the frame information!
 	//and have it called in enter_discovery function!
@@ -2535,11 +2548,6 @@ static struct TDMAHandler new(){
 		ret.maxFramelength *= 2;
 	}
 
-//	ret.myTDMAInfo.uwbIndex = 254; //254 reserved to identify self
-//	ret.myTDMAInfo.framelength = (uint8)MIN_FRAMELENGTH;
-//	ret.myTDMAInfo.slots = NULL;
-//	ret.myTDMAInfo.slotsLength = 0;
-
 	for(int i = 0; i < UWB_LIST_SIZE; i++)
 	{
 		ret.uwbListTDMAInfo[i].uwbIndex = i;
@@ -2548,15 +2556,20 @@ static struct TDMAHandler new(){
 		ret.uwbListTDMAInfo[i].slotsLength = 0;
 	}
 
-    ret.uwbFrameStartTimes[0] = time_now;
-    ret.lastSlotStartTime = time_now;
+    ret.uwbFrameStartTimes64[0] = time_now_us;
+    ret.lastFST = time_now_us;
+    ret.lastSlotStartTime64 = time_now_us;
     ret.infPollSentThisSlot = FALSE;
-    ret.slotStartDelay = 4;
+    ret.slotStartDelay_us = 4000;
     ret.infMessageLength = 0;
 
     ret.enter_discovery_mode(&ret);
-    ret.collectInfDuration = ret.maxFramelength*ret.slotDuration;
-    ret.waitInfDuration = ret.collectInfDuration;
+//    ret.collectInfDuration = ret.maxFramelength*ret.slotDuration;
+    ret.collectInfDuration = 10000;
+	ret.waitInfDuration = ret.collectInfDuration;
+
+	ret.lastINFtx = time_now_us;
+	ret.lastINFrx = time_now_us;
 
 	return ret;
 }

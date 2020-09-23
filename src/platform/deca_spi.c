@@ -63,7 +63,7 @@ int writetospi
 )
 {
 
-	int i=0;
+	uint32 i=0;
 
     decaIrqStatus_t  stat ;
 
@@ -115,7 +115,7 @@ int readfromspi
 )
 {
 
-	int i=0;
+	uint32 i=0;
 
     decaIrqStatus_t  stat ;
 
@@ -160,7 +160,7 @@ void writetoLCD
     const uint8 *bodyBuffer
 )
 {
-	int i = 0;
+	uint32 i = 0;
 	int sleep = 0;
 
 	if(rs_enable)

@@ -18,11 +18,6 @@
 #include "deca_spi.h"
 #include "instance.h"
 
-//#include "llist.h"
-//#include "uwb_select.h"
-
-#include <inttypes.h>
-
 extern void usb_run(void);
 extern int usb_init(void);
 extern void usb_printconfig(int, uint8*, int);
@@ -218,6 +213,78 @@ int instgetuwblistindex(instance_data_t *inst, uint8 *uwbAddr, uint8 addrByteSiz
 {
     uint8 blank[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
+    char uwbChar[2];
+    memcpy(&uwbChar[0], &uwbAddr[0], 2);
+
+    bool match = FALSE;
+	char test_addr[2] = {0x95, 0x15};
+	if(memcmp(&uwbChar[0], &test_addr[0], 2) == 0)
+	{
+		match = TRUE;
+	}
+	test_addr[0] = 0x50;
+	test_addr[1] = 0x59;
+	if(memcmp(&uwbChar[0], &test_addr[0], 2) == 0)
+	{
+		match = TRUE;
+	}
+	test_addr[0] = 0x36;
+	test_addr[1] = 0x18;
+	if(memcmp(&uwbChar[0], &test_addr[0], 2) == 0)
+	{
+		match = TRUE;
+	}
+	test_addr[0] = 0x39;
+	test_addr[1] = 0x16;
+	if(memcmp(&uwbChar[0], &test_addr[0], 2) == 0)
+	{
+		match = TRUE;
+	}
+	test_addr[0] = 0x27;
+	test_addr[1] = 0x59;
+	if(memcmp(&uwbChar[0], &test_addr[0], 2) == 0)
+	{
+		match = TRUE;
+	}
+	test_addr[0] = 0x20;
+	test_addr[1] = 0x1B;
+	if(memcmp(&uwbChar[0], &test_addr[0], 2) == 0)
+	{
+		match = TRUE;
+	}
+	test_addr[0] = 0x8C;
+	test_addr[1] = 0x11;
+	if(memcmp(&uwbChar[0], &test_addr[0], 2) == 0)
+	{
+		match = TRUE;
+	}
+	test_addr[0] = 0x1D;
+	test_addr[1] = 0x14;
+	if(memcmp(&uwbChar[0], &test_addr[0], 2) == 0)
+	{
+		match = TRUE;
+	}
+	test_addr[0] = 0x8C;
+	test_addr[1] = 0x19;
+	if(memcmp(&uwbChar[0], &test_addr[0], 2) == 0)
+	{
+		match = TRUE;
+	}
+	test_addr[0] = 0xD6;
+	test_addr[1] = 0x0C;
+	if(memcmp(&uwbChar[0], &test_addr[0], 2) == 0)
+	{
+		match = TRUE;
+	}
+
+	if(match == FALSE)
+	{
+//		instance_data_t *inst = &instance_data[instance];
+		uint8 debug_msg[100];
+		int n = sprintf((char*)&debug_msg[0], "match not found");
+		 send_usbmessage(&debug_msg[0], n);
+		 usb_run();
+	}
 
     //add the new UWB to the list, if not already there and there is space
     for(uint8 i=0; i<UWB_LIST_SIZE; i++)
@@ -1086,12 +1153,13 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 //	usb_run();
 
 //		uint8 debug_msg[150];
-//		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK, %llX, xxx", instance_get_addr());
+//		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK");
 //		send_usbmessage(&debug_msg[0], n);
 //		usb_run();
 
 
 	uint32 time_now = portGetTickCnt();
+	uint32 time_now_us = portGetTickCntMicro();
 
 	//if we got a frame with a good CRC - RX OK
 	rxd_event = DWT_SIG_RX_OKAY;
@@ -1107,10 +1175,10 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 			{
 				rxd_event = DWT_SIG_RX_BLINK;
 
-				uint8 debug_msg[150];
-				int n = sprintf((char*)&debug_msg[0], "RX CALLBACK: DWT_SIG_RX_BLINK");
-				send_usbmessage(&debug_msg[0], n);
-				usb_run();
+//				uint8 debug_msg[150];
+//				int n = sprintf((char*)&debug_msg[0], "RX CALLBACK: DWT_SIG_RX_BLINK");
+//				send_usbmessage(&debug_msg[0], n);
+//				usb_run();
 			}
 			else
 				rxd_event = SIG_RX_UNKNOWN;
@@ -1250,10 +1318,80 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 		uwb_index = instgetuwblistindex(&instance_data[instance], &blink_address[0], instance_data[instance].addrByteSize);
 //		instance_data[instance].uwbListType[uwb_index] = UWB_LIST_NEIGHBOR;
 
+//		bool match = FALSE;
+//		char test_addr[2] = {0x95, 0x15};
+//		if(memcmp(&blink_address, &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x50;
+//		test_addr[1] = 0x59;
+//		if(memcmp(&blink_address, &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x36;
+//		test_addr[1] = 0x18;
+//		if(memcmp(&blink_address, &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x39;
+//		test_addr[1] = 0x16;
+//		if(memcmp(&blink_address, &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x27;
+//		test_addr[1] = 0x59;
+//		if(memcmp(&blink_address, &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x20;
+//		test_addr[1] = 0x1B;
+//		if(memcmp(&blink_address, &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x8C;
+//		test_addr[1] = 0x11;
+//		if(memcmp(&blink_address, &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x1D;
+//		test_addr[1] = 0x14;
+//		if(memcmp(&blink_address, &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x8C;
+//		test_addr[1] = 0x19;
+//		if(memcmp(&blink_address, &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0xD6;
+//		test_addr[1] = 0x0C;
+//		if(memcmp(&blink_address, &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//
+//		if(match == FALSE)
+//		{
+//			instance_data_t *inst = &instance_data[instance];
+//			uint8 debug_msg[100];
+//			int n = sprintf((char*)&debug_msg[0], "match not found");
+//			 send_usbmessage(&debug_msg[0], n);
+//			 usb_run();
+//		}
+
 
 //		uint8 debug_msg[100];
-//		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK RECEIVED: BLINK uwb_index: %d, uwbToRangeWith: %d ", uwb_index, instance_data[instance].uwbToRangeWith);
-//		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK RECEIVED: BLINK %llX, xxxx", instance_get_addr());
+////		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK RECEIVED: BLINK uwb_index: %d, uwbToRangeWith: %d ", uwb_index, instance_data[instance].uwbToRangeWith);
+//		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK RECEIVED: BLINK,%llX,xxxx", instance_get_addr());
 //		send_usbmessage(&debug_msg[0], n);
 //		usb_run();
 	}
@@ -1267,11 +1405,105 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 		instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
 		instance_data[instance].uwbTimeout[uwb_index] = 0;
 
-//		uint8 debug_msg[100];
+//		bool match = FALSE;
+//		char test_addr[2] = {0x95, 0x15};
+//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x50;
+//		test_addr[1] = 0x59;
+//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x36;
+//		test_addr[1] = 0x18;
+//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x39;
+//		test_addr[1] = 0x16;
+//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x27;
+//		test_addr[1] = 0x59;
+//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x20;
+//		test_addr[1] = 0x1B;
+//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x8C;
+//		test_addr[1] = 0x11;
+//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x1D;
+//		test_addr[1] = 0x14;
+//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0x8C;
+//		test_addr[1] = 0x19;
+//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//		test_addr[0] = 0xD6;
+//		test_addr[1] = 0x0C;
+//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
+//		{
+//			match = TRUE;
+//		}
+//
+//		if(match == FALSE)
+//		{
+//			instance_data_t *inst = &instance_data[instance];
+//			uint8 debug_msg[100];
+//			int n = sprintf((char*)&debug_msg[0], "match not found");
+//			 send_usbmessage(&debug_msg[0], n);
+//			 usb_run();
+//		}
+
+
+
+
+
+		uint8 debug_msg[100];
 //		 int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s uwb_index %d, uwbToRangeWith: %d ", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), uwb_index, instance_data[instance].uwbToRangeWith);
-//		 int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s, %llX, xxxx", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), instance_get_addr());
-//		 send_usbmessage(&debug_msg[0], n);
-//		 usb_run();
+		uint16 my_addr = instance_data[instance].uwbShortAdd;
+////		uint64 my_addr = (uint64)instance_data[instance].uwbShortAdd;
+//		uint16 *addr_ptr = &instance_data[instance].uwbShortAdd;
+//		int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%u,xxxx,%p", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr, (void *) addr_ptr);
+//		int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%u,xxxx", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr);
+		int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%X,xxxx", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr);
+//		int n = sprintf((char*)&debug_msg[0], "%u,%p", my_addr, (void *)addr_ptr);
+		 send_usbmessage(&debug_msg[0], n);
+		 usb_run();
+
+	}
+
+	if(uwb_index > UWB_LIST_SIZE - 1)
+	{
+		instance_data_t *inst = &instance_data[instance];
+
+		uint8 debug_msg[100];
+		uint16 my_addr = instance_data[instance].uwbShortAdd;
+		int n = sprintf((char*)&debug_msg[0], "uwb_index:%u of %u",uwb_index, instance_data[instance].uwbListLen);
+		 send_usbmessage(&debug_msg[0], n);
+		 usb_run();
+
+		 //TODO solve this problem. other, (incorrect) addresses are making it into our UWB list for some reason...
 	}
 
 	bool accept_inf = FALSE;
@@ -1382,7 +1614,7 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 		//NOTE: these could get messed up if other messages trigger rxcallback before being processed by frame sync...
 		//should these be folded into the dw_event?
 		//TODO only do this when we need to (we are accepting and INF message)
-		instance_data[instance].timeofRxCallback = time_now;
+		instance_data[instance].timeofRxCallback = time_now_us;
 
 		//TODO only do this when we need to (we are accepting and INF message)
 		uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
@@ -1393,6 +1625,19 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 		instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
 		instance_data[instance].uwbTimeout[uwb_index] = 0;
 		place_event = 1;
+
+
+		if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_SUG)
+		{
+//			uint8 debug_msg[100];
+//			int n = sprintf((char*)&debug_msg[0], "RX CB: DWT_SIG_RX_OKAY-%s, %llX, xxxx", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), instance_get_addr());
+//			send_usbmessage(&debug_msg[0], n);
+//			usb_run();
+		}
+
+
+
+
 	}
 	else if(uwb_index != 255 && instance_data[instance].uwbToRangeWith == uwb_index)
 	{
@@ -1487,9 +1732,9 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				dwt_writetxdata(frameLength, (uint8 *)  &instance_data[instance].msg, 0) ;	// write the frame data
 
 #if (IMMEDIATE_RESPONSE == 1)
-				dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
+				dwt_starttx(DWT_START_TX_IMMEDIATE | instance_data[instance].wait4ack);
 #else
-				if(instancesendpacket(frameLength, DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED, instance_data[instance].delayedReplyTime))
+				if(instancesendpacket(frameLength, DWT_START_TX_DELAYED | instance_data[instance].wait4ack, instance_data[instance].delayedReplyTime))
 				{
 					dw_event.typePend = DWT_SIG_TX_ERROR ;
 					dwt_setrxaftertxdelay(0);
@@ -1713,7 +1958,15 @@ int instance_run(void)
 
 	while(done == INST_NOT_DONE_YET)
 	{
+//		uint64 time_now_us = portGetTickCntMicro();
+
 		done = testapprun(&instance_data[instance], &tdma_handler, message) ; // run the communications application
+
+//		uint64 duration = get_dt64(time_now_us, portGetTickCntMicro());
+//		uint8 debug_msg[100];
+//		int n = sprintf((char *)&debug_msg, "TAR, duration, %llu", duration);
+//		send_usbmessage(&debug_msg[0], n);
+//		usb_run();
 
 		//we've processed message
 		message = 0;

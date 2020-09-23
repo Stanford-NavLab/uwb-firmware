@@ -93,7 +93,7 @@ uint16_t DW_VCP_Ctrl (uint32_t Cmd, uint8_t* Buf, uint32_t Len)
 #pragma GCC optimize ("O3")
 uint16_t DW_VCP_DataTx (uint8_t* Buf, uint32_t Len)
 {
-	int i = 0;
+	uint32_t i = 0;
 
 	i = APP_Rx_ptr_in ;
 

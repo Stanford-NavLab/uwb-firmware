@@ -27,7 +27,7 @@ extern void usb_printconfig(int, uint8*, int);
 extern void send_usbmessage(uint8*, int);
 
 							// "1234567890123456" - 16 bytes long LCD
-#define SOFTWARE_VER_STRING    "Version 3.11    " //
+#define SOFTWARE_VER_STRING    "TDMA Version 1.0" //
 
 #define SWS1_TXSPECT_MODE	0x80  //Continuous TX spectrum mode
 #define SWS1_ANC_MODE 		0x08  //anchor mode
@@ -263,14 +263,17 @@ void setLCDline1(uint8 s1switch)
 **/
 void configure_continuous_txspectrum_mode(uint8 s1switch)
 {
-#if (USING_LCD == 1)
-    uint8 command = 0x2 ;  //return cursor home
-    writetoLCD( 1, 0,  &command);
-	sprintf((char*)&dataseq[0], "Conti TX %s:%d:%d ", (s1switch & SWS1_SHF_MODE) ? "S" : "L", chan, prf);
-	writetoLCD( 40, 1, dataseq); //send some data
-	memcpy(dataseq, (const uint8 *) "Spectrum Test   ", 16);
-	writetoLCD( 16, 1, dataseq); //send some data
-#endif
+	if(port_is_switch_on(TA_SW1_4) == S1_SWITCH_ON)
+	{
+		//LCD display ON
+
+		uint8 command = 0x2 ;  //return cursor home
+		writetoLCD(1, 0,  &command);
+		sprintf((char*)&dataseq[0], "Conti TX %s:%d:%d ", (s1switch & SWS1_SHF_MODE) ? "S" : "L", chan, prf);
+		writetoLCD(LCD_BUFF_LEN, 1, dataseq); //send some data
+		memcpy(dataseq, (const uint8 *) "Spectrum Test   ", LCD_BUFF_LEN);
+		writetoLCD(LCD_BUFF_LEN, 1, dataseq); //send some data
+	}
 
 	//configure DW1000 into Continuous TX mode
 	instance_starttxtest(0x1000);
@@ -298,30 +301,61 @@ int dw_main(void)
 {
     int i = 0;
     double range_result = 0;
+    uint64 range_addr = 0;
     int canSleep;
+
+    //LCD variables
+    bool enableLCD = FALSE;
+	int toggle = 0;
+	int toggle_counter = 0;
+	int toggle_step = 5;
+    uint8 dataseq[LCD_BUFF_LEN];
+//    bool new_range = FALSE;
+	uint8 command = 0x0;
 
     led_off(LED_ALL); //turn off all the LEDs
 
     peripherals_init();
 
-#if (USING_LCD == 1)
-    int toggle = 1;
-    spi_peripheral_init(1);
-#else
-    spi_peripheral_init(0);
-#endif
+    s1switch = port_is_boot1_on(0) << 1
+    		| port_is_switch_on(TA_SW1_3) << 2
+    		| port_is_switch_on(TA_SW1_4) << 3
+    		| port_is_switch_on(TA_SW1_5) << 4
+		    | port_is_switch_on(TA_SW1_6) << 5
+    		| port_is_switch_on(TA_SW1_7) << 6
+    		| port_is_switch_on(TA_SW1_8) << 7;
+
+
+    if(port_is_switch_on(TA_SW1_4) == S1_SWITCH_ON)
+	{
+		//display ON
+    	enableLCD = TRUE;
+	}
+
+    if(enableLCD == TRUE)
+    {
+		spi_peripheral_init(1);
+    }
+    else
+    {
+    	spi_peripheral_init(0);
+    }
+
 
     Sleep(1000); //wait for LCD to power on
 
-#if (USING_LCD == 1)
-    initLCD();
 
-    memset(dataseq, 0x0, sizeof(dataseq));
-    memcpy(dataseq, (const uint8 *) "DECAWAVE        ", 16);
-    writetoLCD( 40, 1, dataseq); //send some data
-    memcpy(dataseq, (const uint8 *) SOFTWARE_VER_STRING, 16); // Also set at line #26 (Should make this from single value !!!)
-    writetoLCD( 16, 1, dataseq); //send some data
-#endif
+    if(enableLCD == TRUE)
+	{
+    	initLCD();
+
+		memset(dataseq, 0x0, sizeof(dataseq));
+		writetoLCD(1, 0, dataseq);
+		memcpy(dataseq, (const uint8 *) "GGRG UWB RANGING", LCD_BUFF_LEN);
+		writetoLCD(40, 1, dataseq); //send some data
+		memcpy(dataseq, (const uint8 *) SOFTWARE_VER_STRING, LCD_BUFF_LEN); // Also set at line #26 (TODO Should make this from single value !!!)
+		writetoLCD(16, 1, dataseq); //send some data
+	}
 
     Sleep(1000);
 
@@ -332,248 +366,170 @@ int dw_main(void)
     usb_init();
     Sleep(1000);
     usb_run();
-    Sleep(10000);
+    Sleep(10000); //TODO remove this for the final build
 #endif
 
-    s1switch = port_is_boot1_on(0) << 1 // is_switch_on(TA_SW1_2) << 2
-    		| port_is_switch_on(TA_SW1_3) << 2
-    		| port_is_switch_on(TA_SW1_4) << 3
-    		| port_is_switch_on(TA_SW1_5) << 4
-		    | port_is_switch_on(TA_SW1_6) << 5
-    		| port_is_switch_on(TA_SW1_7) << 6
-    		| port_is_switch_on(TA_SW1_8) << 7;
+    //run DecaRanging application
 
-//    uint8 s13 = port_is_switch_on(TA_SW1_3);
-//    uint8 s14 = port_is_switch_on(TA_SW1_4);
-//    uint8 s15 = port_is_switch_on(TA_SW1_5);
-//    uint8 s16 = port_is_switch_on(TA_SW1_6);
-//    uint8 s17 = port_is_switch_on(TA_SW1_7);
-//    uint8 s18 = port_is_switch_on(TA_SW1_8);
-//    uint8 debug_msg[8];
-//    int n = sprintf((char*)&debug_msg[0], "s1switch: %d ", s1switch);
-//    send_usbmessage(&debug_msg[0], n);
-//    usb_run();
-
-    if(port_is_switch_on(TA_SW1_3) == S1_SWITCH_OFF)
-    {
-        int j = 1000000;
-#if (USING_LCD == 1)
-        uint8 command;
-        memset(dataseq, 0, LCD_BUFF_LEN);
-
-        while(j--);
-        command = 0x2 ;  //return cursor home
-        writetoLCD( 1, 0,  &command);
-
-        memcpy(dataseq, (const uint8 *) "DECAWAVE   ", 12);
-        writetoLCD( 40, 1, dataseq); //send some data
-#endif
-#ifdef USB_SUPPORT //this is set in the port.h file
-        memcpy(dataseq, (const uint8 *) "USB to SPI ", 12);
-#else
-#endif
-#if (USING_LCD == 1)
-        writetoLCD( 16, 1, dataseq); //send some data
-#endif
-        j = 1000000;
-
-        while(j--);
-#if (USING_LCD == 1)
-        command = 0x2 ;  //return cursor home
-        writetoLCD( 1, 0,  &command);
-#endif
-#ifdef USB_SUPPORT //this is set in the port.h file
-        // Do nothing in foreground -- allow USB application to run, I guess on the basis of USB interrupts?
-        while (1)       // loop forever
-        {
-            //usb_run();
-        }
-#endif
-        return 1;
-    }
-    else //run DecaRanging application
-    {
-#if (USING_LCD == 1)
-        uint8 dataseq[LCD_BUFF_LEN];
-        uint8 command = 0x0;
-
-        command = 0x2 ;  //return cursor home
-        writetoLCD( 1, 0,  &command);
-        memset(dataseq, ' ', LCD_BUFF_LEN);
-        memcpy(dataseq, (const uint8 *) "DECAWAVE   RANGE", 16);
-        writetoLCD( 16, 1, dataseq); //send some data
-#endif
-
-        led_off(LED_ALL);
+	led_off(LED_ALL);
 
 #ifdef USB_SUPPORT //this is set in the port.h file
-        usb_printconfig(16, (uint8 *)SOFTWARE_VER_STRING, s1switch);
+	usb_printconfig(16, (uint8 *)SOFTWARE_VER_STRING, s1switch);
 #endif
 
-        if(inittestapplication(s1switch) == (uint32)-1)
-        {
-#if (USING_LCD == 1)            
+	if(inittestapplication(s1switch) == (uint32)-1)
+	{
+		if(enableLCD == TRUE)
+		{
+			led_on(LED_ALL); //to display error....
+			dataseq[0] = 0x2 ;  //return cursor home
+			writetoLCD(1, 0,  &dataseq[0]);
+			memset(dataseq, ' ', LCD_BUFF_LEN);
+			memcpy(dataseq, (const uint8 *) "ERROR           ", LCD_BUFF_LEN);
+			writetoLCD( LCD_BUFF_LEN, 1, dataseq); //send some data
+			memcpy(dataseq, (const uint8 *) "INIT FAIL       ", LCD_BUFF_LEN);
+			writetoLCD( LCD_BUFF_LEN, 1, dataseq); //send some data
+		}
+		return 0; //error
+	}
 
-            led_on(LED_ALL); //to display error....
-            dataseq[0] = 0x2 ;  //return cursor home
-            writetoLCD( 1, 0,  &dataseq[0]);
-            memset(dataseq, ' ', LCD_BUFF_LEN);
-            memcpy(dataseq, (const uint8 *) "ERROR   ", 12);
-            writetoLCD( 40, 1, dataseq); //send some data
-            memcpy(dataseq, (const uint8 *) "  INIT FAIL ", 12);
-            writetoLCD( 40, 1, dataseq); //send some data
-#endif
-            return 0; //error
-        }
+	//test EVB1000 - used in EVK1000 production
+	if((s1switch & SWS1_TXSPECT_MODE) == SWS1_TXSPECT_MODE) //to test TX power
+	{
+		//this function does not return!
+		configure_continuous_txspectrum_mode(s1switch);
+	}
 
-        //test EVB1000 - used in EVK1000 production
-        if((s1switch & SWS1_TXSPECT_MODE) == SWS1_TXSPECT_MODE) //to test TX power
-        {
-        	//this function does not return!
-        	configure_continuous_txspectrum_mode(s1switch);
-        }
+	//sleep for 5 seconds displaying "Decawave"
+	i=30;
+	while(i--)
+	{
+		if(enableLCD == TRUE)
+		{
+			if (i & 1) led_off(LED_ALL);
+			else    led_on(LED_ALL);
+		}
+		Sleep(200);
+	}
+	i = 0;
+	led_off(LED_ALL);
 
-        //sleep for 5 seconds displaying "Decawave"
-        i=30;
-        while(i--)
-        {
-#if (USING_LCD == 1)            
-            if (i & 1) led_off(LED_ALL);
-            else    led_on(LED_ALL);
-#endif
-            Sleep(200);
-        }
-        i = 0;
-        led_off(LED_ALL);
-#if (USING_LCD == 1)        
-        command = 0x2 ;  //return cursor home
-        writetoLCD( 1, 0,  &command);
+	if(enableLCD == TRUE)
+	{
+		command = 0x2 ;  //return cursor home
+		writetoLCD( 1, 0,  &command);
+		memset(dataseq, ' ', LCD_BUFF_LEN);
+	}
 
-        memset(dataseq, ' ', LCD_BUFF_LEN);
-#endif
-        if(s1switch & SWS1_ANC_MODE)
-        {
-//            instance_mode = ANCHOR;
+//	if(enableLCD == TRUE)
+//	{
+//
+//		memcpy(&dataseq[0], (const uint8 *) " DISCOVERY MODE ", LCD_BUFF_LEN);
+//		writetoLCD(LCD_BUFF_LEN, 1, dataseq); //send some data
+//		sprintf((char*)&dataseq[0], "%llX", instance_get_addr());
+//		writetoLCD(LCD_BUFF_LEN, 1, dataseq); //send some data
+//
+//		command = 0x2 ;  //return cursor home
+//		writetoLCD( 1, 0,  &command);
+//	}
 
-            led_on(LED_PC6);
-        }
-        else
-        {
-//            instance_mode = TAG;
-            led_on(LED_PC7);
-        }
 
-#if (USING_LCD == 1)
-//        if(instance_mode == TAG)
-//        {
-			memcpy(&dataseq[0], (const uint8 *) " DISCOVERY MODE ", 16);
 
-			writetoLCD( 40, 1, dataseq); //send some data
-			sprintf((char*)&dataseq[0], "%llX", instance_get_addr());
-			writetoLCD( 16, 1, dataseq); //send some data
-//        }
-//        else
-//        {
-//            memcpy(&dataseq[0], (const uint8 *) "    AWAITING    ", 16);
-//            writetoLCD( 40, 1, dataseq); //send some data
-//            memcpy(&dataseq[0], (const uint8 *) "      POLL      ", 16);
-//            writetoLCD( 16, 1, dataseq); //send some data
-//        }
-
-        command = 0x2 ;  //return cursor home
-        writetoLCD( 1, 0,  &command);
-#endif
-
-    }
-
-#if (USING_LCD == 1)
-    memset(dataseq, ' ', LCD_BUFF_LEN);
-    memset(dataseq1, ' ', LCD_BUFF_LEN);
-#endif
+    if(enableLCD == TRUE)
+	{
+		memset(dataseq, ' ', LCD_BUFF_LEN);
+		memset(dataseq1, ' ', LCD_BUFF_LEN);
+	}
 
     port_EnableEXT_IRQ();
+
+    //TODO remove
+    instance_data_t* inst1 = instance_get_local_structure_ptr(0);
+    inst1->testTimer = portGetTickCntMicro();
+
     // main loop
     while(1)
     {
-        
+    	bool updateLCD = FALSE;
+    	//TODO reenable optimization in the compiler settings!!!
 		instance_data_t* inst = instance_get_local_structure_ptr(0);
 		canSleep = instance_run(); //run the state machine!!!
 		instance_mode = inst->mode; //TODO modify how the rest of this works with DISCOVER, TAG, and ANCHOR!
 
         if(instancenewrange())
         {
-        	int n, rng, rng_raw;
-            uint64 aaddr, taddr;
+        	updateLCD = TRUE;
+//        	int n, rng, rng_raw;
+//            uint64 aaddr, taddr;
 //            ranging = 1;
             //send the new range information to LCD and/or USB
             range_result = instance_get_idist(inst->newRangeUWBIndex);
-//            uint8 debug_msg[200];
-//			n = 0;
-//			n = sprintf((char*)&debug_msg[0], "inst->newRangeUWBIndex %d", inst->newRangeUWBIndex);
-//			send_usbmessage(&debug_msg[0], n);
-//			usb_run();
+            range_addr = instance_get_uwbaddr(inst->newRangeUWBIndex);
+
+
             //set_rangeresult(range_result);
-#if (USING_LCD == 1)
+            if(enableLCD == TRUE)
+			{
 #if (DELAY_CALIB_OUTPUT == 1)
-            dataseq[0] = 0x2 ;  //return cursor home
-            writetoLCD( 1, 0,  dataseq);
+				dataseq[0] = 0x2 ;  //return cursor home
+				writetoLCD( 1, 0,  dataseq);
 
-            dataseq[0] = 0x2 ;  //return cursor home
-            writetoLCD( 1, 0,  dataseq);
-            memset(dataseq, ' ', LCD_BUFF_LEN);
-            memset(dataseq1, ' ', LCD_BUFF_LEN);
-            
-            int toggle_step = 5;
+				dataseq[0] = 0x2 ;  //return cursor home
+				writetoLCD( 1, 0,  dataseq);
+				memset(dataseq, ' ', LCD_BUFF_LEN);
+				memset(dataseq1, ' ', LCD_BUFF_LEN);
 
-            if(toggle <= toggle_step)
-            {
-                sprintf((char*)&dataseq[0], "ADDRESS - SELF  ");
-                sprintf((char*)&dataseq1[0], "%llX", instance_get_addr());
-            }
-            else if(toggle <= toggle_step*2)
-            {
-                sprintf((char*)&dataseq[0], "RANGING WITH    ");
-                if(inst->mode == TAG)
-                {
-                    sprintf((char*)&dataseq1[0], "%.3u ANCHORS     ", instfindnumactiveuwbinlist(inst));
-                }
-                else if(inst->mode == ANCHOR)
-                {
-                    sprintf((char*)&dataseq1[0], "%.3u TAGS        ", instfindnumactiveuwbinlist(inst));    
-                }
-            }
-            else
-            {   
-                sprintf((char*)&dataseq[0], "TX DELAY: %.5u ", inst->txAntennaDelay);
-                sprintf((char*)&dataseq1[0], "RX DELAY: %.5u ", inst->rxAntennaDelay);
-            }
-            toggle++;
-            if(toggle > toggle_step*3)
-            {
-                toggle = 0;
-            }
-            
-            writetoLCD( 40, 1, dataseq); //send some data
-            writetoLCD( 16, 1, dataseq1); //send some data
+				toggle_step = 5;
+
+				if(toggle <= toggle_step)
+				{
+					sprintf((char*)&dataseq[0], "ADDRESS - SELF  ");
+					sprintf((char*)&dataseq1[0], "%llX", instance_get_addr());
+				}
+				else if(toggle <= toggle_step*2)
+				{
+					sprintf((char*)&dataseq[0], "RANGING WITH    ");
+					if(inst->mode == TAG)
+					{
+						sprintf((char*)&dataseq1[0], "%.3u ANCHORS     ", instfindnumactiveuwbinlist(inst));
+					}
+					else if(inst->mode == ANCHOR)
+					{
+						sprintf((char*)&dataseq1[0], "%.3u TAGS        ", instfindnumactiveuwbinlist(inst));
+					}
+				}
+				else
+				{
+					sprintf((char*)&dataseq[0], "TX DELAY: %.5u ", inst->txAntennaDelay);
+					sprintf((char*)&dataseq1[0], "RX DELAY: %.5u ", inst->rxAntennaDelay);
+				}
+				toggle++;
+				if(toggle > toggle_step*3)
+				{
+					toggle = 0;
+				}
+
+				writetoLCD( 40, 1, dataseq); //send some data
+				writetoLCD( 16, 1, dataseq1); //send some data
 #else
 
-            dataseq[0] = 0x2 ;  //return cursor home
-            writetoLCD( 1, 0,  dataseq);
-
-            memset(dataseq, ' ', LCD_BUFF_LEN);
-            memset(dataseq1, ' ', LCD_BUFF_LEN);
-
-            sprintf((char*)&dataseq[0], "LAST: %4.2f m", range_result);
-            writetoLCD( 40, 1, dataseq); //send some data
-            sprintf((char*)&dataseq1[0], "%llX", instance_get_uwbaddr(inst->newRangeUWBIndex));
-            writetoLCD( 16, 1, dataseq1); //send some data
-#endif   
+//				dataseq[0] = 0x2 ;  //return cursor home
+//				writetoLCD( 1, 0,  dataseq);
+//
+//				memset(dataseq, ' ', LCD_BUFF_LEN);
+//				memset(dataseq1, ' ', LCD_BUFF_LEN);
+//
+//				sprintf((char*)&dataseq[0], "LAST: %4.2f m", range_result);
+//				writetoLCD( 40, 1, dataseq); //send some data
+//				sprintf((char*)&dataseq1[0], "%llX", instance_get_uwbaddr(inst->newRangeUWBIndex));
+//				writetoLCD( 16, 1, dataseq1); //send some data
 #endif
+			}
 
-            aaddr = instancenewrangeancadd();
-            taddr = instancenewrangetagadd();
-            rng = (int) (range_result*1000);
-            rng_raw = (int) (instance_get_idistraw(inst->newRangeUWBIndex)*1000);
+//            aaddr = instancenewrangeancadd();
+//            taddr = instancenewrangetagadd();
+//            rng = (int) (range_result*1000);
+//            rng_raw = (int) (instance_get_idistraw(inst->newRangeUWBIndex)*1000);
 
 
 
@@ -582,7 +538,11 @@ int dw_main(void)
 
 			if(instance_mode == TAG)
 			{
-//				n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
+				uint64 aaddr = instancenewrangeancadd();
+				uint64 taddr = instancenewrangetagadd();
+				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
+				send_usbmessage(&dataseq[0], n);
+				usb_run();
 
 			}
 			else
@@ -610,90 +570,90 @@ int dw_main(void)
 #endif
         }
 
-#if (USING_LCD == 1)
-        if(instanceisranging() == 0) //discovery/initialization mode for anchor and tag
-        {
-            if(instance_mode != ANCHOR)
-            {
-                if(instancesleeping())
-                {
-                    dataseq[0] = 0x2 ;  //return cursor home
-                    writetoLCD( 1, 0,  dataseq);
-                    if(toggle)
-                    {
-                        toggle = 0;
-                        memcpy(&dataseq[0], (const uint8 *) "    AWAITING    ", 16);
-                        writetoLCD( 40, 1, dataseq); //send some data
-                        memcpy(&dataseq[0], (const uint8 *) "    RESPONSE    ", 16);
-                        writetoLCD( 16, 1, dataseq); //send some data
-                    }
-                    else
-                    {
-                        toggle = 1;
-                        memcpy(&dataseq[0], (const uint8 *) "   TAG BLINK    ", 16);
+        if(enableLCD == TRUE)
+		{
+        	toggle_step = 750;
+        	memset(dataseq, ' ', LCD_BUFF_LEN);
+			memset(dataseq1, ' ', LCD_BUFF_LEN);
+			uint64 addr = instance_get_addr();
 
-                        writetoLCD( 40, 1, dataseq); //send some data
-                        sprintf((char*)&dataseq[0], "%llX", instance_get_addr());
-                        writetoLCD( 16, 1, dataseq); //send some data
-                    }
-                }
+			uint8 num_neighbors = instfindnumactiveneighbors(inst);
+			uint8 num_hidden = instfindnumactivehidden(inst);
+			char status[10];
 
-                if(instanceanchorwaiting() == 2)
-                {
-//                    ranging = 1;
-                    dataseq[0] = 0x2 ;  //return cursor home
-                    writetoLCD( 1, 0,  dataseq);
-                    memcpy(&dataseq[0], (const uint8 *) "    RANGING     ", 16);
-                    writetoLCD( 40, 1, dataseq); //send some data
-                    memcpy(&dataseq[0], (const uint8 *) "    STARTED     ", 16);
-                    writetoLCD( 16, 1, dataseq); //send some data
-                }
-            }
-            else //if(instance_mode == ANCHOR)
-            {
+			if(instance_mode == DISCOVERY)
+			{
+				strcpy(status, "SEARCHING");
+				range_addr = 0x0000;
+				range_result = 0;
+			}
+			else
+			{
+				strcpy(status, "CONNECTED");
+			}
+			dataseq[0] = 0x2 ;  //return cursor home
+			writetoLCD( 1, 0,  dataseq);
 
-                if(instanceanchorwaiting())
-                {
+			//TODO only update the display if something has changed!
+			if(toggle_counter <= toggle_step)
+			{
+				if(toggle == 2)
+				{
+					updateLCD = TRUE;
+				}
+				toggle = 1;
+			}
+			else if(toggle_counter <= toggle_step*2)
+			{
+				if(toggle == 1)
+				{
+					updateLCD = TRUE;
+				}
+				toggle = 2;
+			}
+
+			toggle_counter++;
+			if(toggle_counter > toggle_step*2)
+			{
+				toggle_counter = 0;
+			}
 
 
-                    toggle+=2;
+			//TODO only update the display if something has changed!
+			if(updateLCD == TRUE)
+			{
+				if(toggle == 1)
+				{
+					if(inst->addrByteSize == 8)
+					{
+						sprintf((char*)&dataseq[0], "%s       ", status);
+						sprintf((char*)&dataseq1[0], "N:%02u H:%02u %05.2fm", num_neighbors, num_hidden, range_result);
+					}
+					else
+					{
+						sprintf((char*)&dataseq[0], "%llX %s", addr, status);
+						sprintf((char*)&dataseq1[0], "N:%02u %04llX:%05.2fm", num_neighbors, range_addr, range_result);
+					}
+				}
+				else //if(toggle == 2)
+				{
+					if(inst->addrByteSize == 8)
+					{
+						sprintf((char*)&dataseq[0], "%llX", addr);
+						sprintf((char*)&dataseq1[0], "N:%02u H:%02u %05.2fm", num_neighbors, num_hidden, range_result);
+					}
+					else
+					{
+						sprintf((char*)&dataseq[0], "%llX %s", addr, status);
+						sprintf((char*)&dataseq1[0], "H:%02u %04llX:%05.2fm", num_hidden, range_addr, range_result);
+					}
 
-                    if(toggle > 300000)
-                    {
-                        dataseq[0] = 0x2 ;  //return cursor home
-                        writetoLCD( 1, 0,  dataseq);
-                        if(toggle & 0x1)
-                        {
-                            toggle = 0;
-                            memcpy(&dataseq[0], (const uint8 *) "    AWAITING    ", 16);
-                            writetoLCD( 40, 1, dataseq); //send some data
-                            memcpy(&dataseq[0], (const uint8 *) "      POLL      ", 16);
-                            writetoLCD( 16, 1, dataseq); //send some data
-                        }
-                        else
-                        {
-                            toggle = 1;
-                            memcpy(&dataseq[0], (const uint8 *) " DISCOVERY MODE ", 16);
-                            writetoLCD( 40, 1, dataseq); //send some data
-                            sprintf((char*)&dataseq[0], "%llX", instance_get_addr());
-                            writetoLCD( 16, 1, dataseq); //send some data
-                        }
-                    }
+				}
 
-                }
-                else if(instanceanchorwaiting() == 2)
-                {
-
-                    dataseq[0] = 0x2 ;  //return cursor home
-                    writetoLCD( 1, 0,  dataseq);
-                    memcpy(&dataseq[0], (const uint8 *) "    RANGING     ", 16);
-                    writetoLCD( 40, 1, dataseq); //send some data
-                    memcpy(&dataseq[0], (const uint8 *) "    STARTED     ", 16);
-                    writetoLCD( 16, 1, dataseq); //send some data
-                }
-            }
-        }
-#endif
+				writetoLCD(40, 1, dataseq); //send some data
+				writetoLCD(16, 1, dataseq1); //send some data
+			}
+		}
 
 #ifdef USB_SUPPORT //this is set in the port.h file
 //        usb_run();

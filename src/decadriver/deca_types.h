@@ -38,6 +38,13 @@ typedef unsigned long uint32;
 #endif
 #endif
 
+#ifndef uint64
+#ifndef _DECA_UINT64_
+#define _DECA_UINT64_
+typedef unsigned long long uint64;
+#endif
+#endif
+
 #ifndef int8
 #ifndef _DECA_INT8_
 #define _DECA_INT8_

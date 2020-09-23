@@ -39,6 +39,13 @@ typedef unsigned long uint32;
 #endif
 #endif
 
+#ifndef uint64
+#ifndef _DECA_UINT64_
+#define _DECA_UINT64_
+typedef unsigned long long uint64;
+#endif
+#endif
+
 #ifndef int8
 #ifndef _DECA_INT8_
 #define _DECA_INT8_
@@ -679,6 +686,46 @@ uint32 dwt_readsystimestamphi32(void);
  * no return value
  */
 void dwt_readsystime(uint8 * timestamp);
+
+/*! ------------------------------------------------------------------------------------------------------------------
+ * @fn dwt_getdt()
+ *
+ * @brief This is used get the delta time between two systime timestamps.
+ *
+ * input parameters
+ * @param t1 - the first dwt timestamp
+ * @param t2 - the second dwt timestamp which occurs after t1
+ *
+ * difference between the timestamps
+ */
+uint64 dwt_getdt(uint64 t1, uint64 t2);
+
+/*! ------------------------------------------------------------------------------------------------------------------
+ * @fn dwt_timestamp_add()
+ *
+ * @brief this is used to add a duration to a dwt timestamp. This function handles number wrapping
+ *
+ * input parameters
+ * @param timestamp - the dwt timestamp
+ * @param duration - the 40 bit dwt duration
+ *
+ * returns timestamp offset by a duration
+ */
+uint64 dwt_timestamp_add(uint64 timestamp, uint64 duration);
+
+/*! ------------------------------------------------------------------------------------------------------------------
+ * @fn dwt_timestamp_subtract()
+ *
+ * @brief this function is used to subtract a duration from a dwt timestamp. This function handles number wrapping
+ *
+ * input parameters
+ * @param timestamp - the dwt timestamp
+ * @param duration - the 40 bit dwt duration
+ *
+ * returns timestamp offset by a duration
+ */
+//
+uint64 dwt_timestamp_subtract(uint64 timestamp, uint64 duration);
 
 /*! ------------------------------------------------------------------------------------------------------------------
  * @fn dwt_forcetrxoff()

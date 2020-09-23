@@ -856,6 +856,91 @@ void dwt_readsystime(uint8 * timestamp)
 }
 
 /*! ------------------------------------------------------------------------------------------------------------------
+ * @fn dwt_getdt()
+ *
+ * @brief This is used get the delta time between two systime timestamps.
+ *
+ * input parameters
+ * @param t1 - the first dwt timestamp
+ * @param t2 - the second dwt timestamp which occurs after t1
+ *
+ * returns difference between the timestamps
+ */
+uint64 dwt_getdt(uint64 t1, uint64 t2)
+{
+	//dwt systime timestamps are 40 bits
+	t1 &= 0x00FFFFFFFFFF;//40 bit mask
+	t2 &= 0x00FFFFFFFFFF;//40 bit mask
+
+	if(t2 >= t1)
+	{
+		return t2 - t1;
+	}
+	else
+	{
+		//handle timestamp roleover
+		return (uint64)0xFFFFFFFFFF - t1 + t2;
+	}
+}
+
+/*! ------------------------------------------------------------------------------------------------------------------
+ * @fn dwt_timestamp_add()
+ *
+ * @brief this is used to add a duration to a dwt timestamp. This function handles number wrapping
+ *
+ * input parameters
+ * @param timestamp - the dwt timestamp
+ * @param duration - the 40 bit dwt duration
+ *
+ * returns timestamp offset by a duration
+ */
+uint64 dwt_timestamp_add(uint64 timestamp, uint64 duration)
+{
+	//dwt systime timestamps are 40 bits
+	timestamp &= 0x00FFFFFFFFFF;//40 bit mask
+	duration &= 0x00FFFFFFFFFF;//40 bit mask
+
+	uint64 to_wrap = (uint64)0xFFFFFFFFFF - timestamp;
+	if(duration >= to_wrap)
+	{
+		return to_wrap + duration;
+	}
+	else
+	{
+		return  timestamp + duration;
+	}
+}
+
+/*! ------------------------------------------------------------------------------------------------------------------
+ * @fn dwt_timestamp_subtract()
+ *
+ * @brief this function is used to subtract a duration from a dwt timestamp. This function handles number wrapping
+ *
+ * input parameters
+ * @param timestamp - the dwt timestamp
+ * @param duration - the 40 bit dwt duration
+ *
+ * returns timestamp offset by a duration
+ */
+//
+uint64 dwt_timestamp_subtract(uint64 timestamp, uint64 duration)
+{
+	//dwt systime timestamps are 40 bits
+	timestamp &= 0x00FFFFFFFFFF;//40 bit mask
+	duration &= 0x00FFFFFFFFFF;//40 bit mask
+
+	if(duration > timestamp)
+	{
+		return (uint64)0xFFFFFFFFFF - (duration - timestamp);
+	}
+	else
+	{
+		return timestamp - duration;
+	}
+}
+
+
+/*! ------------------------------------------------------------------------------------------------------------------
  * @fn dwt_writetodevice()
  *
  * @brief  this function is used to write to the DW1000 device registers
@@ -2602,6 +2687,11 @@ int dwt_starttx(uint8 mode)
         }
         else
         {
+//        	uint8 debug_msg[150];
+//			int n = sprintf((char*)&debug_msg[0], "SYS_STATUS: %u", checkTxOK);
+//			send_usbmessage(&debug_msg[0], n);
+//			usb_run();
+
             // I am taking DSHP set to Indicate that the TXDLYS was set too late for the specified DX_TIME.
             // Remedial Action - (a) cancel delayed send
             temp = (uint8)SYS_CTRL_TRXOFF; // This assumes the bit is in the lowest byte
@@ -2665,15 +2755,9 @@ void dwt_forcetrxoff(void)
     dwt_write8bitoffsetreg(SYS_CTRL_ID, SYS_CTRL_OFFSET, (uint8)SYS_CTRL_TRXOFF) ; // Disable the radio
 
     // Forcing Transceiver off - so we do not want to see any new events that may have happened
-//    dwt_write32bitreg(SYS_STATUS_ID, (SYS_STATUS_ALL_TX | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_GOOD));
-//    dwt_write32bitreg(SYS_STATUS_ID, (SYS_STATUS_ALL_TX | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_GOOD));
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_INT);
-//	SYS_MASK_VAL //TODO do something like this for SYS_STATUS above!
     dwt_syncrxbufptrs();
 
-//    dwt_write32bitreg(SYS_MASK_ID, mask) ; // Set interrupt mask to what it was
-//    uint32 reserved_mask = 0xC0080001;
-//    mask &= reserved_mask; //preserve reserved bits
     mask |= SYS_MASK_VAL;  //set out desired sys_mask values
     dwt_write32bitreg(SYS_MASK_ID, mask);
 

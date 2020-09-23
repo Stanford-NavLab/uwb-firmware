@@ -22,6 +22,7 @@
 #define NUM_INST            1
 #define SPEED_OF_LIGHT      (299704644.54) //(299702547.0)     // in m/s in air
 #define MASK_40BIT			(0x00FFFFFFFFFF)  // DW1000 counter is 40 bits
+#define MASK_42BIT          (0x000003FFFFFFFFFF) //stm32 microsecond timestamps are 42 bits
 #define MASK_TXDTS			(0x00FFFFFFFE00)  //The TX timestamp will snap to 8 ns resolution - mask lower 9 bits.
 #define SYS_MASK_VAL        (DWT_INT_TFRS | DWT_INT_RFCG | DWT_INT_RXOVRR | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO)
 #define DELAY_CALIB (0)                     // when set to 1 - the LCD display will show information used for TX/RX delay calibration
@@ -31,7 +32,6 @@
 #define RX_ANT_DELAY                0
 
 #define USING_64BIT_ADDR (0)                  //when set to 0 - the DecaRanging application will use 16-bit addresses
-#define USING_LCD (1)                         //when set to 0 - the DecaRanging application will not use the LCD display
 
 //! callback events
 #define DWT_SIG_RX_NOERR            0
@@ -78,10 +78,12 @@ enum
 
 //lengths including the Decaranging Message Function Code byte
 #define TAG_POLL_MSG_LEN                    1				// FunctionCode(1),
-#define ANCH_RESPONSE_MSG_LEN               15               // FunctionCode(1), RespOption (1), OptionParam(2), Number of Tags(1), Measured_TOF_Time(6), Time Till next window reserved for catching a blink message (4)
+#define ANCH_RESPONSE_MSG_LEN               15 //TODO shorten!              // FunctionCode(1), RespOption (1), OptionParam(2), Number of Tags(1), Measured_TOF_Time(6), Time Till next window reserved for catching a blink message (4)
 #define TAG_FINAL_MSG_LEN                   16              // FunctionCode(1), Poll_TxTime(5), Resp_RxTime(5), Final_TxTime(5)
-#define RANGINGINIT_MSG_LEN					7				// FunctionCode(1), Tag Address (2), Response Time (2) * 2
-#define RNG_REPORT_MSG_LEN				    7			// FunctionCode(1), time of flight (6)
+//#define RANGINGINIT_MSG_LEN					7				// FunctionCode(1), Tag Address (2), Response Time (2) * 2
+#define RANGINGINIT_MSG_LEN					1				// FunctionCode(1)
+#define RNG_REPORT_MSG_LEN_SHORT		    9			// FunctionCode(1), time of flight (6), short address (2)
+#define RNG_REPORT_MSG_LEN_LONG		    	15			// FunctionCode(1), time of flight (6), long address (8)
 
 #define MAX_MAC_MSG_DATA_LEN                (TAG_FINAL_MSG_LEN) //max message len of the above
 
@@ -154,7 +156,7 @@ enum
 
 
 
-#define IMMEDIATE_RESPONSE (1)
+#define IMMEDIATE_RESPONSE 				1
 
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 // NOTE: the maximum RX timeout is ~ 65ms
@@ -169,11 +171,11 @@ enum
 #define FCODE                               0               // Function code is 1st byte of messageData
 
 //INF message byte offsets
-#define TDMA_TSFS                           1				// offset to put time since TDMA frame start in the INF message
-#define TDMA_NUMN							5				// offset to put the number of this UWB's neighbors in the INF message
-#define TDMA_NUMH							6				// offset to put the number of this UWB's hidden neighbors in the INF message
-#define TDMA_FRAMELENGTH                    7				// offset to put this UWB's TDMA framelength in the INF message
-#define TDMA_NUMS							8				// offset to put the number of this UWB's TDMA slot assignments in the INF message
+#define TDMA_TSFS                           1+6				// offset to put time since TDMA frame start in the INF message
+#define TDMA_NUMN							7+6				// offset to put the number of this UWB's neighbors in the INF message
+#define TDMA_NUMH							8+6				// offset to put the number of this UWB's hidden neighbors in the INF message
+#define TDMA_FRAMELENGTH                    9+6				// offset to put this UWB's TDMA framelength in the INF message
+#define TDMA_NUMS							10+6				// offset to put the number of this UWB's TDMA slot assignments in the INF message
 
 
 // Final message byte offsets.
@@ -182,22 +184,19 @@ enum
 #define FTXT                                11
 
 
-// Anchor response byte offsets.
-#define RES_R1                              1               // Response option octet 0x02 (1),
-#define RES_R2                              2               // Response option parameter 0x00 (1) - used to notify Tag that the report is coming
-#define RES_R3                              3               // Response option parameter 0x00 (1),
-#define NTAG                                4               // Offset to put number of active TAGs in the report message. (1 byte)
-#define TOFR                                5               // Offset to put ToF values in the report message.			  (6 bytes)
-#define TIME_TILL						    11				// Offset to put time until next RX_ACCEPT in the report message (4 bytes)
+// Range report byte offsets.
+#define REPORT_TOF                          1               // Offset to put ToF values in the report message.			  (6 bytes)
+#define REPORT_ADDR							7				// Offset to put address of other UWB involved in the range report (2 [short address] or 8 [long address] bytes)
 
+//TODO remove below
 // Ranging init message byte offsets. Composed of tag short address, anchor
 // response delay and tag response delay.
-#define RNG_INIT_TAG_SHORT_ADDR_LO 1
-#define RNG_INIT_TAG_SHORT_ADDR_HI 2
-#define RNG_INIT_ANC_RESP_DLY_LO 3
-#define RNG_INIT_ANC_RESP_DLY_HI 4
-#define RNG_INIT_TAG_RESP_DLY_LO 5
-#define RNG_INIT_TAG_RESP_DLY_HI 6
+//#define RNG_INIT_TAG_SHORT_ADDR_LO 1
+//#define RNG_INIT_TAG_SHORT_ADDR_HI 2
+//#define RNG_INIT_ANC_RESP_DLY_LO 3
+//#define RNG_INIT_ANC_RESP_DLY_HI 4
+//#define RNG_INIT_TAG_RESP_DLY_LO 5
+//#define RNG_INIT_TAG_RESP_DLY_HI 6
 
 // Response delay values coded in ranging init message.
 // This is a bitfield composed of:
@@ -233,7 +232,7 @@ enum
 #define US_TO_SY_INT(x) (((x) * 10000) / 10256)
 
 // Minimum delay between reception and following transmission.
-#define RX_TO_TX_TIME_US 150 //TODO tune again (150)
+#define RX_TO_TX_TIME_US 1500 //TODO tune again (150)
 #define RXTOTXTIME          ((int)(50.0 / 1.0256)) //e.g. Poll RX to Response TX time
 
 // Default anchor turn-around time: has to be RX_TO_TX_TIME_US when using
@@ -279,7 +278,7 @@ typedef uint64_t        uint64 ;
 typedef int64_t         int64 ;
 
 
-typedef enum instanceModes{DISCOVERY, CONNECTION_PENDING, TAG, ANCHOR, NUM_MODES} INST_MODE;
+typedef enum instanceModes{DISCOVERY, TAG, ANCHOR, NUM_MODES} INST_MODE;
 
 typedef enum discovery_modes
 {
