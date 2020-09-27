@@ -747,7 +747,8 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                 if(dwt_starttx(DWT_START_TX_IMMEDIATE | inst->wait4ack) == 0) //always using immediate TX and enable delayed RX
                 {
 					uint8 debug_msg[100];
-					int n = sprintf((char *)&debug_msg, "TX_BLINK,%llX,NULL", instance_get_addr());
+//					int n = sprintf((char *)&debug_msg, "TX_BLINK,%llX,NULL", instance_get_addr());
+					int n = sprintf((char *)&debug_msg, "TX_BLINK,%04llX,NULL", instance_get_addr());
 					send_usbmessage(&debug_msg[0], n);
 					usb_run();
 
@@ -894,7 +895,8 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 				}
 				else
 				{
-					inst->nextState = TA_TXPOLL_WAIT_SEND;
+//					inst->nextState = TA_TXPOLL_WAIT_SEND;
+					inst->nextState = TA_RXE_WAIT;//TODO remember this is for testing INF as last message
 				}
 
 
@@ -941,6 +943,8 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
             psduLength = TAG_POLL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
 #endif
 
+//            Sleep(2);
+
             //set the delayed rx on time (the response message will be sent after this delay)
             dwt_setrxaftertxdelay(inst->txToRxDelayTag_sy*0); //TODO fix this! remove *0
             dwt_setrxtimeout((uint16)inst->fwtoTime_sy*0);    //TODO fix this! remove *2
@@ -952,7 +956,8 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
             dwt_writetxfctrl(psduLength, 0, 1);
             if(dwt_starttx(DWT_START_TX_IMMEDIATE | inst->wait4ack) == 0){
             	uint8 debug_msg[100];
-				int n = sprintf((char *)&debug_msg, "TX_POLL,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+//				int n = sprintf((char *)&debug_msg, "TX_POLL,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+				int n = sprintf((char *)&debug_msg, "TX_POLL,%04llX,%04llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
 				send_usbmessage(&debug_msg[0], n);
 				usb_run();
             }
@@ -961,8 +966,28 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
             inst->previousState = TA_TXPOLL_WAIT_SEND ; //TODO move to ...
             done = INST_DONE_WAIT_FOR_NEXT_EVENT; //will use RX FWTO to time out (set below)
 
-            inst->blink0range1 = 1; //TODO check if this is still needed...
             inst->range_start = portGetTickCnt();
+            inst->blink0range1 = 1; //TODO check if this is still needed...
+
+
+//            //test between 0CD6 and 118C
+//            uint16 source_addr = 0x0CD6;
+//			uint16 my_addr = inst->uwbShortAdd;
+//			if(memcmp(&my_addr, &source_addr, sizeof(uint16))==0)
+//			{
+//
+//
+//
+//				uint16 dest_addr = (uint16)instance_get_uwbaddr(inst->uwbToRangeWith);
+//				uint16 test_addr = 0x118C;
+//				if(memcmp(&test_addr, &dest_addr, sizeof(uint16))==0)
+//				{
+//					uint8 debug_msg[100];
+//					int n = sprintf((char *)&debug_msg, "range_start,xxxx,xxxx");
+//					send_usbmessage(&debug_msg[0], n);
+//					usb_run();
+//				}
+//			}
 
 
             inst->timeofTx = portGetTickCnt();
@@ -1010,7 +1035,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                 inst->lateTX++;
 
                 uint8 debug_msg[100];
-				sprintf((char *)&debug_msg, "RTLS_DEMO_MSG_TAG_FINAL->late tx,%X,xxxx",inst->uwbShortAdd);
+				sprintf((char *)&debug_msg, "RTLS_DEMO_MSG_TAG_FINAL->late tx,%04X,xxxx",inst->uwbShortAdd);
 				send_txmsgtousb((char *)&debug_msg);
 				usb_run();
 
@@ -1370,8 +1395,9 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 //                            send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-RTLS_DEMO_MSG_RNG_INIT");
                         	uint8 debug_msg[100];
-                        	int n = sprintf((char *)&debug_msg, "BLINK_COMPLETE,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
-							send_usbmessage(&debug_msg[0], n);
+//                        	int n = sprintf((char *)&debug_msg, "BLINK_COMPLETE,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+                        	int n = sprintf((char *)&debug_msg, "BLINK_COMPLETE,%04llX,%04llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+                        	send_usbmessage(&debug_msg[0], n);
 							usb_run();
 
 //                            uint32 final_reply_delay_us;
@@ -1531,10 +1557,27 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 								//collecting tdma info, append to previously stored info
 								bool tdma_modified = tdma_handler->process_inf_msg(tdma_handler, messageData, srcIndex, CLEAR_LISTED_COPY);
 
+
+//								uint16 dest_addr = 0x118C;
+//								uint16 my_addr = inst->uwbShortAdd;
+//								if(memcmp(&my_addr, &dest_addr, sizeof(uint16))==0)
+//								{
+//									uint16 test_addr = 0x0CD6;
+//
+//									if(memcmp(&test_addr, &srcAddr, sizeof(uint16))==0)
+//									{
+//										uint8 debug_msg[100];
+//										int n = sprintf((char *)&debug_msg, "range_end,xxxx,xxxx");
+//										send_usbmessage(&debug_msg[0], n);
+//										usb_run();
+//									}
+//								}
+
+
+
 								if(tdma_modified)
 								{
-									//TODO set some sort of flag that tells us to send INF_UPDATE!!!
-									tdma_handler->populate_inf_msg(tdma_handler, RTLS_DEMO_MSG_INF_UPDATE);
+									tdma_handler->populate_inf_msg(tdma_handler, RTLS_DEMO_MSG_INF_UPDATE);//TODO populate at slot start while waiting for buffer to expire
 								}
 
 //								//clear all tdma information
@@ -1805,17 +1848,26 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 								inst->lastRangeTimeStamp[inst->uwbToRangeWith] = portGetTickCnt();
 
 								uint8 debug_msg[100];
-								int n = sprintf((char *)&debug_msg, "POLL_COMPLETE,%llX,%llX", inst->newRangeTagAddress, inst->newRangeAncAddress);
+//								int n = sprintf((char *)&debug_msg, "POLL_COMPLETE,%llX,%llX", inst->newRangeTagAddress, inst->newRangeAncAddress);
+								int n = sprintf((char *)&debug_msg, "POLL_COMPLETE,%04llX,%04llX", inst->newRangeTagAddress, inst->newRangeAncAddress);
 								send_usbmessage(&debug_msg[0], n);
 								usb_run();
 
+
+								//TODO remember that below is for testing out if its better to send INF as last message
+								inst->testAppState = TA_TXINF_WAIT_SEND;
+								inst->previousState = TA_INIT;
+								inst->nextState = TA_INIT;
+								inst->uwbToRangeWith = 255;
+
 							}
-
-
-                            inst->testAppState = TA_RXE_WAIT ;
-                            inst->previousState = TA_INIT;
-                            inst->nextState = TA_INIT;
-                            inst->uwbToRangeWith = 255;
+							else
+							{
+								inst->testAppState = TA_RXE_WAIT ;
+								inst->previousState = TA_INIT;
+								inst->nextState = TA_INIT;
+								inst->uwbToRangeWith = 255;
+							}
 
                             dwt_setrxaftertxdelay(0);
 							instancesetantennadelays(); //this will update the antenna delay if it has changed
@@ -1863,7 +1915,8 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 
 						uint8 debug_msg[100];
-						n = sprintf((char *)&debug_msg, "TX_BLINK_TIMEOUT,%llX,NULL", instance_get_addr());
+//						n = sprintf((char *)&debug_msg, "TX_BLINK_TIMEOUT,%llX,NULL", instance_get_addr());
+						n = sprintf((char *)&debug_msg, "TX_BLINK_TIMEOUT,%04llX,NULL", instance_get_addr());
 						send_usbmessage(&debug_msg[0], n);
 						usb_run();
 					}
@@ -1881,14 +1934,16 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 					else if(inst->previousState == TA_TXFINAL_WAIT_SEND)
 					{
 						uint8 debug_msg[100];
-						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+//						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%04llX,%04llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
 						send_usbmessage(&debug_msg[0], n);
 						usb_run();
 					}
 					else if(inst->previousState == TA_TXPOLL_WAIT_SEND)
 					{
 						uint8 debug_msg[100];
-						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+//						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%04llX,%04llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
 						send_usbmessage(&debug_msg[0], n);
 						usb_run();
 					}
@@ -2014,7 +2069,7 @@ void instance_init_timings(void)
             RESP_FRAME_LEN_BYTES, FINAL_FRAME_LEN_BYTES};
 
 
-    int i;
+
     // Margin used for timeouts computation.
     const int margin_sy = 500; //50;
 
@@ -2065,7 +2120,7 @@ void instance_init_timings(void)
     inst->storePreLen_us = CEIL_DIV(pre_len, 100000);
 
     // Second step is data length for all frame types.
-    for (i = 0; i < FRAME_TYPE_NB - 1; i++)//exclude INF message, since it changes size
+    for (int i = 0; i < FRAME_TYPE_NB - 1; i++)//exclude INF message, since it changes size
     {
     	inst->frameLengths_us[i] = instance_getmessageduration_us(data_len_bytes[i]);
 

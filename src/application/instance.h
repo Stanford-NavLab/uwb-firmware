@@ -153,7 +153,9 @@ typedef struct
 	uint8 uwbNumActive[UWB_LIST_SIZE];		//number of TAGs each tracked ANCHOR is actively ranging with. //TODO remove?
 
     // keep track of when final messages so we can drop uwbs that we haven't communicated with in a while
-    uint32 lastCommTimeStamp[UWB_LIST_SIZE];
+    uint32 lastCommTimeStamp[UWB_LIST_SIZE]; //TODO move into tdma_handler?
+    uint32 lastHiddenTimeStamp[UWB_LIST_SIZE];
+    uint32 lastTwiceHiddenTimeStamp[UWB_LIST_SIZE];
     uint8 uwbTimeout[UWB_LIST_SIZE] ;
 
     uint32 lastRangeTimeStamp[UWB_LIST_SIZE];

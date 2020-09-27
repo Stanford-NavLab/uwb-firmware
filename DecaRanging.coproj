@@ -6,7 +6,7 @@
       <Compile>
         <Option name="OptimizationLevel" value="0"/>
         <Option name="UseFPU" value="0"/>
-        <Option name="UserEditCompiler" value="-ffunction-sections; -fdata-sections; -c; -fmessage-length=0"/>
+        <Option name="UserEditCompiler" value="-ffunction-sections; -fdata-sections; -c; -fmessage-length=0; -Wshadow"/>
         <Includepaths>
           <Includepath path="."/>
           <Includepath path="Libraries/CMSIS/CM3/CoreSupport"/>

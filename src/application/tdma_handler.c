@@ -373,7 +373,7 @@ static bool tx_select(struct TDMAHandler *this) //TODO handle unsuccessful add
 				}
 			}
 
-			if(uwb_index == 255 && inst->uwbListLen > 0)
+			if(uwb_index == 255 && inst->uwbListLen > 0) //TODO what is the purpose of this exactly?
 			{
 				uwb_index = 1;
 			}
@@ -422,7 +422,17 @@ static bool tx_select(struct TDMAHandler *this) //TODO handle unsuccessful add
 //		usb_run();
 
 		this->infPollSentThisSlot = TRUE;
-		inst->testAppState = TA_TXINF_WAIT_SEND;
+		uint8 fcode = RTLS_DEMO_MSG_INF_INIT;
+		if(memcmp(&inst->inf_msg.messageData[FCODE], &fcode, sizeof(uint8)) == 0)
+		{
+			inst->testAppState = TA_TXINF_WAIT_SEND;
+		}
+		else
+		{
+			inst->testAppState = TA_TXPOLL_WAIT_SEND;//TODO modify any other related variables with this change if we keep it.
+													//in case the ranging event fails, dont just wait till end of slot, move on toe TA_TXINF_WAIT_SEND
+		}
+
 		inst->uwbToRangeWith = (uint8)uwb_index;
 	}
 
@@ -636,8 +646,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 
 	bool tdma_modified = FALSE;
 
-
-	uint32 t_start = portGetTickCnt();
+	uint32 time_now = portGetTickCnt();
 
 	if((mode != CLEAR_ALL_COPY)     && //happens when we creat a new network
 	   (mode != CLEAR_LISTED_COPY)	&& //happens most of the time while processing
@@ -766,6 +775,8 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 			{
 				inst->uwbListType[uwb_index] = UWB_LIST_HIDDEN;
 			}
+
+			inst->lastHiddenTimeStamp[uwb_index] = time_now;
 		}
 
 		info = &this->uwbListTDMAInfo[uwb_index];
@@ -787,7 +798,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 			if(framelength == info->framelength && numSlots == info->slotsLength)
 			{
 				//then check if each incoming slot is already assigned
-				for(int i = 0; i < numSlots; i++)
+				for(int s = 0; s < numSlots; s++)
 				{
 					memcpy(&slot, &messageData[msgDataIndex], sizeof(uint8));
 					msgDataIndex++;
@@ -839,6 +850,8 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 			{
 				inst->uwbListType[uwb_index] = UWB_LIST_TWICE_HIDDEN;
 			}
+
+			inst->lastTwiceHiddenTimeStamp[uwb_index] = time_now;
 		}
 
 		uwbListInMsg[uwb_index] = TRUE;
@@ -857,7 +870,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 			if(framelength == info->framelength && numSlots == info->slotsLength)
 			{
 				//then check if each incoming slot is already assigned
-				for(int i = 0; i < numSlots; i++)
+				for(int s = 0; s < numSlots; s++)
 				{
 					memcpy(&slot, &messageData[msgDataIndex], sizeof(uint8));
 					msgDataIndex++;
@@ -936,12 +949,15 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 		}
 	}
 
-	uint32 deltat = get_dt32(t_start, portGetTickCnt());
+	uint32 deltat = get_dt32(time_now, portGetTickCnt());
 
-//	uint8 debug_msg[100];
-//	int n = sprintf((char *)&debug_msg, "process_inf_time,%X,%lu", inst->uwbShortAdd, deltat);
-//	send_usbmessage(&debug_msg[0], n);
-//	usb_run();
+	if(deltat > 1)
+	{
+		uint8 debug_msg[100];
+		int n = sprintf((char *)&debug_msg, "process_inf_time:%lu,%04X,xxxx", deltat, inst->uwbShortAdd);
+		send_usbmessage(&debug_msg[0], n);
+		usb_run();
+	}
 
 	return tdma_modified;
 

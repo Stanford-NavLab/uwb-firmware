@@ -309,7 +309,7 @@ int dw_main(void)
 	int toggle = 0;
 	int toggle_counter = 0;
 	int toggle_step = 5;
-    uint8 dataseq[LCD_BUFF_LEN];
+//    uint8 dataseq[LCD_BUFF_LEN];
 //    bool new_range = FALSE;
 	uint8 command = 0x0;
 
@@ -540,7 +540,8 @@ int dw_main(void)
 			{
 				uint64 aaddr = instancenewrangeancadd();
 				uint64 taddr = instancenewrangetagadd();
-				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
+//				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
+				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
 				send_usbmessage(&dataseq[0], n);
 				usb_run();
 

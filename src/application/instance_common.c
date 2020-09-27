@@ -1318,76 +1318,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 		uwb_index = instgetuwblistindex(&instance_data[instance], &blink_address[0], instance_data[instance].addrByteSize);
 //		instance_data[instance].uwbListType[uwb_index] = UWB_LIST_NEIGHBOR;
 
-//		bool match = FALSE;
-//		char test_addr[2] = {0x95, 0x15};
-//		if(memcmp(&blink_address, &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x50;
-//		test_addr[1] = 0x59;
-//		if(memcmp(&blink_address, &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x36;
-//		test_addr[1] = 0x18;
-//		if(memcmp(&blink_address, &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x39;
-//		test_addr[1] = 0x16;
-//		if(memcmp(&blink_address, &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x27;
-//		test_addr[1] = 0x59;
-//		if(memcmp(&blink_address, &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x20;
-//		test_addr[1] = 0x1B;
-//		if(memcmp(&blink_address, &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x8C;
-//		test_addr[1] = 0x11;
-//		if(memcmp(&blink_address, &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x1D;
-//		test_addr[1] = 0x14;
-//		if(memcmp(&blink_address, &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x8C;
-//		test_addr[1] = 0x19;
-//		if(memcmp(&blink_address, &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0xD6;
-//		test_addr[1] = 0x0C;
-//		if(memcmp(&blink_address, &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//
-//		if(match == FALSE)
-//		{
-//			instance_data_t *inst = &instance_data[instance];
-//			uint8 debug_msg[100];
-//			int n = sprintf((char*)&debug_msg[0], "match not found");
-//			 send_usbmessage(&debug_msg[0], n);
-//			 usb_run();
-//		}
-
 
 //		uint8 debug_msg[100];
 ////		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK RECEIVED: BLINK uwb_index: %d, uwbToRangeWith: %d ", uwb_index, instance_data[instance].uwbToRangeWith);
@@ -1405,91 +1335,19 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 		instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
 		instance_data[instance].uwbTimeout[uwb_index] = 0;
 
-//		bool match = FALSE;
-//		char test_addr[2] = {0x95, 0x15};
-//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x50;
-//		test_addr[1] = 0x59;
-//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x36;
-//		test_addr[1] = 0x18;
-//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x39;
-//		test_addr[1] = 0x16;
-//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x27;
-//		test_addr[1] = 0x59;
-//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x20;
-//		test_addr[1] = 0x1B;
-//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x8C;
-//		test_addr[1] = 0x11;
-//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x1D;
-//		test_addr[1] = 0x14;
-//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0x8C;
-//		test_addr[1] = 0x19;
-//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//		test_addr[0] = 0xD6;
-//		test_addr[1] = 0x0C;
-//		if(memcmp(&dw_event.msgu.frame[srcAddr_index], &test_addr, 2) == 0)
-//		{
-//			match = TRUE;
-//		}
-//
-//		if(match == FALSE)
-//		{
-//			instance_data_t *inst = &instance_data[instance];
-//			uint8 debug_msg[100];
-//			int n = sprintf((char*)&debug_msg[0], "match not found");
-//			 send_usbmessage(&debug_msg[0], n);
-//			 usb_run();
-//		}
 
 
-
-
-
-		uint8 debug_msg[100];
-//		 int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s uwb_index %d, uwbToRangeWith: %d ", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), uwb_index, instance_data[instance].uwbToRangeWith);
-		uint16 my_addr = instance_data[instance].uwbShortAdd;
-////		uint64 my_addr = (uint64)instance_data[instance].uwbShortAdd;
-//		uint16 *addr_ptr = &instance_data[instance].uwbShortAdd;
-//		int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%u,xxxx,%p", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr, (void *) addr_ptr);
-//		int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%u,xxxx", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr);
-		int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%X,xxxx", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr);
-//		int n = sprintf((char*)&debug_msg[0], "%u,%p", my_addr, (void *)addr_ptr);
-		 send_usbmessage(&debug_msg[0], n);
-		 usb_run();
+//		uint8 debug_msg[100];
+////		 int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s uwb_index %d, uwbToRangeWith: %d ", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), uwb_index, instance_data[instance].uwbToRangeWith);
+//		uint16 my_addr = instance_data[instance].uwbShortAdd;
+//////		uint64 my_addr = (uint64)instance_data[instance].uwbShortAdd;
+////		uint16 *addr_ptr = &instance_data[instance].uwbShortAdd;
+////		int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%u,xxxx,%p", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr, (void *) addr_ptr);
+////		int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%u,xxxx", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr);
+//		int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,xxxx", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr);
+////		int n = sprintf((char*)&debug_msg[0], "%u,%p", my_addr, (void *)addr_ptr);
+//		 send_usbmessage(&debug_msg[0], n);
+//		 usb_run();
 
 	}
 
@@ -1976,16 +1834,17 @@ int instance_run(void)
 	for(int i=1; i < instance_data[instance].uwbListLen; i++)//0 reserved for self, timeout not applicable
 	{
 		//TODO could also have a timer to put into DISCOVERY if we haven't spoken to anyone in a while
+		uint32 time_now = portGetTickCnt();
 
-		if(instance_data[instance].lastCommTimeStamp[i] + UWB_COMM_TIMEOUT < portGetTickCnt()) //TODO handle number wrapping
+		uint32 delat_t = get_dt32(instance_data[instance].lastCommTimeStamp[i], time_now);
+//		if(instance_data[instance].lastCommTimeStamp[i] + UWB_COMM_TIMEOUT < portGetTickCnt()) //TODO handle number wrapping
+		if(delta_t > UWB_COMM_TIMEOUT) //TODO handle number wrapping
 		{
 //			if(instance_data[instance].uwbTimeout[i] == 0)
 			if(instance_data[instance].uwbListType[i] == UWB_LIST_NEIGHBOR) //what about hidden?
 			{
 				instance_data[instance].uwbListType[i] = UWB_LIST_INACTIVE; //TODO release TDMA slots as well
 				instance_data[instance].uwbTimeout[i] = 1;
-				
-
 
 				//NEW
 				//if no more active neighbors exist, transition to DISCOVERY
