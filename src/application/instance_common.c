@@ -1836,7 +1836,7 @@ int instance_run(void)
 		//TODO could also have a timer to put into DISCOVERY if we haven't spoken to anyone in a while
 		uint32 time_now = portGetTickCnt();
 
-		uint32 delat_t = get_dt32(instance_data[instance].lastCommTimeStamp[i], time_now);
+		uint32 delta_t = get_dt32(instance_data[instance].lastCommTimeStamp[i], time_now);
 //		if(instance_data[instance].lastCommTimeStamp[i] + UWB_COMM_TIMEOUT < portGetTickCnt()) //TODO handle number wrapping
 		if(delta_t > UWB_COMM_TIMEOUT) //TODO handle number wrapping
 		{

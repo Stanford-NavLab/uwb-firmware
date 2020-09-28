@@ -859,7 +859,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 			//update time since frame start!
 			tdma_handler->update_inf_tsfs(tdma_handler);
 
-
 			//response is not expected
 			inst->wait4ack = 0;
 
@@ -878,6 +877,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 					inst->nextState = TA_RXE_WAIT;
 					tdma_handler->set_discovery_mode(tdma_handler, EXIT, portGetTickCnt());
 					inst->mode = ANCHOR;
+
 
 //					uint8 debug_msg[100];
 //					int n = sprintf((char *)&debug_msg, "TX_INF_SUG,%llX,NULL", instance_get_addr());
@@ -906,6 +906,11 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 				{
 					fcode = RTLS_DEMO_MSG_INF_REG;
 					memcpy(&inst->inf_msg.messageData[FCODE], &fcode, sizeof(uint8));
+				}
+
+				if(tdma_handler->rebase_pending == TRUE)
+				{
+					tdma_handler->rebase_tx = TRUE;
 				}
 
 				inst->timeofTx = portGetTickCnt();
@@ -1526,7 +1531,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
                         		if(tdma_handler->discovery_mode == WAIT_INF_REG) //treat INF_UPDATE and INF_SUG the same
 								{
-                        			//synchronize the frames
+                        			//synchronize the frames //TODO don't need to sync frame at this point...?
                         			tdma_handler->frame_sync(tdma_handler, dw_event, messageData, srcIndex, FS_ADOPT);
 //                        			//initialize collection of tdma info, clear any previously stored info
                         			tdma_handler->process_inf_msg(tdma_handler, messageData, srcIndex, CLEAR_ALL_COPY);
@@ -1535,7 +1540,14 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 								}
                         		else if(tdma_handler->discovery_mode == COLLECT_INF_REG)
                         		{
-                        			//TODO for some reason, it seems like the frame start time is way off with this... fix it!
+                        			//TODO handle the case where we are collecting from two different UWB networks that are not synchronized
+                        			//in case there are multiple subnetworks... only collect average frame start times for one of them...
+                        			//send out INF_SUG in that 0th frame with rebase to the other subnetwork's frame. but what if there are two other networks?
+                        			//instead send out INF fug in that 0th frame with rebase to that frame. Hopefully the other networks will get the message.
+                        			//if not, the discrepency will eventually be taken care of the ANCHOR and TAG logic, regarless of how many subnetworks there are.
+                        			//sync to the largest subnetwork...
+
+                        			//TODO don't need to sync frame while collecting?
 
                         			//synchronize the frames
 									tdma_handler->frame_sync(tdma_handler, dw_event, messageData, srcIndex, FS_AVERAGE);

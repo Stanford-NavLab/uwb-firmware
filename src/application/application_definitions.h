@@ -172,11 +172,12 @@ enum
 
 //INF message byte offsets
 #define TDMA_TSFS                           1+6				// offset to put time since TDMA frame start in the INF message
-#define TDMA_NUMN							7+6				// offset to put the number of this UWB's neighbors in the INF message
-#define TDMA_NUMH							8+6				// offset to put the number of this UWB's hidden neighbors in the INF message
-#define TDMA_FRAMELENGTH                    9+6				// offset to put this UWB's TDMA framelength in the INF message
-#define TDMA_NUMS							10+6				// offset to put the number of this UWB's TDMA slot assignments in the INF message
-
+#define TDMA_TSFS_REBASE					7+6				// offset to put whether the receiving UWB needs to rebase its TDMA frame to the transmitted TSFS
+#define TDMA_NUMN							8+6				// offset to put the number of this UWB's neighbors in the INF message
+#define TDMA_NUMH							9+6				// offset to put the number of this UWB's hidden neighbors in the INF message
+#define TDMA_FRAMELENGTH                    10+6			// offset to put this UWB's TDMA framelength in the INF message
+#define TDMA_NUMS							11+6			// offset to put the number of this UWB's TDMA slot assignments in the INF message
+//TODO remove the +6 from above!
 
 // Final message byte offsets.
 #define PTXT                                1

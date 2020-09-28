@@ -25,6 +25,7 @@ typedef enum frame_sync_mode
 {
 	FS_ADOPT,
 	FS_AVERAGE
+//	FS_REBASE //TODO remove
 }
 FRAME_SYNC_MODE;
 
@@ -49,6 +50,9 @@ struct TDMAHandler
 	uint32 slotDuration_ms;   //TODO make variable in duration based on UWB_LIST_SIZE
 	uint32 slotDuration_us;   //TODO make variable in duration based on UWB_LIST_SIZE
 	bool infPollSentThisSlot;
+	bool rebase_pending;
+	bool rebase_tx;
+	uint64 rebase_frameStartTime64; //TODO rename 64 to us!
 
 	//TODO can probably use a smaller data type...
 	uint64 slotStartDelay_us; //time between slot start and transmission within that slot
