@@ -316,6 +316,7 @@ const char* get_instanceModes_string(enum instanceModes mode);
 const char* get_discovery_modes_string(enum discovery_modes mode);
 
 instance_data_t* instance_get_local_structure_ptr(unsigned int x);
+struct TDMAHandler* tdma_get_local_structure_ptr();
 
 uint32 get_dt32(uint32 t1, uint32 t2);
 uint32 timestamp_add32(uint32 timestamp, uint32 duration);

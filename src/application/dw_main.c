@@ -15,6 +15,7 @@
 #include "port.h"
 
 #include "instance.h"
+#include "tdma_handler.h"
 
 #include "deca_types.h"
 
@@ -140,23 +141,23 @@ instanceConfig_t chConfig[8] ={
 };
 
 
-uint32 inittestapplication(uint8 s1switch);
+//uint32 inittestapplication(uint8 s1switch);
 
 
-int decarangingmode(uint8 s1switch)
+int decarangingmode(uint8 mode_switch)
 {
     int mode = 0;
 
-    if(s1switch & SWS1_SHF_MODE)
+    if(mode_switch & SWS1_SHF_MODE)
     {
         mode = 1;
     }
 
-    if(s1switch & SWS1_64M_MODE)
+    if(mode_switch & SWS1_64M_MODE)
     {
         mode = mode + 2;
     }
-    if(s1switch & SWS1_CH5_MODE)
+    if(mode_switch & SWS1_CH5_MODE)
     {
         mode = mode + 4;
     }
@@ -164,7 +165,7 @@ int decarangingmode(uint8 s1switch)
     return mode;
 }
 
-uint32 inittestapplication(uint8 s1switch)
+uint32 inittestapplication(uint8 mode_switch)
 {
     uint32 devID ;
     int result;
@@ -202,7 +203,7 @@ uint32 inittestapplication(uint8 s1switch)
         return(-1) ;
     }
 
-    if(s1switch & SWS1_ANC_MODE)
+    if(mode_switch & SWS1_ANC_MODE)
     {
 //        instance_mode = ANCHOR;
 
@@ -216,7 +217,7 @@ uint32 inittestapplication(uint8 s1switch)
     }
 
     instance_init_s();
-	dr_mode = decarangingmode(s1switch);
+	dr_mode = decarangingmode(mode_switch);
 
     chan = chConfig[dr_mode].channelNumber ;
     prf = (chConfig[dr_mode].pulseRepFreq == DWT_PRF_16M)? 16 : 64 ;
@@ -245,12 +246,12 @@ void initLCD(void)
     writetoLCD( 1, 0,  &command);
 }
 
-void setLCDline1(uint8 s1switch)
+void setLCDline1(uint8 mode_switch)
 {
 	uint8 command = 0x2 ;  //return cursor home
     writetoLCD( 1, 0,  &command);
 
-	sprintf((char*)&dataseq[0], "DecaRanging  %02x", s1switch);
+	sprintf((char*)&dataseq[0], "DecaRanging  %02x", mode_switch);
 	writetoLCD( 40, 1, dataseq); //send some data
 
 	sprintf((char*)&dataseq1[0], "                 ");
@@ -261,7 +262,7 @@ void setLCDline1(uint8 s1switch)
  * @fn configure_continuous_txspectrum_mode
  * @brief   test application for production to check the TX power in various modes
 **/
-void configure_continuous_txspectrum_mode(uint8 s1switch)
+void configure_continuous_txspectrum_mode(uint8 mode_switch)
 {
 	if(port_is_switch_on(TA_SW1_4) == S1_SWITCH_ON)
 	{
@@ -269,7 +270,7 @@ void configure_continuous_txspectrum_mode(uint8 s1switch)
 
 		uint8 command = 0x2 ;  //return cursor home
 		writetoLCD(1, 0,  &command);
-		sprintf((char*)&dataseq[0], "Conti TX %s:%d:%d ", (s1switch & SWS1_SHF_MODE) ? "S" : "L", chan, prf);
+		sprintf((char*)&dataseq[0], "Conti TX %s:%d:%d ", (mode_switch & SWS1_SHF_MODE) ? "S" : "L", chan, prf);
 		writetoLCD(LCD_BUFF_LEN, 1, dataseq); //send some data
 		memcpy(dataseq, (const uint8 *) "Spectrum Test   ", LCD_BUFF_LEN);
 		writetoLCD(LCD_BUFF_LEN, 1, dataseq); //send some data
@@ -538,12 +539,12 @@ int dw_main(void)
 
 			if(instance_mode == TAG)
 			{
-				uint64 aaddr = instancenewrangeancadd();
-				uint64 taddr = instancenewrangetagadd();
-//				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
-				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
-				send_usbmessage(&dataseq[0], n);
-				usb_run();
+//				uint64 aaddr = instancenewrangeancadd();
+//				uint64 taddr = instancenewrangetagadd();
+////				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
+//				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
+//				send_usbmessage(&dataseq[0], n);
+//				usb_run();
 
 			}
 			else
@@ -632,8 +633,11 @@ int dw_main(void)
 					}
 					else
 					{
+						struct TDMAHandler *tdma_handler = tdma_get_local_structure_ptr();
+						uint8 framelength = tdma_handler->uwbListTDMAInfo[0].framelength;
 						sprintf((char*)&dataseq[0], "%llX %s", addr, status);
-						sprintf((char*)&dataseq1[0], "N:%02u %04llX:%05.2fm", num_neighbors, range_addr, range_result);
+//						sprintf((char*)&dataseq1[0], "N:%02u %04llX:%05.2fm", num_neighbors, range_addr, range_result);
+						sprintf((char*)&dataseq1[0], "N:%02u %04d:%05.2fm", num_neighbors, framelength, range_result);
 					}
 				}
 				else //if(toggle == 2)
@@ -645,8 +649,11 @@ int dw_main(void)
 					}
 					else
 					{
+						struct TDMAHandler *tdma_handler = tdma_get_local_structure_ptr();
+						uint8 framelength = tdma_handler->uwbListTDMAInfo[0].framelength;
 						sprintf((char*)&dataseq[0], "%llX %s", addr, status);
-						sprintf((char*)&dataseq1[0], "H:%02u %04llX:%05.2fm", num_hidden, range_addr, range_result);
+//						sprintf((char*)&dataseq1[0], "H:%02u %04llX:%05.2fm", num_hidden, range_addr, range_result);
+						sprintf((char*)&dataseq1[0], "H:%02u %04d:%05.2fm", num_hidden, framelength, range_result);
 					}
 
 				}
