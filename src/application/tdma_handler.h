@@ -25,8 +25,8 @@ typedef enum frame_sync_mode
 {
 	FS_ADOPT,
 	FS_AVERAGE,
-	FS_COLLECT
-//	FS_REBASE //TODO remove
+	FS_COLLECT,
+	FS_EVAL
 }
 FRAME_SYNC_MODE;
 
@@ -58,6 +58,7 @@ struct TDMAHandler
 
 	//TODO can probably use a smaller data type...
 	uint64 slotStartDelay_us; //time between slot start and transmission within that slot
+	uint64 frameSyncThreshold_us;
 
 	//discovery variables
 	DISCOVERY_MODE discovery_mode;
@@ -74,7 +75,9 @@ struct TDMAHandler
 
     //class functions
 	bool (*slot_transition)(struct TDMAHandler *this);
-	void (*frame_sync)(struct TDMAHandler *this, event_data_t *dw_event, uint8 *messageData, uint8 srcIndex, FRAME_SYNC_MODE mode);
+//	void (*frame_sync)(struct TDMAHandler *this, event_data_t *dw_event, uint8 *messageData, uint8 srcIndex, FRAME_SYNC_MODE mode);
+	void (*frame_sync)(struct TDMAHandler *this, event_data_t *dw_event, uint8 framelength, uint64 timeSinceFrameStart_us, uint8 srcIndex, FRAME_SYNC_MODE mode);
+	bool (*tx_sync_msg)(struct TDMAHandler *this);
 	void (*update_inf_tsfs)(struct TDMAHandler *this);
 	bool (*tx_select)(struct TDMAHandler *this);
     bool (*check_blink)(struct TDMAHandler *this);
@@ -86,6 +89,7 @@ struct TDMAHandler
     void (*set_discovery_mode)(struct TDMAHandler *this, DISCOVERY_MODE mode, uint32 time_now);
     void (*check_discovery_mode_expiration)(struct TDMAHandler *this);
     void (*usb_dump_tdma)(struct TDMAHandler *this);
+
 
     //TODO left off here. updating messageData as well as
     //TODO revisit anything that works with messageData!!!

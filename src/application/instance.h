@@ -76,11 +76,14 @@ typedef struct
     srd_ext_msg_dlsl msg; // simple 802.15.4 frame structure (used for tx message) - using long addresses
 	srd_ext_msg_dssl inf_msg;         	  // extended inf message containing frame lengths and slot assignments
     srd_ext_msg_dssl report_msg;          // extended report message containing the calculated range
+    srd_ext_msg_dssl sync_msg;		      // extended message indicating the need to resync TDMA frame
+    //TODO make sure the dssl are correct! (ds for broadcast?)
 #else
 	srd_msg_dlss rng_initmsg ;  // ranging init message (destination long, source short)
     srd_ext_msg_dsss msg; // simple 802.15.4 frame structure (used for tx message) - using short addresses
     srd_ext_msg_dsss inf_msg;         	  // extended inf message containing frame lengths and slot assignments
-    srd_ext_msg_dsss report_msg;			// extended report message containing the calculated range
+    srd_ext_msg_dsss report_msg;		  // extended report message containing the calculated range
+    srd_ext_msg_dsss sync_msg;		      // extended message indicating the need to resync TDMA frame
 #endif
 	iso_IEEE_EUI64_blink_msg blinkmsg ; // frame structure (used for tx blink message)
 

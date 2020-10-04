@@ -539,12 +539,12 @@ int dw_main(void)
 
 			if(instance_mode == TAG)
 			{
-//				uint64 aaddr = instancenewrangeancadd();
-//				uint64 taddr = instancenewrangetagadd();
-////				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
-//				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
-//				send_usbmessage(&dataseq[0], n);
-//				usb_run();
+				uint64 aaddr = instancenewrangeancadd();
+				uint64 taddr = instancenewrangetagadd();
+//				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
+				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
+				send_usbmessage(&dataseq[0], n);
+				usb_run();
 
 			}
 			else

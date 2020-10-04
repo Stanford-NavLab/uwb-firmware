@@ -33,11 +33,11 @@ static bool slot_transition(struct TDMAHandler *this)
 			uint64 frameDuration64 = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
 			if(timeSinceFrameStart64 >= frameDuration64)
 			{
-				uint8 debug_msg[100];
-////				 int n = sprintf((char*)&debug_msg[0], "NEW FRAME, %llX,  this->frameStartTime: %lu, this->slotDuration*this->framelength: %lu", instance_get_addr(), this->frameStartTime, (this->slotDuration*this->framelength));
-				int n = sprintf((char*)&debug_msg[0], "%llX, %llu, %llu", instance_get_addr(), this->lastFST, time_now_us);
-				send_usbmessage(&debug_msg[0], n);
-				usb_run();
+//				uint8 debug_msg[100];
+//////				 int n = sprintf((char*)&debug_msg[0], "NEW FRAME, %llX,  this->frameStartTime: %lu, this->slotDuration*this->framelength: %lu", instance_get_addr(), this->frameStartTime, (this->slotDuration*this->framelength));
+//				int n = sprintf((char*)&debug_msg[0], "%llX, %llu, %llu", instance_get_addr(), this->lastFST, time_now_us);
+//				send_usbmessage(&debug_msg[0], n);
+//				usb_run();
 
 				//TODO think about adopting rebase AFTER all neighbors have had a chance to TX the rebase in their INF message as well.
 //				this->rebase_pending = FALSE;
@@ -116,7 +116,8 @@ static bool slot_transition(struct TDMAHandler *this)
 }
 
 //static void frame_sync(struct TDMAHandler *this, uint8 *messageData, uint16 rxLength, uint8 srcIndex, FRAME_SYNC_MODE mode)
-static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 *messageData, uint8 srcIndex, FRAME_SYNC_MODE mode)
+//static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 *messageData, uint8 srcIndex, FRAME_SYNC_MODE mode)
+static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 framelength, uint64 timeSinceFrameStart_us, uint8 srcIndex, FRAME_SYNC_MODE mode)
 {
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
 
@@ -126,24 +127,18 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 *
 	dwt_time_now = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
 	uint64 time_now_us = portGetTickCntMicro();
 
-	uint8 framelength;
-	uint32 timeSinceFrameStart64 = 0;
+//	uint8 framelength;
+//	uint64 timeSinceFrameStart_us = 0;
 
-	memcpy(&framelength, &messageData[TDMA_FRAMELENGTH], 1);
-	//timeSinceFrameStart in message
-	memcpy(&timeSinceFrameStart64, &messageData[TDMA_TSFS], 6);
-
+//	memcpy(&framelength, &messageData[TDMA_FRAMELENGTH], sizeof(uint8));
+//	//timeSinceFrameStart in message
+//	memcpy(&timeSinceFrameStart_us, &messageData[TDMA_TSFS], 6);
 
 	//time from message to tx
 	//assuming zero since we use DWT_START_TX_IMMEDIATE
 
 	//tx antenna delay
 	uint64 tx_antenna_delay = (uint64)inst->txAntennaDelay;
-
-	//time for xmission (only count once, happens on both sides near simultaneously)
-	//TODO make sure this is correct...
-	//easiest way to check would be to see if it is the same as the defines for other standard messages...
-//	inst->frameLengths_us[INF] = instance_getmessageduration_us(dw_event->rxLength); //TODO should maybe make sure extended framelength cannot overflow a uint32
 
 	//time to propagate
 	//NOTE: assuming zero since difference for speed of light travel time over 10cm and 100m is negligible for frame sync purposes
@@ -156,10 +151,10 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 *
 
 	uint64 txrx_delay =  (uint64)(convertdevicetimetosec(tx_antenna_delay + rxfs_process_delay)*1000000.0) + inst->storePreLen_us;
 
-	uint64 hisTimeSinceFrameStart_us = timeSinceFrameStart64 + txrx_delay;
+	uint64 hisTimeSinceFrameStart_us = timeSinceFrameStart_us + txrx_delay;
 	this->uwbFrameStartTimes64[srcIndex] = timestamp_subtract64(time_now_us, hisTimeSinceFrameStart_us); //TODO consider applying the diff!
 
-	if(mode == FS_ADOPT)
+	if(mode == FS_ADOPT) //TODO this might not be right! incoming framelength not always the same as ours!
 	{
 		this->uwbFrameStartTimes64[0] = this->uwbFrameStartTimes64[srcIndex];
 		uint8 slot = hisTimeSinceFrameStart_us/this->slotDuration_us; //integer division rounded down
@@ -169,9 +164,9 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 *
 	{
 		return;
 	}
-	else if(mode == FS_AVERAGE) //TODO consider using a weighted average. perhaps use threshholds to determine if instead we should just use the ADOPT logic
+	else// if(mode == FS_AVERAGE || mode == FS_EVAL) //TODO consider using a weighted average. perhaps use threshholds to determine if instead we should just use the ADOPT logic
 	{
-		uint64 myFramelengthDuration_us = this->uwbListTDMAInfo[0].framelength*this->slotDuration_us;
+//		uint64 myFramelengthDuration_us = this->uwbListTDMAInfo[0].framelength*this->slotDuration_us;
 		uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbFrameStartTimes64[0], time_now_us);
 
 		////OLD WAY
@@ -283,13 +278,20 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 *
 			}
 		}
 
-		uint64 threshold = 2*this->slotStartDelay_us;//TODO make this a permanent variable
-		if(diff_us > threshold)
+		if(diff_us > this->frameSyncThreshold_us)
 		{
-			return;//TODO send out a rebase message!
+			this->tx_sync_msg(this);
+		}
+		else if(mode == FS_EVAL)
+		{
+			return;
 		}
 
-
+		uint8 div = 2;
+		if(mode == FS_EVAL)
+		{
+			div = 1;
+		}
 
 		if(diff_add == TRUE)
 		{
@@ -298,8 +300,8 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 *
 //			 send_usbmessage(&debug_msg[0], n);
 //			 usb_run();
 
-			this->uwbFrameStartTimes64[0] = timestamp_add64(this->uwbFrameStartTimes64[0], diff_us/2);
-			this->lastSlotStartTime64 = timestamp_add64(this->lastSlotStartTime64, diff_us/2);
+			this->uwbFrameStartTimes64[0] = timestamp_add64(this->uwbFrameStartTimes64[0], diff_us/div);
+			this->lastSlotStartTime64 = timestamp_add64(this->lastSlotStartTime64, diff_us/div);
 		}
 		else
 		{
@@ -307,14 +309,53 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 *
 //			 int n = sprintf((char*)&debug_msg[0], "subtract %llu", diff_us);
 //			 send_usbmessage(&debug_msg[0], n);
 //			 usb_run();
-			this->uwbFrameStartTimes64[0] = timestamp_subtract64(this->uwbFrameStartTimes64[0], diff_us/2);
-			this->lastSlotStartTime64 = timestamp_subtract64(this->lastSlotStartTime64, diff_us/2);
+			this->uwbFrameStartTimes64[0] = timestamp_subtract64(this->uwbFrameStartTimes64[0], diff_us/div);
+			this->lastSlotStartTime64 = timestamp_subtract64(this->lastSlotStartTime64, diff_us/div);
 		}
 
 
 
 	}
 }
+
+
+static bool tx_sync_msg(struct TDMAHandler *this)
+{
+	instance_data_t *inst = instance_get_local_structure_ptr(0);
+	uint64 time_now_us = portGetTickCntMicro();
+	uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbFrameStartTimes64[0], time_now_us);
+	memcpy(&inst->sync_msg.messageData[SYNC_FRAMELENGTH], &this->uwbListTDMAInfo[0].framelength, sizeof(uint8));
+	memcpy(&inst->sync_msg.messageData[SYNC_TSFS], &myTimeSinceFrameStart_us, 6);
+	int psduLength = 0;
+
+	inst->sync_msg.seqNum = inst->frameSN++;
+
+
+#if (USING_64BIT_ADDR==1)
+	psduLength = SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC;
+#else
+	psduLength = SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
+#endif
+
+	dwt_writetxdata(psduLength, (uint8 *)&inst->sync_msg, 0) ; // write the frame data
+
+	inst->wait4ack = 0;
+
+	if(instancesendpacket(psduLength, DWT_START_RX_IMMEDIATE, 0))
+	{
+		inst->testAppState = TA_RXE_WAIT;
+		return FALSE;
+	}
+	else
+	{
+
+		inst->previousState = inst->testAppState;
+		inst->testAppState = TA_TX_WAIT_CONF;	// wait confirmation
+		return TRUE;
+	}
+}
+
+
 
 //
 ////static void frame_sync(struct TDMAHandler *this, uint8 *messageData, uint16 rxLength, uint8 srcIndex, FRAME_SYNC_MODE mode)
@@ -2683,11 +2724,10 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 //						}
 //					}
 
-					uint64 threshold = this->slotStartDelay_us*2; //TODO make a permanent variable for this threshold
 					//if difference is below the threshold, it belongs to this subnetwork
 					//if not, it may belong to another one already listed,
 					//if not, create a new one...
-					if(diff_us < threshold)
+					if(diff_us < this->frameSyncThreshold_us)
 					{
 						sub_network_members[j]++;
 						sub_network_membership[i] = j;
@@ -2990,6 +3030,7 @@ static struct TDMAHandler new(){
 
 	ret.slot_transition = &slot_transition;
 	ret.frame_sync = &frame_sync;
+	ret.tx_sync_msg = &tx_sync_msg;
 	ret.tx_select  = &tx_select;
 	ret.check_blink  = &check_blink;
 
@@ -3012,6 +3053,7 @@ static struct TDMAHandler new(){
 	ret.set_discovery_mode = &set_discovery_mode;
 	ret.check_discovery_mode_expiration = &check_discovery_mode_expiration;
 	ret.usb_dump_tdma = &usb_dump_tdma;
+
 
 	ret.deconflict_slot_assignments = &deconflict_slot_assignments;
 	ret.deconflict_uwb_pair = &deconflict_uwb_pair;
@@ -3044,6 +3086,7 @@ static struct TDMAHandler new(){
     ret.infSentThisSlot = FALSE;
     ret.pollSentThisSlot = FALSE;
     ret.slotStartDelay_us = 4000;
+    ret.frameSyncThreshold_us = 2*ret.slotStartDelay_us;
     ret.infMessageLength = 0;
     ret.rebase_pending = FALSE;
 	ret.rebase_tx = FALSE;

@@ -69,23 +69,6 @@ int usbtxdebugdataprev_size = 0;
 //
 void instanceconfigframeheader(instance_data_t *inst)
 {
-
-//	//configure ranging message(s)
-//	for(int i = 0; i < UWB_LIST_SIZE; i++)//TODO only have one msg
-//	{
-//		inst->msg[i].panID[0] = (inst->panID) & 0xff;
-//		inst->msg[i].panID[1] = inst->panID >> 8;
-//
-//		//set frame type (0-2), SEC (3), Pending (4), ACK (5), PanIDcomp(6)
-//		inst->msg[i].frameCtrl[0] = 0x1 /*frame type 0x1 == data*/ | 0x40 /*PID comp*/;
-//#if (USING_64BIT_ADDR==1)
-//		    //source/dest addressing modes and frame version
-//		inst->msg[i].frameCtrl[1] = 0xC /*dest extended address (64bits)*/ | 0xC0 /*src extended address (64bits)*/;
-//#else
-//		inst->msg[i].frameCtrl[1] = 0x8 /*dest short address (16bits)*/ | 0x80 /*src short address (16bits)*/;
-//#endif
-//	}
-
 	//configure ranging message
 	inst->msg.panID[0] = (inst->panID) & 0xff;
 	inst->msg.panID[1] = inst->panID >> 8;
@@ -127,7 +110,6 @@ void instanceconfigframeheader(instance_data_t *inst)
 
 
 	//configure RNG_REPORT
-
 	inst->report_msg.panID[0] = (inst->panID) & 0xff;
 	inst->report_msg.panID[1] = inst->panID >> 8;
 
@@ -138,6 +120,20 @@ void instanceconfigframeheader(instance_data_t *inst)
 	inst->report_msg.frameCtrl[1] = 0x8 /*dest short address (16bits)*/ | 0xC0 /*src extended address (64bits)*/;
 #else
 	inst->report_msg.frameCtrl[1] = 0x8 /*dest short address (16bits)*/ | 0x80 /*src short address (16bits)*/;
+#endif
+
+
+	//configure SYNC message
+	inst->sync_msg.panID[0] = (inst->panID) & 0xff;
+	inst->sync_msg.panID[1] = inst->panID >> 8;
+
+	//set frame type (0-2), SEC (3), Pending (4), ACK (5), PanIDcomp(6)
+	inst->sync_msg.frameCtrl[0] = 0x1 /*frame type 0x1 == data*/ | 0x40 /*PID comp*/;
+#if (USING_64BIT_ADDR==1)
+	//source/dest addressing modes and frame version
+	inst->sync_msg.frameCtrl[1] = 0x8 /*dest short address (16bits)*/ | 0xC0 /*src extended address (64bits)*/;
+#else
+	inst->sync_msg.frameCtrl[1] = 0x8 /*dest short address (16bits)*/ | 0x80 /*src short address (16bits)*/;
 #endif
 
 
@@ -225,6 +221,11 @@ void instanceconfigmessages(instance_data_t *inst)
 	memcpy(&inst->report_msg.destAddr[0], &broadcast_address, 2);
 	inst->report_msg.messageData[FCODE] = RTLS_DEMO_MSG_RNG_REPORT; //message function code (specifies if message is a poll, response or other...)
 
+
+	//configure SYNC message
+	memcpy(&inst->sync_msg.sourceAddr[0], &inst->eui64[0], inst->addrByteSize);
+	memcpy(&inst->sync_msg.destAddr[0], &broadcast_address, 2);
+	inst->sync_msg.messageData[FCODE] = RTLS_DEMO_MSG_SYNC; //message function code (specifies if message is a poll, response or other...)
 
 	//configure BLINK message
 	memcpy(&inst->blinkmsg.tagID[0], &inst->eui64[0], ADDR_BYTE_SIZE_L);
@@ -960,11 +961,11 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
             dwt_writetxdata(psduLength, (uint8 *)  &inst->msg, 0) ; // write the frame data
             dwt_writetxfctrl(psduLength, 0, 1);
             if(dwt_starttx(DWT_START_TX_IMMEDIATE | inst->wait4ack) == 0){
-//            	uint8 debug_msg[100];
-////				int n = sprintf((char *)&debug_msg, "TX_POLL,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
-//				int n = sprintf((char *)&debug_msg, "TX_POLL,%04llX,%04llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
+            	uint8 debug_msg[100];
+//				int n = sprintf((char *)&debug_msg, "TX_POLL,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+				int n = sprintf((char *)&debug_msg, "TX_POLL,%04llX,%04llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+				send_usbmessage(&debug_msg[0], n);
+				usb_run();
             }
 
             inst->testAppState = TA_TX_WAIT_CONF ;   //TODO move to if statement above?                                       // wait confirmation
@@ -1463,12 +1464,34 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                         
                             break; 
                         } //RTLS_DEMO_MSG_RNG_INIT
+                        case RTLS_DEMO_MSG_SYNC :
+                        {
+                        	uint8 srcIndex = instgetuwblistindex(inst, &srcAddr[0], inst->addrByteSize);
+                        	uint8 framelength;
+							uint64 timeSinceFrameStart_us = 0;
+							memcpy(&framelength, &messageData[SYNC_FRAMELENGTH], sizeof(uint8));
+							memcpy(&timeSinceFrameStart_us, &messageData[SYNC_TSFS], 6);
+
+							if(inst->mode == ANCHOR || inst->mode == TAG)
+							{
+								//evaluate our frame synchronization to see if we need to snap to the incoming value
+								//and rebroadcast a SYNC message
+								tdma_handler->frame_sync(tdma_handler, dw_event, framelength, timeSinceFrameStart_us, srcIndex, FS_EVAL);
+							}
+
+                        	break;
+                        }
                         case RTLS_DEMO_MSG_INF_UPDATE : //fall through
                         case RTLS_DEMO_MSG_INF_SUG :    //fall through
                         case RTLS_DEMO_MSG_INF_REG :
                         {
 							uint32 time_now = portGetTickCnt();
 							uint8 srcIndex = instgetuwblistindex(inst, &srcAddr[0], inst->addrByteSize);
+
+							uint8 framelength;
+							uint64 timeSinceFrameStart_us = 0;
+							memcpy(&framelength, &messageData[TDMA_FRAMELENGTH], sizeof(uint8));
+							memcpy(&timeSinceFrameStart_us, &messageData[TDMA_TSFS], 6);
 
 							//return to dicovery mode if no slots assigned to this UWB
 							if(inst->mode == ANCHOR || inst->mode == TAG)
@@ -1489,7 +1512,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                         		if(tdma_handler->discovery_mode == WAIT_INF_REG) //treat INF_UPDATE and INF_SUG the same
 								{
                         			//synchronize the frames //TODO don't need to sync frame at this point...?
-                        			tdma_handler->frame_sync(tdma_handler, dw_event, messageData, srcIndex, FS_ADOPT);
+                        			tdma_handler->frame_sync(tdma_handler, dw_event, framelength, timeSinceFrameStart_us, srcIndex, FS_ADOPT);
 //                        			//initialize collection of tdma info, clear any previously stored info
                         			tdma_handler->process_inf_msg(tdma_handler, messageData, srcIndex, CLEAR_ALL_COPY);
 //                        			//set discovery mode to COLLECT_INF_REG
@@ -1505,7 +1528,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                         			//sync to the largest subnetwork...
 
                         			//synchronize the frames
-									tdma_handler->frame_sync(tdma_handler, dw_event, messageData, srcIndex, FS_COLLECT);
+									tdma_handler->frame_sync(tdma_handler, dw_event, framelength, timeSinceFrameStart_us, srcIndex, FS_COLLECT);
 									//collecting tdma info, append to previously stored info
                         			tdma_handler->process_inf_msg(tdma_handler, messageData, srcIndex, COPY);
                         		}
@@ -1513,7 +1536,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 								{
                         			//process frame sync while waiting to send sug so we maintain syn with selected (sub)network
                         			//also give ourselves the opportunity to detect the need to transmit frame sync rebase messages
-									tdma_handler->frame_sync(tdma_handler, dw_event, messageData, srcIndex, FS_AVERAGE);
+									tdma_handler->frame_sync(tdma_handler, dw_event, framelength, timeSinceFrameStart_us, srcIndex, FS_AVERAGE);
 								}
                         	}
                         	else if(inst->mode == ANCHOR || inst->mode == TAG)
@@ -1525,7 +1548,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                         		//2.) check for and adopt any tdma changes, sending an INF_UPDATE or INF_REG accordingly
 
                         		//synchronize the frames
-								tdma_handler->frame_sync(tdma_handler, dw_event, messageData, srcIndex, FS_AVERAGE);
+								tdma_handler->frame_sync(tdma_handler, dw_event, framelength, timeSinceFrameStart_us, srcIndex, FS_AVERAGE);
 
 								//collecting tdma info, append to previously stored info
 								bool tdma_modified = tdma_handler->process_inf_msg(tdma_handler, messageData, srcIndex, CLEAR_LISTED_COPY);
@@ -1599,9 +1622,13 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 //							tdma_handler->uwbListTDMAInfo[0].framelength = (uint8)MIN_FRAMELENGTH;
 //							tdma_handler->uwbListTDMAInfo[inst->uwbToRangeWith].framelength = (uint8)MIN_FRAMELENGTH;
 
+							uint8 framelength;
+							uint64 timeSinceFrameStart_us = 0;
+							memcpy(&framelength, &messageData[TDMA_FRAMELENGTH], sizeof(uint8));
+							memcpy(&timeSinceFrameStart_us, &messageData[TDMA_TSFS], 6);
 
 							//synchronise the frames
-							tdma_handler->frame_sync(tdma_handler, dw_event, messageData, srcIndex, FS_ADOPT);
+							tdma_handler->frame_sync(tdma_handler, dw_event, framelength, timeSinceFrameStart_us, srcIndex, FS_ADOPT);
 							//copy the TDMA network configuration directly
 							tdma_handler->process_inf_msg(tdma_handler, messageData, srcIndex, CLEAR_ALL_COPY);
 							//copy new TDMA configuration into the INF message that this UWB will send out
@@ -1820,11 +1847,11 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 								inst->lastRangeTimeStamp[inst->uwbToRangeWith] = portGetTickCnt();
 
-//								uint8 debug_msg[100];
-////								int n = sprintf((char *)&debug_msg, "POLL_COMPLETE,%llX,%llX", inst->newRangeTagAddress, inst->newRangeAncAddress);
-//								int n = sprintf((char *)&debug_msg, "POLL_COMPLETE,%04llX,%04llX", inst->newRangeTagAddress, inst->newRangeAncAddress);
-//								send_usbmessage(&debug_msg[0], n);
-//								usb_run();
+								uint8 debug_msg[100];
+//								int n = sprintf((char *)&debug_msg, "POLL_COMPLETE,%llX,%llX", inst->newRangeTagAddress, inst->newRangeAncAddress);
+								int n = sprintf((char *)&debug_msg, "POLL_COMPLETE,%04llX,%04llX", inst->newRangeTagAddress, inst->newRangeAncAddress);
+								send_usbmessage(&debug_msg[0], n);
+								usb_run();
 
 
 								//TODO remember that below is for testing out if its better to send INF as last message
@@ -1907,19 +1934,19 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 					}
 					else if(inst->previousState == TA_TXFINAL_WAIT_SEND)
 					{
-//						uint8 debug_msg[100];
-////						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
-//						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%04llX,%04llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
-//						send_usbmessage(&debug_msg[0], n);
-//						usb_run();
+						uint8 debug_msg[100];
+//						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%04llX,%04llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+						send_usbmessage(&debug_msg[0], n);
+						usb_run();
 					}
 					else if(inst->previousState == TA_TXPOLL_WAIT_SEND)
 					{
-//						uint8 debug_msg[100];
-////						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
-//						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%04llX,%04llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
-//						send_usbmessage(&debug_msg[0], n);
-//						usb_run();
+						uint8 debug_msg[100];
+//						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%04llX,%04llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+						send_usbmessage(&debug_msg[0], n);
+						usb_run();
 					}
 
                     instance_getevent(17); //get and clear this event
@@ -2038,10 +2065,9 @@ void instance_init_timings(void)
     uint32 pre_len;
     int sfd_len;
 
-	static const int data_len_bytes[FRAME_TYPE_NB - 1] = {
+	static const int data_len_bytes[FRAME_TYPE_NB] = {
             BLINK_FRAME_LEN_BYTES, RNG_INIT_FRAME_LEN_BYTES, POLL_FRAME_LEN_BYTES,
-            RESP_FRAME_LEN_BYTES, FINAL_FRAME_LEN_BYTES};
-
+            RESP_FRAME_LEN_BYTES, FINAL_FRAME_LEN_BYTES, SYNC_FRAME_LEN_BYTES};
 
 
     // Margin used for timeouts computation.
@@ -2094,7 +2120,7 @@ void instance_init_timings(void)
     inst->storePreLen_us = CEIL_DIV(pre_len, 100000);
 
     // Second step is data length for all frame types.
-    for (int i = 0; i < FRAME_TYPE_NB - 1; i++)//exclude INF message, since it changes size
+    for (int i = 0; i < FRAME_TYPE_NB; i++)
     {
     	inst->frameLengths_us[i] = instance_getmessageduration_us(data_len_bytes[i]);
 

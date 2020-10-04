@@ -61,8 +61,8 @@ enum
     POLL,
     RESP,
     FINAL,
-    INF,
-    FRAME_TYPE_NB //TODO add in RNG_REPORT? would be useful in calculating how long a frame slot should be... if so, dont forget to update the init_timings function...
+    SYNC,
+    FRAME_TYPE_NB
 };
 
 //TWO WAY RANGING function codes
@@ -74,16 +74,17 @@ enum
 #define RTLS_DEMO_MSG_INF_INIT              (0x14)          // TDMA coordination info packet
 #define RTLS_DEMO_MSG_INF_SUG              	(0x15)          // TDMA coordination info packet
 #define RTLS_DEMO_MSG_INF_UPDATE            (0x16)          // TDMA coordination info packet
-#define RTLS_DEMO_MSG_RNG_REPORT            (0x11)			// Report of calculated range back to the Tag
+#define RTLS_DEMO_MSG_RNG_REPORT            (0x11)			// Report of calculated range to network
+#define RTLS_DEMO_MSG_SYNC					(0x22)			// Inform other UWBs to sync their TDMA frame start times
 
 //lengths including the Decaranging Message Function Code byte
 #define TAG_POLL_MSG_LEN                    1				// FunctionCode(1),
 #define ANCH_RESPONSE_MSG_LEN               15 //TODO shorten!              // FunctionCode(1), RespOption (1), OptionParam(2), Number of Tags(1), Measured_TOF_Time(6), Time Till next window reserved for catching a blink message (4)
 #define TAG_FINAL_MSG_LEN                   16              // FunctionCode(1), Poll_TxTime(5), Resp_RxTime(5), Final_TxTime(5)
-//#define RANGINGINIT_MSG_LEN					7				// FunctionCode(1), Tag Address (2), Response Time (2) * 2
 #define RANGINGINIT_MSG_LEN					1				// FunctionCode(1)
 #define RNG_REPORT_MSG_LEN_SHORT		    9			// FunctionCode(1), time of flight (6), short address (2)
 #define RNG_REPORT_MSG_LEN_LONG		    	15			// FunctionCode(1), time of flight (6), long address (8)
+#define SYNC_MSG_LEN						8			// FunctionCode (1), framelength (1), time since frame start (6)
 
 #define MAX_MAC_MSG_DATA_LEN                (TAG_FINAL_MSG_LEN) //max message len of the above
 
@@ -126,11 +127,13 @@ enum
     #define POLL_FRAME_LEN_BYTES (TAG_POLL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
     #define RESP_FRAME_LEN_BYTES (ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
     #define FINAL_FRAME_LEN_BYTES (TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
+	#define SYNC_FRAME_LEN_BYTES (SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
 #else
     #define RNG_INIT_FRAME_LEN_BYTES (RANGINGINIT_MSG_LEN + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
     #define POLL_FRAME_LEN_BYTES (TAG_POLL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
     #define RESP_FRAME_LEN_BYTES (ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
     #define FINAL_FRAME_LEN_BYTES (TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
+	#define SYNC_FRAME_LEN_BYTES (SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
 #endif
 
 #define BLINK_FRAME_CONTROL_BYTES       (1)
@@ -189,6 +192,10 @@ enum
 #define REPORT_TOF                          1               // Offset to put ToF values in the report message.			  (6 bytes)
 #define REPORT_ADDR							7				// Offset to put address of other UWB involved in the range report (2 [short address] or 8 [long address] bytes)
 
+//Sync
+#define SYNC_FRAMELENGTH					1				// offset to put the framelength in the sync message
+#define SYNC_TSFS							2				// offset to put the time since TDMA frame start in the sync message
+
 //TODO remove below
 // Ranging init message byte offsets. Composed of tag short address, anchor
 // response delay and tag response delay.
@@ -245,7 +252,7 @@ enum
 // Default tag turn-around time: cannot be less than 300 us. Defined as 500 us
 // so that the tag is not transmitting more than one frame by millisecond (for
 // power management purpose).
-#define TAG_TURN_AROUND_TIME_US 1500 //TODO tune again!!! (300)
+#define TAG_TURN_AROUND_TIME_US 2500 //TODO tune again!!! (300)
 
 // "Long" response delays value. Over this limit, special processes must be
 // applied.
@@ -275,7 +282,6 @@ enum
 #define MIN_FRAMELENGTH							4 //minimum size by TDMA E-ASAP
 
 typedef uint64_t        uint64 ;
-
 typedef int64_t         int64 ;
 
 

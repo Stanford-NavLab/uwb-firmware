@@ -1220,7 +1220,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				{
 					srcAddr_index = FRAME_CTRLP + ADDR_BYTE_SIZE_S;
 				}
-	
 			}
 
 			break;
@@ -1275,13 +1274,12 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				rxd_event = SIG_RX_UNKNOWN;
 			}
 		}
-
-
 		else if(dw_event.msgu.frame[fcode_index] != RTLS_DEMO_MSG_INF_REG &&
 				dw_event.msgu.frame[fcode_index] != RTLS_DEMO_MSG_INF_INIT &&
 				dw_event.msgu.frame[fcode_index] != RTLS_DEMO_MSG_INF_SUG &&
 				dw_event.msgu.frame[fcode_index] != RTLS_DEMO_MSG_INF_UPDATE &&
-				dw_event.msgu.frame[fcode_index] != RTLS_DEMO_MSG_RNG_REPORT)
+				dw_event.msgu.frame[fcode_index] != RTLS_DEMO_MSG_RNG_REPORT &&
+				dw_event.msgu.frame[fcode_index] != RTLS_DEMO_MSG_SYNC)
 		{
 			rxd_event = SIG_RX_UNKNOWN;
 //			uint8 debug_msg[150];
@@ -1455,7 +1453,7 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 	if(rxd_event == DWT_SIG_RX_OKAY && uwb_index != 255)
 	{
 		//always accept.
-		if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_REPORT)
+		if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_REPORT || dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_SYNC)
 		{
 //			uint8 debug_msg[100];
 //			 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: RNG_REPORT <- uwb_index %d", uwb_index);
@@ -1671,6 +1669,10 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 //				 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: RNG_REPORT <- uwb_index %d", uwb_index);
 //				 send_usbmessage(&debug_msg[0], n);
 //				 usb_run();
+//			}
+//			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_SYNC)
+//			{
+//
 //			}
 
 
