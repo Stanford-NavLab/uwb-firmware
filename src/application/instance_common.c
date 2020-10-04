@@ -216,6 +216,7 @@ int instgetuwblistindex(instance_data_t *inst, uint8 *uwbAddr, uint8 addrByteSiz
     char uwbChar[2];
     memcpy(&uwbChar[0], &uwbAddr[0], 2);
 
+    //TODO remove the following!
     bool match = FALSE;
 	char test_addr[2] = {0x95, 0x15};
 	if(memcmp(&uwbChar[0], &test_addr[0], 2) == 0)
@@ -449,7 +450,8 @@ int instfindnumactiveneighbors(instance_data_t *inst)
 
     for(int i=1; i<inst->uwbListLen; i++)// 0 reserved for self, cant be neighbor
     {
-		if(inst->uwbListType[i] == UWB_LIST_NEIGHBOR)
+//		if(inst->uwbListType[i] == UWB_LIST_NEIGHBOR)
+		if(tdma_handler.uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR)
 		{
 			num++;
 		}
@@ -469,8 +471,10 @@ int instfindnumactivehidden(instance_data_t *inst)
 
     for(int i=1; i<inst->uwbListLen; i++)//0 reserved for self, cannot be hidden
     {
-		if(inst->uwbListType[i] == UWB_LIST_HIDDEN)
+//		if(inst->uwbListType[i] == UWB_LIST_HIDDEN)
+		if(tdma_handler.uwbListTDMAInfo[i].connectionType == UWB_LIST_HIDDEN)
 		{
+
 			num++;
 		}
     }
@@ -496,12 +500,14 @@ void instclearuwbList(void)
 	for(int i=0; i<UWB_LIST_SIZE; i++)
 	{
 		instance_data[instance].lastCommTimeStamp[i] = 0;
-		instance_data[instance].lastRangeTimeStamp[i] = 0;
+//		instance_data[instance].lastRangeTimeStamp[i] = 0;
+		tdma_handler.uwbListTDMAInfo[i].lastRange = 0;
 		instance_data[instance].uwbTimeout[i] = 0;
-		instance_data[instance].time_till_next_reported[i] = 0;
+//		instance_data[instance].time_till_next_reported[i] = 0;
 		
 		memcpy(&instance_data[instance].uwbList[i][0], &blank[0], 8);
-		instance_data[instance].uwbListType[i] = UWB_LIST_INACTIVE;
+//		instance_data[instance].uwbListType[i] = UWB_LIST_INACTIVE;
+		tdma_handler.uwbListTDMAInfo[i].connectionType = UWB_LIST_INACTIVE;
 	}
 }
 
@@ -1329,7 +1335,8 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 		uwb_index = instgetuwblistindex(&instance_data[instance], &dw_event.msgu.frame[srcAddr_index], instance_data[instance].addrByteSize);
 
 		//TODO maybe do this somewhere else...
-		instance_data[instance].uwbListType[uwb_index] = UWB_LIST_NEIGHBOR;
+//		instance_data[instance].uwbListType[uwb_index] = UWB_LIST_NEIGHBOR;
+		tdma_handler.uwbListTDMAInfo[uwb_index].connectionType = UWB_LIST_NEIGHBOR;
 		instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
 		instance_data[instance].uwbTimeout[uwb_index] = 0;
 
@@ -1839,13 +1846,13 @@ int instance_run(void)
 		uint32 time_now = portGetTickCnt();
 
 		uint32 delta_t = get_dt32(instance_data[instance].lastCommTimeStamp[i], time_now);
-//		if(instance_data[instance].lastCommTimeStamp[i] + UWB_COMM_TIMEOUT < portGetTickCnt()) //TODO handle number wrapping
 		if(delta_t > UWB_COMM_TIMEOUT) //TODO handle number wrapping
 		{
-//			if(instance_data[instance].uwbTimeout[i] == 0)
-			if(instance_data[instance].uwbListType[i] == UWB_LIST_NEIGHBOR) //what about hidden?
+//			if(instance_data[instance].uwbListType[i] == UWB_LIST_NEIGHBOR) //what about hidden?
+			if(tdma_handler.uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR) //what about hidden?
 			{
-				instance_data[instance].uwbListType[i] = UWB_LIST_INACTIVE; //TODO release TDMA slots as well
+//				instance_data[instance].uwbListType[i] = UWB_LIST_INACTIVE; //TODO release TDMA slots as well
+				tdma_handler.uwbListTDMAInfo[i].connectionType = UWB_LIST_INACTIVE; //TODO release TDMA slots as well
 				instance_data[instance].uwbTimeout[i] = 1;
 
 				//NEW

@@ -7,6 +7,12 @@
 
 struct TDMAInfo
 {
+	//lastCommNeighbor
+	//lastCommHidden
+	//lastComm2Hidden
+	uint64 frameStartTime;
+	uint32 lastRange;
+	uint8 connectionType;       //UWB_LIST_SELF, UWB_LIST_NEIGHBOR, UWB_LIST_HIDDEN, UWB_LIST_INACTIVE
 	uint8 uwbIndex; //TODO remove if unused
 	uint8 framelength;
 	uint8 slotsLength;
@@ -45,7 +51,7 @@ struct TDMAHandler
 	uint64 lastINFrx;
 
 
-	uint64 uwbFrameStartTimes64[UWB_LIST_SIZE];
+//	uint64 uwbFrameStartTimes64[UWB_LIST_SIZE];
 	uint64 lastFST;
 	uint64 lastSlotStartTime64;
 	uint32 slotDuration_ms;   //TODO make variable in duration based on UWB_LIST_SIZE

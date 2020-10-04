@@ -529,7 +529,8 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 					memcpy(&inst->uwbList[0][0], &inst->eui64, inst->addrByteSize);
 #endif
 					inst->uwbListLen = 1;
-					inst->uwbListType[0] = UWB_LIST_SELF;
+//					inst->uwbListType[0] = UWB_LIST_SELF;
+					tdma_handler->uwbListTDMAInfo[0].connectionType = UWB_LIST_SELF;
 
                     mode = (DWT_PRESRV_SLEEP|DWT_CONFIG|DWT_TANDV);
 
@@ -1783,7 +1784,9 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 		                        }
 		                    }
 
-                            inst->lastRangeTimeStamp[inst->uwbToRangeWith] = portGetTickCnt();
+
+//                            inst->lastRangeTimeStamp[inst->uwbToRangeWith] = portGetTickCnt();
+                            tdma_handler->uwbListTDMAInfo[inst->uwbToRangeWith].lastRange = portGetTickCnt();
 
                             inst->newRangeTagAddress = instance_get_uwbaddr(inst->uwbToRangeWith);
                             inst->newRangeAncAddress = instance_get_addr();
@@ -1845,7 +1848,8 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 									}
 								}
 
-								inst->lastRangeTimeStamp[inst->uwbToRangeWith] = portGetTickCnt();
+//								inst->lastRangeTimeStamp[inst->uwbToRangeWith] = portGetTickCnt();
+								tdma_handler->uwbListTDMAInfo[inst->uwbToRangeWith].lastRange = portGetTickCnt();
 
 								uint8 debug_msg[100];
 //								int n = sprintf((char *)&debug_msg, "POLL_COMPLETE,%llX,%llX", inst->newRangeTagAddress, inst->newRangeAncAddress);

@@ -151,19 +151,19 @@ typedef struct
     uint8 uwbListLen ;
 
 	uint8 uwbList[UWB_LIST_SIZE][8];		//index 0 reserved for self, rest for other tracked uwbs
-	uint8 uwbListType[UWB_LIST_SIZE];       //UWB_LIST_SELF, UWB_LIST_NEIGHBOR, UWB_LIST_HIDDEN, UWB_LIST_INACTIVE
+//	uint8 uwbListType[UWB_LIST_SIZE];       //UWB_LIST_SELF, UWB_LIST_NEIGHBOR, UWB_LIST_HIDDEN, UWB_LIST_INACTIVE
 
-	uint8 uwbNumActive[UWB_LIST_SIZE];		//number of TAGs each tracked ANCHOR is actively ranging with. //TODO remove?
+//	uint8 uwbNumActive[UWB_LIST_SIZE];		//number of TAGs each tracked ANCHOR is actively ranging with. //TODO remove?
 
     // keep track of when final messages so we can drop uwbs that we haven't communicated with in a while
     uint32 lastCommTimeStamp[UWB_LIST_SIZE]; //TODO move into tdma_handler?
     uint32 lastHiddenTimeStamp[UWB_LIST_SIZE];
     uint32 lastTwiceHiddenTimeStamp[UWB_LIST_SIZE];
-    uint8 uwbTimeout[UWB_LIST_SIZE] ;
+    uint8 uwbTimeout[UWB_LIST_SIZE] ;		//TODO remove and use list type instead
 
-    uint32 lastRangeTimeStamp[UWB_LIST_SIZE];
+//    uint32 lastRangeTimeStamp[UWB_LIST_SIZE];
 
-    uint8 time_till_next_reported[UWB_LIST_SIZE]; //used to keep track of whether we reported the RX_ACCEPT node. 0 if no, 1 if yes.
+//    uint8 time_till_next_reported[UWB_LIST_SIZE]; //used to keep track of whether we reported the RX_ACCEPT node. 0 if no, 1 if yes.
 
     uint32 blink_start;
     uint32 range_start;

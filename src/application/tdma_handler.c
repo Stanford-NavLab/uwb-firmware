@@ -28,7 +28,8 @@ static bool slot_transition(struct TDMAHandler *this)
 			//we have transitioned into the next slot.
 			//get the slot number and set the start time appropriately
 
-			uint64 timeSinceFrameStart64 = get_dt64(this->uwbFrameStartTimes64[0], time_now_us);
+//			uint64 timeSinceFrameStart64 = get_dt64(this->uwbFrameStartTimes64[0], time_now_us);
+			uint64 timeSinceFrameStart64 = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
 
 			uint64 frameDuration64 = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
 			if(timeSinceFrameStart64 >= frameDuration64)
@@ -48,14 +49,17 @@ static bool slot_transition(struct TDMAHandler *this)
 
 			while(timeSinceFrameStart64 >= frameDuration64)
 			{
-				this->uwbFrameStartTimes64[0] = timestamp_add64(this->uwbFrameStartTimes64[0], frameDuration64);
+//				this->uwbFrameStartTimes64[0] = timestamp_add64(this->uwbFrameStartTimes64[0], frameDuration64);
+				this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, frameDuration64);
 				timeSinceFrameStart64 -= frameDuration64;
 			}
 
-			this->lastFST = this->uwbFrameStartTimes64[0];
+//			this->lastFST = this->uwbFrameStartTimes64[0];
+			this->lastFST = this->uwbListTDMAInfo[0].frameStartTime;
 
 			uint8 slot = timeSinceFrameStart64/(this->slotDuration_us); //integer division rounded down
-			this->lastSlotStartTime64 = this->uwbFrameStartTimes64[0] + (uint64)(this->slotDuration_us*slot);
+//			this->lastSlotStartTime64 = this->uwbFrameStartTimes64[0] + (uint64)(this->slotDuration_us*slot);
+			this->lastSlotStartTime64 = this->uwbListTDMAInfo[0].frameStartTime + (uint64)(this->slotDuration_us*slot);
 
 
 //				uint8 debug_msg[100];
@@ -152,13 +156,16 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 	uint64 txrx_delay =  (uint64)(convertdevicetimetosec(tx_antenna_delay + rxfs_process_delay)*1000000.0) + inst->storePreLen_us;
 
 	uint64 hisTimeSinceFrameStart_us = timeSinceFrameStart_us + txrx_delay;
-	this->uwbFrameStartTimes64[srcIndex] = timestamp_subtract64(time_now_us, hisTimeSinceFrameStart_us); //TODO consider applying the diff!
+//	this->uwbFrameStartTimes64[srcIndex] = timestamp_subtract64(time_now_us, hisTimeSinceFrameStart_us); //TODO consider applying the diff!
+	this->uwbListTDMAInfo[srcIndex].frameStartTime = timestamp_subtract64(time_now_us, hisTimeSinceFrameStart_us); //TODO consider applying the diff!
 
 	if(mode == FS_ADOPT) //TODO this might not be right! incoming framelength not always the same as ours!
 	{
-		this->uwbFrameStartTimes64[0] = this->uwbFrameStartTimes64[srcIndex];
+//		this->uwbFrameStartTimes64[0] = this->uwbFrameStartTimes64[srcIndex];
+		this->uwbListTDMAInfo[0].frameStartTime = this->uwbListTDMAInfo[srcIndex].frameStartTime;
 		uint8 slot = hisTimeSinceFrameStart_us/this->slotDuration_us; //integer division rounded down
-		this->lastSlotStartTime64 = this->uwbFrameStartTimes64[0] + (uint64)((this->slotDuration_us)*slot);
+//		this->lastSlotStartTime64 = this->uwbFrameStartTimes64[0] + (uint64)((this->slotDuration_us)*slot);
+		this->lastSlotStartTime64 = this->uwbListTDMAInfo[0].frameStartTime + (uint64)((this->slotDuration_us)*slot);
 	}
 	else if(mode == FS_COLLECT)
 	{
@@ -167,7 +174,8 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 	else// if(mode == FS_AVERAGE || mode == FS_EVAL) //TODO consider using a weighted average. perhaps use threshholds to determine if instead we should just use the ADOPT logic
 	{
 //		uint64 myFramelengthDuration_us = this->uwbListTDMAInfo[0].framelength*this->slotDuration_us;
-		uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbFrameStartTimes64[0], time_now_us);
+//		uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbFrameStartTimes64[0], time_now_us);
+		uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
 
 		////OLD WAY
 
@@ -300,7 +308,8 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 //			 send_usbmessage(&debug_msg[0], n);
 //			 usb_run();
 
-			this->uwbFrameStartTimes64[0] = timestamp_add64(this->uwbFrameStartTimes64[0], diff_us/div);
+//			this->uwbFrameStartTimes64[0] = timestamp_add64(this->uwbFrameStartTimes64[0], diff_us/div);
+			this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, diff_us/div);
 			this->lastSlotStartTime64 = timestamp_add64(this->lastSlotStartTime64, diff_us/div);
 		}
 		else
@@ -309,7 +318,8 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 //			 int n = sprintf((char*)&debug_msg[0], "subtract %llu", diff_us);
 //			 send_usbmessage(&debug_msg[0], n);
 //			 usb_run();
-			this->uwbFrameStartTimes64[0] = timestamp_subtract64(this->uwbFrameStartTimes64[0], diff_us/div);
+//			this->uwbFrameStartTimes64[0] = timestamp_subtract64(this->uwbFrameStartTimes64[0], diff_us/div);
+			this->uwbListTDMAInfo[0].frameStartTime = timestamp_subtract64(this->uwbListTDMAInfo[0].frameStartTime, diff_us/div);
 			this->lastSlotStartTime64 = timestamp_subtract64(this->lastSlotStartTime64, diff_us/div);
 		}
 
@@ -323,7 +333,8 @@ static bool tx_sync_msg(struct TDMAHandler *this)
 {
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
 	uint64 time_now_us = portGetTickCntMicro();
-	uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbFrameStartTimes64[0], time_now_us);
+//	uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbFrameStartTimes64[0], time_now_us);
+	uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
 	memcpy(&inst->sync_msg.messageData[SYNC_FRAMELENGTH], &this->uwbListTDMAInfo[0].framelength, sizeof(uint8));
 	memcpy(&inst->sync_msg.messageData[SYNC_TSFS], &myTimeSinceFrameStart_us, 6);
 	int psduLength = 0;
@@ -667,9 +678,11 @@ static bool tx_select(struct TDMAHandler *this) //TODO handle unsuccessful add
 			uint32 timeSinceOldestRange = 0;
 			for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
 			{
-				if(inst->uwbListType[i] == UWB_LIST_NEIGHBOR)
+//				if(inst->uwbListType[i] == UWB_LIST_NEIGHBOR)
+				if(this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR)
 				{
-					uint32 timeSinceRange = get_dt32(inst->lastRangeTimeStamp[i], time_now);
+//					uint32 timeSinceRange = get_dt32(inst->lastRangeTimeStamp[i], time_now);
+					uint32 timeSinceRange = get_dt32(this->uwbListTDMAInfo[i].lastRange, time_now);
 					if(timeSinceRange > timeSinceOldestRange)
 					{
 						timeSinceOldestRange = timeSinceRange;
@@ -842,7 +855,8 @@ static void populate_inf_msg(struct TDMAHandler *this, uint8 inf_msg_type)
 	//neighbor address, framelength, number of slots, and slot assignments
 	for(int i = 1; i < inst->uwbListLen; i++) //slot 0 reserved for self
 	{
-		if(inst->uwbListType[i] == UWB_LIST_NEIGHBOR)
+//		if(inst->uwbListType[i] == UWB_LIST_NEIGHBOR)
+		if(this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR)
 		{
 			struct TDMAInfo *info = &this->uwbListTDMAInfo[i];
 
@@ -870,7 +884,8 @@ static void populate_inf_msg(struct TDMAHandler *this, uint8 inf_msg_type)
 	//hidden address, framelength, number of slots, and slot assignments
 	for(int i = 1; i < inst->uwbListLen; i++) //slot 0 reserved for self
 	{
-		if(inst->uwbListType[i] == UWB_LIST_HIDDEN)
+//		if(inst->uwbListType[i] == UWB_LIST_HIDDEN)
+		if(this->uwbListTDMAInfo[i].connectionType == UWB_LIST_HIDDEN)
 		{
 			struct TDMAInfo *info = &this->uwbListTDMAInfo[i];
 
@@ -912,11 +927,13 @@ static void update_inf_tsfs(struct TDMAHandler *this)
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
 	uint64 time_now_us = portGetTickCntMicro();
 	int msgDataIndex = TDMA_TSFS;
-	uint64 timeSinceFrameStart64 = get_dt64(this->uwbFrameStartTimes64[0], time_now_us);
+//	uint64 timeSinceFrameStart64 = get_dt64(this->uwbFrameStartTimes64[0], time_now_us);
+	uint64 timeSinceFrameStart64 = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
 	uint64 frameDuration = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
 	while(timeSinceFrameStart64 > frameDuration)
 	{
-		this->uwbFrameStartTimes64[0] = timestamp_add64(this->uwbFrameStartTimes64[0], frameDuration);
+//		this->uwbFrameStartTimes64[0] = timestamp_add64(this->uwbFrameStartTimes64[0], frameDuration);
+		this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, frameDuration);
 		timeSinceFrameStart64 -= frameDuration;
 	}
 
@@ -995,7 +1012,8 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 	}
 
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
-	inst->uwbListType[srcIndex] = UWB_LIST_NEIGHBOR;
+//	inst->uwbListType[srcIndex] = UWB_LIST_NEIGHBOR;
+	this->uwbListTDMAInfo[srcIndex].connectionType = UWB_LIST_NEIGHBOR;
 
 	uint8 numNeighbors;
 	uint8 numHidden;
@@ -1090,9 +1108,11 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 		uint8 uwb_index = instgetuwblistindex(inst, &address[0], inst->addrByteSize);
 		if(uwb_index != 0)
 		{
-			if(inst->uwbListType[uwb_index] == UWB_LIST_INACTIVE || inst->uwbListType[uwb_index] == UWB_LIST_TWICE_HIDDEN)
+//			if(inst->uwbListType[uwb_index] == UWB_LIST_INACTIVE || inst->uwbListType[uwb_index] == UWB_LIST_TWICE_HIDDEN)
+			if(this->uwbListTDMAInfo[uwb_index].connectionType == UWB_LIST_INACTIVE || this->uwbListTDMAInfo[uwb_index].connectionType == UWB_LIST_TWICE_HIDDEN)
 			{
-				inst->uwbListType[uwb_index] = UWB_LIST_HIDDEN;
+//				inst->uwbListType[uwb_index] = UWB_LIST_HIDDEN;
+				this->uwbListTDMAInfo[uwb_index].connectionType = UWB_LIST_HIDDEN;
 			}
 
 			inst->lastHiddenTimeStamp[uwb_index] = time_now;
@@ -1165,9 +1185,11 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 		uint8 uwb_index = instgetuwblistindex(inst, &address[0], inst->addrByteSize);
 		if(uwb_index != 0)//0 reserved for self
 		{
-			if(inst->uwbListType[uwb_index] == UWB_LIST_INACTIVE)
+//			if(inst->uwbListType[uwb_index] == UWB_LIST_INACTIVE)
+			if(this->uwbListTDMAInfo[uwb_index].connectionType == UWB_LIST_INACTIVE)
 			{
-				inst->uwbListType[uwb_index] = UWB_LIST_TWICE_HIDDEN;
+//				inst->uwbListType[uwb_index] = UWB_LIST_TWICE_HIDDEN;
+				this->uwbListTDMAInfo[uwb_index].connectionType = UWB_LIST_TWICE_HIDDEN;
 			}
 
 			inst->lastTwiceHiddenTimeStamp[uwb_index] = time_now;
@@ -1240,10 +1262,14 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 				if((uwbListInMsg[i] == FALSE && uwbListInMsg[j] == TRUE) || (uwbListInMsg[i] == TRUE && uwbListInMsg[j] == FALSE))
 				{
 
-					if((inst->uwbListType[i] == UWB_LIST_NEIGHBOR && inst->uwbListType[j] == UWB_LIST_NEIGHBOR) ||
-					   (inst->uwbListType[i] == UWB_LIST_NEIGHBOR && inst->uwbListType[j] == UWB_LIST_HIDDEN)   ||
-					   (inst->uwbListType[j] == UWB_LIST_NEIGHBOR && inst->uwbListType[i] == UWB_LIST_NEIGHBOR) ||
-					   (inst->uwbListType[j] == UWB_LIST_NEIGHBOR && inst->uwbListType[i] == UWB_LIST_HIDDEN))
+//					if((inst->uwbListType[i] == UWB_LIST_NEIGHBOR && inst->uwbListType[j] == UWB_LIST_NEIGHBOR) ||
+//					   (inst->uwbListType[i] == UWB_LIST_NEIGHBOR && inst->uwbListType[j] == UWB_LIST_HIDDEN)   ||
+//					   (inst->uwbListType[j] == UWB_LIST_NEIGHBOR && inst->uwbListType[i] == UWB_LIST_NEIGHBOR) ||
+//					   (inst->uwbListType[j] == UWB_LIST_NEIGHBOR && inst->uwbListType[i] == UWB_LIST_HIDDEN))
+					if((this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR && this->uwbListTDMAInfo[j].connectionType == UWB_LIST_NEIGHBOR) ||
+					   (this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR && this->uwbListTDMAInfo[j].connectionType == UWB_LIST_HIDDEN)   ||
+					   (this->uwbListTDMAInfo[j].connectionType == UWB_LIST_NEIGHBOR && this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR) ||
+					   (this->uwbListTDMAInfo[j].connectionType == UWB_LIST_NEIGHBOR && this->uwbListTDMAInfo[i].connectionType == UWB_LIST_HIDDEN))
 					{
 						//TODO make sure this is okay. will i need to ensure the assignments from the message are maintained?
 						if(this->deconflict_uwb_pair(this, &this->uwbListTDMAInfo[i], &this->uwbListTDMAInfo[j]) == TRUE)
@@ -2082,7 +2108,8 @@ static void build_new_network(struct TDMAHandler *this)
 //	this->lastSlotStartTime_stm32 = time_now;
 
 	//build the initial TDMA
-	this->uwbFrameStartTimes64[0] = timestamp_subtract64(time_now_us, this->slotDuration_us);
+//	this->uwbFrameStartTimes64[0] = timestamp_subtract64(time_now_us, this->slotDuration_us);
+	this->uwbListTDMAInfo[0].frameStartTime = timestamp_subtract64(time_now_us, this->slotDuration_us);
 	this->lastSlotStartTime64 = time_now_us;
 
 
@@ -2106,17 +2133,23 @@ static bool deconflict_slot_assignments(struct TDMAHandler *this)
 		//first deconflict slots in neighbor, hidden, and twice hidden
 		for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
 		{
-			if(inst->uwbListType[i] != UWB_LIST_INACTIVE)
+//			if(inst->uwbListType[i] != UWB_LIST_INACTIVE)
+			if(this->uwbListTDMAInfo[i].connectionType != UWB_LIST_INACTIVE)
 			{
 				for(int j = i+1; j < inst->uwbListLen; j++)
 				{
-					if(inst->uwbListType[j] != UWB_LIST_INACTIVE && j != i)
+//					if(inst->uwbListType[j] != UWB_LIST_INACTIVE && j != i)
+					if(this->uwbListTDMAInfo[j].connectionType != UWB_LIST_INACTIVE && j != i)
 					{
 						//first check if their list type requires deconflicting
-						if((inst->uwbListType[i] == UWB_LIST_NEIGHBOR && inst->uwbListType[j] == UWB_LIST_TWICE_HIDDEN) ||
-						   (inst->uwbListType[j] == UWB_LIST_NEIGHBOR && inst->uwbListType[i] == UWB_LIST_TWICE_HIDDEN) ||
-						   (inst->uwbListType[i] == UWB_LIST_TWICE_HIDDEN && inst->uwbListType[j] == UWB_LIST_TWICE_HIDDEN) ||
-						   (inst->uwbListType[i] == UWB_LIST_HIDDEN && inst->uwbListType[j] == UWB_LIST_HIDDEN))
+//						if((inst->uwbListType[i] == UWB_LIST_NEIGHBOR && inst->uwbListType[j] == UWB_LIST_TWICE_HIDDEN) ||
+//						   (inst->uwbListType[j] == UWB_LIST_NEIGHBOR && inst->uwbListType[i] == UWB_LIST_TWICE_HIDDEN) ||
+//						   (inst->uwbListType[i] == UWB_LIST_TWICE_HIDDEN && inst->uwbListType[j] == UWB_LIST_TWICE_HIDDEN) ||
+//						   (inst->uwbListType[i] == UWB_LIST_HIDDEN && inst->uwbListType[j] == UWB_LIST_HIDDEN))
+						if((this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR && this->uwbListTDMAInfo[j].connectionType == UWB_LIST_TWICE_HIDDEN) ||
+						   (this->uwbListTDMAInfo[j].connectionType == UWB_LIST_NEIGHBOR && this->uwbListTDMAInfo[i].connectionType == UWB_LIST_TWICE_HIDDEN) ||
+						   (this->uwbListTDMAInfo[i].connectionType == UWB_LIST_TWICE_HIDDEN && this->uwbListTDMAInfo[j].connectionType == UWB_LIST_TWICE_HIDDEN) ||
+						   (this->uwbListTDMAInfo[i].connectionType == UWB_LIST_HIDDEN && this->uwbListTDMAInfo[j].connectionType == UWB_LIST_HIDDEN))
 						{
 							continue;
 						}
@@ -2146,7 +2179,8 @@ static bool deconflict_slot_assignments(struct TDMAHandler *this)
 		//next deconflict slots between self and neighbor, hidden, and twice hidden
 		for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
 		{
-			if(inst->uwbListType[i] != UWB_LIST_INACTIVE)
+//			if(inst->uwbListType[i] != UWB_LIST_INACTIVE)
+			if(this->uwbListTDMAInfo[i].connectionType != UWB_LIST_INACTIVE)
 			{
 				if(this->deconflict_uwb_pair(this, &this->uwbListTDMAInfo[0], &this->uwbListTDMAInfo[i]))
 				{
@@ -2420,9 +2454,12 @@ static bool self_conflict(struct TDMAHandler *this)
 
 	for(int b = 1; b < inst->uwbListLen; b++)
 	{
-		if(inst->uwbListType[b] == UWB_LIST_NEIGHBOR ||
-		   inst->uwbListType[b] == UWB_LIST_HIDDEN   ||
-		   inst->uwbListType[b] == UWB_LIST_TWICE_HIDDEN)
+//		if(inst->uwbListType[b] == UWB_LIST_NEIGHBOR ||
+//		   inst->uwbListType[b] == UWB_LIST_HIDDEN   ||
+//		   inst->uwbListType[b] == UWB_LIST_TWICE_HIDDEN)
+		if(this->uwbListTDMAInfo[b].connectionType == UWB_LIST_NEIGHBOR ||
+			this->uwbListTDMAInfo[b].connectionType == UWB_LIST_HIDDEN   ||
+			this->uwbListTDMAInfo[b].connectionType == UWB_LIST_TWICE_HIDDEN)
 		{
 			struct TDMAInfo *info_b = &this->uwbListTDMAInfo[b];
 
@@ -2646,14 +2683,16 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 
 			for(int i=1; i < inst->uwbListLen; i++) //zero reserved for self
 			{
-				if(inst->uwbListType[i] != UWB_LIST_NEIGHBOR)
+//				if(inst->uwbListType[i] != UWB_LIST_NEIGHBOR)
+				if(this->uwbListTDMAInfo[i].connectionType != UWB_LIST_NEIGHBOR)
 				{
 					continue; //TODO consider a way to accoutn for hidden and twice hidden to determine which netowrk is larger
 				}
 
 				struct TDMAInfo *info_i = &this->uwbListTDMAInfo[i];
 //				uint64 framelengthDuration_us = info_i->framelength*this->slotDuration_us;
-				uint64 timeSinceFrameStart_us = get_dt64(this->uwbFrameStartTimes64[i], time_now_us);
+//				uint64 timeSinceFrameStart_us = get_dt64(this->uwbFrameStartTimes64[i], time_now_us);
+				uint64 timeSinceFrameStart_us = get_dt64(this->uwbListTDMAInfo[i].frameStartTime, time_now_us);
 
 				//if tsfs > framelengthDuration_us, reduce it by framelengthDuration_us
 
@@ -2738,7 +2777,8 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 						//reached the last listed sub_netowrk, list a new subnetwork.
 						sub_network_members[num_sub_networks] = 1;
 						sub_network_base_framelength[num_sub_networks] = this->uwbListTDMAInfo[i].framelength;
-						sub_network_tsfs[num_sub_networks] = get_dt64(this->uwbFrameStartTimes64[i], time_now_us);
+//						sub_network_tsfs[num_sub_networks] = get_dt64(this->uwbFrameStartTimes64[i], time_now_us);
+						sub_network_tsfs[num_sub_networks] = get_dt64(this->uwbListTDMAInfo[i].frameStartTime, time_now_us);
 						sub_network_membership[num_sub_networks] = num_sub_networks;
 						num_sub_networks++;
 						break;
@@ -2780,10 +2820,12 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 
 			for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
 			{
-				if(inst->uwbListType[i] == UWB_LIST_NEIGHBOR && sub_network_membership[i] == sub_network_selected)
+//				if(inst->uwbListType[i] == UWB_LIST_NEIGHBOR && sub_network_membership[i] == sub_network_selected)
+				if(this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR && sub_network_membership[i] == sub_network_selected)
 				{
 					neighborIndices[nidx] = i;
-					tnext[nidx] = this->uwbFrameStartTimes64[i];
+//					tnext[nidx] = this->uwbFrameStartTimes64[i];
+					tnext[nidx] = this->uwbListTDMAInfo[i].frameStartTime;
 					while(time_now_us > tnext[nidx]) //TODO handle number wrapping...
 					{
 						tnext[nidx] += this->uwbListTDMAInfo[i].framelength*slotDuration_us;
@@ -2853,15 +2895,20 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 
 			//back-track the frame start time so we can inform the need to rebase
 			//and keep in sync with the subnetwork we initially chose to sync with
-			this->uwbFrameStartTimes64[0] = latest_tnext;
+//			this->uwbFrameStartTimes64[0] = latest_tnext;
+			this->uwbListTDMAInfo[0].frameStartTime = latest_tnext;
 			//TODO handle number wrapping
 			uint64 myFrameDuration = this->uwbListTDMAInfo[0].framelength*this->slotDuration_us;
-			while(this->uwbFrameStartTimes64[0] > time_now_us)
+//			while(this->uwbFrameStartTimes64[0] > time_now_us)
+			while(this->uwbListTDMAInfo[0].frameStartTime > time_now_us)
 			{
-				this->uwbFrameStartTimes64[0] -= myFrameDuration;
+//				this->uwbFrameStartTimes64[0] -= myFrameDuration;
+				this->uwbListTDMAInfo[0].frameStartTime -= myFrameDuration;
 			}
-			uint8 slot = this->uwbFrameStartTimes64[0]/this->slotDuration_us; //integer division rounded down
-			this->lastSlotStartTime64 = this->uwbFrameStartTimes64[0] + (uint64)(this->slotDuration_us*slot);
+//			uint8 slot = this->uwbFrameStartTimes64[0]/this->slotDuration_us; //integer division rounded down
+			uint8 slot = this->uwbListTDMAInfo[0].frameStartTime/this->slotDuration_us; //integer division rounded down
+//			this->lastSlotStartTime64 = this->uwbFrameStartTimes64[0] + (uint64)(this->slotDuration_us*slot);
+			this->lastSlotStartTime64 = this->uwbListTDMAInfo[0].frameStartTime + (uint64)(this->slotDuration_us*slot);
 
 //			this->lastSlotStartTime64 = this->uwbFrameStartTimes64[0];
 
@@ -3078,9 +3125,12 @@ static struct TDMAHandler new(){
 		ret.uwbListTDMAInfo[i].framelength = (uint8)MIN_FRAMELENGTH;
 		ret.uwbListTDMAInfo[i].slots = NULL;
 		ret.uwbListTDMAInfo[i].slotsLength = 0;
+		ret.uwbListTDMAInfo[i].frameStartTime = time_now_us;
+		ret.uwbListTDMAInfo[i].connectionType = UWB_LIST_INACTIVE;
 	}
+	ret.uwbListTDMAInfo[0].connectionType = UWB_LIST_SELF;
 
-    ret.uwbFrameStartTimes64[0] = time_now_us;
+//    ret.uwbFrameStartTimes64[0] = time_now_us;
     ret.lastFST = time_now_us;
     ret.lastSlotStartTime64 = time_now_us;
     ret.infSentThisSlot = FALSE;
