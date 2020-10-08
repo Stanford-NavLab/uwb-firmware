@@ -302,7 +302,7 @@ int dw_main(void)
 {
     int i = 0;
     double range_result = 0;
-//    uint64 range_addr = 0;
+    uint64 range_addr = 0;
     int canSleep;
 
     //LCD variables
