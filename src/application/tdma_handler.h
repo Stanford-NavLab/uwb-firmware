@@ -7,13 +7,13 @@
 
 struct TDMAInfo
 {
-	//lastCommNeighbor
-	//lastCommHidden
-	//lastComm2Hidden
-	uint64 frameStartTime;
-	uint32 lastRange;
+//	uint8 uwbIndex; //TODO remove if unused
 	uint8 connectionType;       //UWB_LIST_SELF, UWB_LIST_NEIGHBOR, UWB_LIST_HIDDEN, UWB_LIST_INACTIVE
-	uint8 uwbIndex; //TODO remove if unused
+	uint32 lastCommNeighbor;	//milliseconds
+	uint32 lastCommHidden;		//milliseconds
+	uint32 lastCommTwiceHidden;		//milliseconds
+	uint32 lastRange;			//milliseconds
+	uint64 frameStartTime;		//microseconds
 	uint8 framelength;
 	uint8 slotsLength;
 	uint8 *slots;
@@ -47,17 +47,14 @@ struct TDMAHandler
 
 	//TODO use smaller data types where possible
 
-	uint64 lastINFtx;
-	uint64 lastINFrx;
-
-
-//	uint64 uwbFrameStartTimes64[UWB_LIST_SIZE];
 	uint64 lastFST;
 	uint64 lastSlotStartTime64;
 	uint32 slotDuration_ms;   //TODO make variable in duration based on UWB_LIST_SIZE
 	uint32 slotDuration_us;   //TODO make variable in duration based on UWB_LIST_SIZE
 	bool infSentThisSlot;
-	bool pollSentThisSlot;
+	bool firstPollSentThisSlot;
+	bool firstPollComplete;
+	bool secondPollSentThisSlot;
 	bool rebase_pending;
 	bool rebase_tx;
 	uint64 rebase_frameStartTime64; //TODO rename 64 to us!
@@ -81,7 +78,6 @@ struct TDMAHandler
 
     //class functions
 	bool (*slot_transition)(struct TDMAHandler *this);
-//	void (*frame_sync)(struct TDMAHandler *this, event_data_t *dw_event, uint8 *messageData, uint8 srcIndex, FRAME_SYNC_MODE mode);
 	void (*frame_sync)(struct TDMAHandler *this, event_data_t *dw_event, uint8 framelength, uint64 timeSinceFrameStart_us, uint8 srcIndex, FRAME_SYNC_MODE mode);
 	bool (*tx_sync_msg)(struct TDMAHandler *this);
 	void (*update_inf_tsfs)(struct TDMAHandler *this);
@@ -94,11 +90,9 @@ struct TDMAHandler
     void (*enter_discovery_mode)(struct TDMAHandler *this);
     void (*set_discovery_mode)(struct TDMAHandler *this, DISCOVERY_MODE mode, uint32 time_now);
     void (*check_discovery_mode_expiration)(struct TDMAHandler *this);
+    bool (*check_timeouts)(struct TDMAHandler *this, uint32 time_now);
+    void (*remove_uwbinfo)(struct TDMAHandler *this, uint8 uwb_index);
     void (*usb_dump_tdma)(struct TDMAHandler *this);
-
-
-    //TODO left off here. updating messageData as well as
-    //TODO revisit anything that works with messageData!!!
     bool (*slot_assigned)(struct TDMAInfo *info, uint8 slot);
     bool (*assign_slot)(struct TDMAInfo *info, uint8 slot, bool safeAssign);
     void (*free_slot)(struct TDMAInfo *info, uint8 slot);

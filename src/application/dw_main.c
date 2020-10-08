@@ -302,7 +302,7 @@ int dw_main(void)
 {
     int i = 0;
     double range_result = 0;
-    uint64 range_addr = 0;
+//    uint64 range_addr = 0;
     int canSleep;
 
     //LCD variables
@@ -579,8 +579,8 @@ int dw_main(void)
 			memset(dataseq1, ' ', LCD_BUFF_LEN);
 			uint64 addr = instance_get_addr();
 
-			uint8 num_neighbors = instfindnumactiveneighbors(inst);
-			uint8 num_hidden = instfindnumactivehidden(inst);
+			uint8 num_neighbors = instfindnumneighbors(inst);
+			uint8 num_hidden = instfindnumhidden(inst);
 			char status[10];
 
 			if(instance_mode == DISCOVERY)

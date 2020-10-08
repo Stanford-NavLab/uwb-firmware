@@ -395,11 +395,11 @@ void send_statetousb(instance_data_t *inst, struct TDMAHandler *tdma_handler)
         usbdebugdataprev_size = usbdebugdata_size;
         memcpy(usbdebugdataprev, usbdebugdata, usbdebugdata_size);
 
-        int num_neighbors = instfindnumactiveneighbors(inst);
-		uint8 debug_msg[150];
-		int n = sprintf((char*)&debug_msg[0], "mode: %s, num_neighbors %d, discovery_mode %s", get_instanceModes_string(inst->mode), num_neighbors, get_discovery_modes_string(tdma_handler->discovery_mode));
-		send_usbmessage(&debug_msg[0], n);
-		usb_run();
+//        int num_neighbors = instfindnumneighbors(inst);
+//		uint8 debug_msg[150];
+//		int n = sprintf((char*)&debug_msg[0], "mode: %s, num_neighbors %d, discovery_mode %s", get_instanceModes_string(inst->mode), num_neighbors, get_discovery_modes_string(tdma_handler->discovery_mode));
+//		send_usbmessage(&debug_msg[0], n);
+//		usb_run();
 
     }
 }
@@ -624,10 +624,11 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 
 
-          	//select a TX action, return if TRUE if we should move on to another state
+          	//select a TX action, return TRUE if we should move on to another state
         	if(tdma_handler->tx_select(tdma_handler) == TRUE)
         	{
         		dwt_forcetrxoff();
+
         	}
         	else
         	{
@@ -954,7 +955,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
             //set the delayed rx on time (the response message will be sent after this delay)
             dwt_setrxaftertxdelay(inst->txToRxDelayTag_sy*0); //TODO fix this! remove *0
-            dwt_setrxtimeout((uint16)inst->fwtoTime_sy*0);    //TODO fix this! remove *2
+            dwt_setrxtimeout((uint16)inst->fwtoTime_sy*2);    //TODO fix this! remove *2
 
             //response is expected
             inst->wait4ack = DWT_RESPONSE_EXPECTED;
@@ -1317,6 +1318,18 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
             inst->testAppState = TA_RX_WAIT_DATA;   // let this state handle it
             inst->rxCheckOnTime = portGetTickCnt() + RX_CHECK_ON_PERIOD;
 
+
+//            //see if tx is actually enabled
+//			//read SYS_STATE, getting second byte
+//			uint8 regval = dwt_read8bitoffsetreg(SYS_STATE_ID,1);
+//			//get the first 5 bytes
+//			regval &= 0x1F;
+//			uint8 debug_msg[200];
+//			int n = sprintf((char *)&debug_msg, "RX STATUS: regval %u", regval);
+//			send_usbmessage(&debug_msg[0], n);
+//			usb_run();
+
+
             // end case TA_RXE_WAIT, don't break, but fall through into the TA_RX_WAIT_DATA state to process it immediately.
             if(message == 0) 
             {
@@ -1499,6 +1512,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 							{
 								if(tdma_handler->uwbListTDMAInfo[0].slotsLength == 0)
 								{
+									inst->mode = DISCOVERY;
 									tdma_handler->set_discovery_mode(tdma_handler, WAIT_INF_REG, time_now);
 								}
 							}
@@ -1650,39 +1664,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 							break;
 						}//RTLS_DEMO_MSG_INF
-//                        case RTLS_DEMO_MSG_INF_SUG :
-//						{
-//							//TODO: process differently depending on if we are or aren't in discovery
-//
-//							//process the INF_SUG packet and return to RX
-//							uint8 debug_msg[100];
-//							int n = sprintf((char*)&debug_msg[0], "process RTLS_DEMO_MSG_INF_SUG :");
-//							send_usbmessage(&debug_msg[0], n);
-//							usb_run();
-//
-////							uint8 srcIndex = instgetuwblistindex(inst, &srcAddr[0], inst->addrByteSize);
-////
-////							//synchronise the frames
-////							tdma_handler->frame_sync(tdma_handler, messageData, dw_event->rxLength, srcIndex, FS_ADOPT);
-////							//initialize collection of tdma info, clear any previously stored info
-////							tdma_handler->process_inf_msg(tdma_handler, messageData, srcIndex, CLEAR_ALL_COPY);
-////							//set discovery mode to EXIT
-////							tdma_handler->set_discovery_mode(tdma_handler, EXIT, time_now); //TODO do I really need EXIT?
-//
-//
-//							uint8 srcIndex = instgetuwblistindex(inst, &srcAddr[0], inst->addrByteSize);
-//
-//							//TODO implement
-////							tdma_handler->process_sug_msg(tdma_handler, messageData, &srcAddr);
-//							tdma_handler->process_inf_msg(tdma_handler, messageData, srcIndex, CLEAR_LISTED_COPY);
-//
-//							//TODO add frame sync!
-//
-//							//stay in RX wait for next frame...
-//							inst->testAppState = TA_RXE_WAIT ;              // wait for next frame
-//
-//							break;
-//						}//RTLS_DEMO_MSG_INF_SUG
                         case RTLS_DEMO_MSG_TAG_POLL:
                         {
                             if(dw_event->typePend == DWT_SIG_TX_PENDING)
@@ -1848,7 +1829,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 									}
 								}
 
-//								inst->lastRangeTimeStamp[inst->uwbToRangeWith] = portGetTickCnt();
 								tdma_handler->uwbListTDMAInfo[inst->uwbToRangeWith].lastRange = portGetTickCnt();
 
 								uint8 debug_msg[100];
@@ -1857,9 +1837,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 								send_usbmessage(&debug_msg[0], n);
 								usb_run();
 
-
-								//TODO remember that below is for testing out if its better to send INF as last message
-//								inst->testAppState = TA_TXINF_WAIT_SEND;
+								tdma_handler->firstPollComplete = TRUE;
 								inst->testAppState = TA_TX_SELECT;
 								inst->previousState = TA_INIT;
 								inst->nextState = TA_INIT;

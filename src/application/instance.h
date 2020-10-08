@@ -127,12 +127,12 @@ typedef struct
 	int lateTX;
 	int lateRX;
 
-    double adist[RTD_MED_SZ] ;
-    double adist4[4] ;
-    double longTermRangeSum ;
-    int longTermRangeCount ;
-    int tofIndex ;
-    int tofCount ;
+//    double adist[RTD_MED_SZ] ;
+//    double adist4[4] ;
+//    double longTermRangeSum ;
+//    int longTermRangeCount ;
+//    int tofIndex ;
+//    int tofCount ;
 
     uint8 newRangeUWBIndex; //index for most recent ranging exchange
     int newRange;
@@ -156,10 +156,10 @@ typedef struct
 //	uint8 uwbNumActive[UWB_LIST_SIZE];		//number of TAGs each tracked ANCHOR is actively ranging with. //TODO remove?
 
     // keep track of when final messages so we can drop uwbs that we haven't communicated with in a while
-    uint32 lastCommTimeStamp[UWB_LIST_SIZE]; //TODO move into tdma_handler?
-    uint32 lastHiddenTimeStamp[UWB_LIST_SIZE];
-    uint32 lastTwiceHiddenTimeStamp[UWB_LIST_SIZE];
-    uint8 uwbTimeout[UWB_LIST_SIZE] ;		//TODO remove and use list type instead
+//    uint32 lastCommTimeStamp[UWB_LIST_SIZE]; //TODO move into tdma_handler?
+//    uint32 lastHiddenTimeStamp[UWB_LIST_SIZE];
+//    uint32 lastTwiceHiddenTimeStamp[UWB_LIST_SIZE];
+//    uint8 uwbTimeout[UWB_LIST_SIZE] ;		//TODO remove and use list type instead
 
 //    uint32 lastRangeTimeStamp[UWB_LIST_SIZE];
 
@@ -214,9 +214,10 @@ int instaddactivateuwbinlist(instance_data_t *inst, uint8 *uwbAddr);
 int instcheckactiveuwbinlist(instance_data_t *inst, uint8 *uwbAddr);
 int instfindfirstactiveuwbinlist(instance_data_t *inst, uint8 startindex);
 int instfindnumactiveuwbinlist(instance_data_t *inst);
-int instfindnumactiveneighbors(instance_data_t *inst);
-int instfindnumactivehidden(instance_data_t *inst);
+int instfindnumneighbors(instance_data_t *inst);
+int instfindnumhidden(instance_data_t *inst);
 int instgetuwblistindex(instance_data_t *inst, uint8 *uwbAddr, uint8 addrByteSize);
+void instremoveuwb(instance_data_t *inst, uint8 uwb_index);
 
 
 void instance_readaccumulatordata(void);

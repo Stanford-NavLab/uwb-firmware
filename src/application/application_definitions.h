@@ -144,8 +144,12 @@ enum
 #define BLINK_FRAME_CRTL_AND_ADDRESS    (BLINK_FRAME_SOURCE_ADDRESS + BLINK_FRAME_CTRLP) //10 bytes
 #define BLINK_FRAME_LEN_BYTES           (BLINK_FRAME_CRTL_AND_ADDRESS + BLINK_FRAME_CRC)
 
-#define UWB_LIST_SIZE				    (10)	//maximum number of UWBs to range with (valid options are 0 through 253)//TODO check what works based on data sizes needed for INF packets and 16 or 64 bit addres
-#define UWB_COMM_TIMEOUT                3000    //ms	//TODO maybe make this a function of other defines?
+#define UWB_LIST_SIZE				    10	//the maximum size of the UWB network
+											//do not use a number larger than 80 if USING_64BIT_ADDR==1 and 127 if USING_64BIT_ADDR==0
+											//these are the largest UWB network sizes that the firmware will support.
+											//USING_64BIT_ADDR==1: Limiting factor is the max length of the INF messages
+											//USING_64BIT_ADDR==0: Limiting factor is the max power of 2 that fits in a uint8 (framelength is stored as uint8)
+#define UWB_COMM_TIMEOUT                3000    //ms	//TODO make this a function of UWB_LIST_SIZE, twice the max framelengt? maybe this shouldn't be a define?
 
 //UWB_LIST entry types
 #define UWB_LIST_SELF					0 //entry for self in list
@@ -154,8 +158,8 @@ enum
 #define UWB_LIST_TWICE_HIDDEN			3 //uwb in list that is active, out of range, and a hidden neighbor is slotted to range with
 #define UWB_LIST_INACTIVE               4 //uwb in list that is not active (could have previously been neighbor, hidden, or twice hidden)
 
-#define BLINK_SLEEP_DELAY					0     //ms //how long the tag should sleep after blinking
-#define POLL_SLEEP_DELAY					25     //ms //how long the tag should sleep after ranging
+#define BLINK_SLEEP_DELAY				0     //ms //how long the tag should sleep after blinking
+#define POLL_SLEEP_DELAY				25     //ms //how long the tag should sleep after ranging
 
 
 
@@ -165,15 +169,15 @@ enum
 // NOTE: the maximum RX timeout is ~ 65ms
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-#define INST_DONE_WAIT_FOR_NEXT_EVENT   1   //this signifies that the current event has been processed and instance is ready for next one
+#define INST_DONE_WAIT_FOR_NEXT_EVENT   	1   //this signifies that the current event has been processed and instance is ready for next one
 #define INST_DONE_WAIT_FOR_NEXT_EVENT_TO    2   //this signifies that the current event has been processed and that instance is waiting for next one with a timeout
-                                        //which will trigger if no event coming in specified time
-#define INST_NOT_DONE_YET               0   //this signifies that the instance is still processing the current event
+                                        		//which will trigger if no event coming in specified time
+#define INST_NOT_DONE_YET               	0   //this signifies that the instance is still processing the current event
 
 // Function code byte offset (valid for all message types).
 #define FCODE                               0               // Function code is 1st byte of messageData
 
-//INF message byte offsets
+//INF message byte offsets					//TODO remove the +6
 #define TDMA_TSFS                           1+6				// offset to put time since TDMA frame start in the INF message
 #define TDMA_TSFS_REBASE					7+6				// offset to put whether the receiving UWB needs to rebase its TDMA frame to the transmitted TSFS
 #define TDMA_NUMN							8+6				// offset to put the number of this UWB's neighbors in the INF message
@@ -195,16 +199,6 @@ enum
 //Sync
 #define SYNC_FRAMELENGTH					1				// offset to put the framelength in the sync message
 #define SYNC_TSFS							2				// offset to put the time since TDMA frame start in the sync message
-
-//TODO remove below
-// Ranging init message byte offsets. Composed of tag short address, anchor
-// response delay and tag response delay.
-//#define RNG_INIT_TAG_SHORT_ADDR_LO 1
-//#define RNG_INIT_TAG_SHORT_ADDR_HI 2
-//#define RNG_INIT_ANC_RESP_DLY_LO 3
-//#define RNG_INIT_ANC_RESP_DLY_HI 4
-//#define RNG_INIT_TAG_RESP_DLY_LO 5
-//#define RNG_INIT_TAG_RESP_DLY_HI 6
 
 // Response delay values coded in ranging init message.
 // This is a bitfield composed of:
