@@ -546,50 +546,54 @@ static bool tx_select(struct TDMAHandler *this)
 	{
 		if(this->discovery_mode == WAIT_INF_REG)
 		{
-			//start blinking if enough time has passed since entering DISCOVERY mode
-			uint32 timeSinceDiscoverStart = get_dt32(this->discoveryStartTime, time_now);
-
-//			uint8 debug_msg[100];
-//			int n = sprintf((char *)&debug_msg, "discovery wait inf reg");
-//			send_usbmessage(&debug_msg[0], n);
-//			usb_run();
-
-	//		uint8 debug_msg[100];
-	//		int n = sprintf((char *)&debug_msg, "timeSinceDiscoverStart %lu, maxFrameDuration %lu ", timeSinceDiscoverStart, maxFrameDuration);
-	//		send_usbmessage(&debug_msg[0], n);
-	//		usb_run();
-
-			if(timeSinceDiscoverStart > this->waitInfDuration)
+			if(this->check_blink(this))
 			{
-				//enforce blink period
-				uint32 timeSinceLastBlink = get_dt32(this->last_blink_time, time_now);
-
-	//			uint8 debug_msg[100];
-	//			int n = sprintf((char *)&debug_msg, "timeSinceLastBlink %lu, BLINK_PERIOD_MS %lu ", timeSinceLastBlink, (uint32)BLINK_PERIOD_MS);
-	//			send_usbmessage(&debug_msg[0], n);
-	//			usb_run();
-
-				if(timeSinceLastBlink  > (uint32)BLINK_PERIOD_MS + (uint32)(rand() % 100))
-				{
-					//time to blink
-					uwb_index = 255;
-					this->set_discovery_mode(this, WAIT_RNG_INIT, time_now);
-				}
-				else
-				{
-					//not time to blink yet, keep waiting for RNG_INIT
-					inst->wait4ack = 0;
-					inst->testAppState = TA_RXE_WAIT;
-					return TRUE;
-				}
+				//time to blink
+				uwb_index = 255;
+				this->set_discovery_mode(this, WAIT_RNG_INIT, time_now);
 			}
 			else
 			{
-				//shouldn't be in this mode, should be listening for INF messages
+				//not time to blink yet, keep waiting for RNG_INIT
 				inst->wait4ack = 0;
 				inst->testAppState = TA_RXE_WAIT;
 				return TRUE;
 			}
+
+//			//start blinking if enough time has passed since entering DISCOVERY mode
+//			uint32 timeSinceDiscoverStart = get_dt32(this->discoveryStartTime, time_now);
+//
+//			if(timeSinceDiscoverStart > this->waitInfDuration)
+//			{
+//				//enforce blink period
+//				uint32 timeSinceLastBlink = get_dt32(this->last_blink_time, time_now);
+//
+//	//			uint8 debug_msg[100];
+//	//			int n = sprintf((char *)&debug_msg, "timeSinceLastBlink %lu, BLINK_PERIOD_MS %lu ", timeSinceLastBlink, (uint32)BLINK_PERIOD_MS);
+//	//			send_usbmessage(&debug_msg[0], n);
+//	//			usb_run();
+//
+//				if(timeSinceLastBlink  > (uint32)BLINK_PERIOD_MS + this->blinkPeriodRand)
+//				{
+//					//time to blink
+//					uwb_index = 255;
+//					this->set_discovery_mode(this, WAIT_RNG_INIT, time_now);
+//				}
+//				else
+//				{
+//					//not time to blink yet, keep waiting for RNG_INIT
+//					inst->wait4ack = 0;
+//					inst->testAppState = TA_RXE_WAIT;
+//					return TRUE;
+//				}
+//			}
+//			else
+//			{
+//				//shouldn't be in this mode, should be listening for INF messages
+//				inst->wait4ack = 0;
+//				inst->testAppState = TA_RXE_WAIT;
+//				return TRUE;
+//			}
 		}
 		else if(this->discovery_mode == SEND_SUG)
 		{
@@ -755,21 +759,11 @@ static bool check_blink(struct TDMAHandler *this)
 	{
 		uint32 time_now = portGetTickCnt();
 		uint32 timeSinceDiscoveryStart = get_dt32(this->discoveryStartTime, time_now);
-		if(timeSinceDiscoveryStart > this->maxFramelength*this->slotDuration_ms )
+		if(timeSinceDiscoveryStart > this->waitInfDuration )
 		{
-//			uint8 debug_msg[100];
-//			int n = sprintf((char *)&debug_msg, "in RX_WAIT_DATA, portGetTickCnt(): %lu, inst->last_blink_time: %lu, BLINK_PERIOD_MS: %lu", portGetTickCnt(), inst->last_blink_time, (uint32)BLINK_PERIOD_MS);
-//			send_usbmessage(&debug_msg[0], n);
-//			usb_run();
-
 			uint32 timeSinceBlink = get_dt32(this->last_blink_time, time_now);
-			if(timeSinceBlink > (uint32)BLINK_PERIOD_MS + (uint32)(rand()%100)){
-//				uint8 debug_msg[100];
-//				int n = sprintf((char *)&debug_msg, "in RX_WAIT_DATA, siwtch to TA_TX_SELECT");
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-
-//				this->discovery_mode = WAIT_RNG_INIT;
+			if(timeSinceBlink > (uint32)BLINK_PERIOD_MS + this->blinkPeriodRand)
+			{
 				retval = TRUE;
 			}
 		}
@@ -3255,6 +3249,7 @@ static struct TDMAHandler new(){
 //    ret.collectInfDuration = ret.maxFramelength*ret.slotDuration;
     ret.collectInfDuration = 10000; //TODO change this back
 	ret.waitInfDuration = ret.collectInfDuration;
+	ret.blinkPeriodRand = (uint32)rand()%BLINK_PERIOD_RAND_MS;
 
 	return ret;
 }

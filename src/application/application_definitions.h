@@ -264,16 +264,20 @@ enum
 
 #define BLINK_DURATION_MS						RNG_INIT_REPLY_DLY_MS + 1
 #define RANGE_DURATION_MS						MAX(18, POLL_SLEEP_DELAY)  //to increase time between ranging, modify POLL_SLEEP_DELAY
-//#define BLINK_FREQUENCY							0.0001
-#define BLINK_PERIOD_MS							1000     //time to wait between sending blink messages
+#define BLINK_PERIOD_MS							900     //time to wait between sending blink messages
+#define BLINK_PERIOD_RAND_MS					200
 
-#define RX_CHECK_ON_PERIOD						200 //TODO modify
+
+#define RANGE_INIT_RAND							2000		//in DW1000 device time
+
+
+#define RX_CHECK_ON_PERIOD						200 	//TODO modify
 
 // Reception start-up time, in symbols.
 #define RX_START_UP_SY 16
 
 //TDMA defines
-#define MIN_FRAMELENGTH							4 //minimum size by TDMA E-ASAP
+#define MIN_FRAMELENGTH							4 		//minimum size by TDMA E-ASAP
 
 typedef uint64_t        uint64 ;
 typedef int64_t         int64 ;

@@ -179,8 +179,6 @@ typedef struct
 	uint8 dweventPeek;
 	uint8 monitor;
 	uint32 timeofTx;
-	uint64 timeofRxCallback;
-	uint64 timeofRxCallback_dwtime;
 	uint8 smartPowerEn;
 
 	uint32 currentStateStartTime;

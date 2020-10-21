@@ -280,7 +280,6 @@ int instgetuwblistindex(instance_data_t *inst, uint8 *uwbAddr, uint8 addrByteSiz
 
 	if(match == FALSE)
 	{
-//		instance_data_t *inst = &instance_data[instance];
 		uint8 debug_msg[100];
 		int n = sprintf((char*)&debug_msg[0], "match not found");
 		 send_usbmessage(&debug_msg[0], n);
@@ -296,7 +295,6 @@ int instgetuwblistindex(instance_data_t *inst, uint8 *uwbAddr, uint8 addrByteSiz
             {
                 memcpy(&inst->uwbList[i][0], &uwbAddr[0], addrByteSize) ;
                 inst->uwbListLen = i + 1 ;
-//				inst->uwbTimeout[i] = 1;
 				return i;
             }
         }
@@ -1310,11 +1308,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 		{
 			uint8 destAddr_index = FRAME_CTRLP;
 
-//#if (USING_64BIT_ADDR==0)
-//			if(memcmp(&instance_data[instance].uwbShortAdd, &dw_event.msgu.frame[destAddr_index], instance_data[instance].addrByteSize) != 0)
-//#else
-//    		if(memcmp(&instance_data[instance].eui64[0], &dw_event.msgu.frame[destAddr_index], instance_data[instance].addrByteSize) != 0)
-//#endif
 			if(memcmp(&instance_data[instance].uwbList[0][0], &dw_event.msgu.frame[destAddr_index], instance_data[instance].addrByteSize) != 0)
     		{
 //				uint8 debug_msg[150];
@@ -1362,17 +1355,12 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 #endif
 
 		//must be a neighbor
-//		uwb_index = instgetuwblistindex(&instance_data[instance], &dw_event.msgu.rxblinkmsg.tagID[0], instance_data[instance].addrByteSize);
 		uwb_index = instgetuwblistindex(&instance_data[instance], &blink_address[0], instance_data[instance].addrByteSize);
-//		instance_data[instance].uwbListType[uwb_index] = UWB_LIST_NEIGHBOR;
 
 		if(uwb_index > 0 && uwb_index < UWB_LIST_SIZE)
 		{
-	//		instance_data[instance].uwbListType[uwb_index] = UWB_LIST_NEIGHBOR;
 			tdma_handler.uwbListTDMAInfo[uwb_index].connectionType = UWB_LIST_NEIGHBOR;
-	//		instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
 			tdma_handler.uwbListTDMAInfo[uwb_index].lastCommNeighbor = time_now;
-//			instance_data[instance].uwbTimeout[uwb_index] = 0;
 		}
 
 
@@ -1391,11 +1379,8 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 		if(uwb_index > 0 && uwb_index < UWB_LIST_SIZE)
 		{
 			//TODO maybe do this somewhere else...
-	//		instance_data[instance].uwbListType[uwb_index] = UWB_LIST_NEIGHBOR;
 			tdma_handler.uwbListTDMAInfo[uwb_index].connectionType = UWB_LIST_NEIGHBOR;
-	//		instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
 			tdma_handler.uwbListTDMAInfo[uwb_index].lastCommNeighbor = time_now;
-//			instance_data[instance].uwbTimeout[uwb_index] = 0;
 		}
 
 
@@ -1475,7 +1460,7 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 							dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_UPDATE ||
 							dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_SUG)
 					{
-						if(tdma_handler.discovery_mode == WAIT_INF_REG || tdma_handler.discovery_mode == COLLECT_INF_REG)
+						if(tdma_handler.discovery_mode == WAIT_INF_REG || tdma_handler.discovery_mode == COLLECT_INF_REG || tdma_handler.discovery_mode == WAIT_INF_INIT)
 						{
 							accept_inf = TRUE;
 						}
@@ -1496,10 +1481,10 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 //						send_usbmessage(&debug_msg[0], n);
 //						usb_run();
 
-						if(num_neighbors <= 1)
-						{
+//						if(num_neighbors <= 1) //TODO i don't think I want this
+//						{
 							instance_data[instance].uwbToRangeWith = uwb_index;
-						}
+//						}
 					}
 				}
 			}
@@ -1532,19 +1517,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 
 	if(accept_inf == TRUE)
 	{
-		//NOTE: these could get messed up if other messages trigger rxcallback before being processed by frame sync...
-		//should these be folded into the dw_event?
-		//TODO only do this when we need to (we are accepting and INF message)
-		instance_data[instance].timeofRxCallback = time_now_us;
-
-		//TODO only do this when we need to (we are accepting and INF message)
-		uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
-		dwt_readsystime(sys_time_arr);
-		instance_data[instance].timeofRxCallback_dwtime = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
-
-
-//		instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
-//		instance_data[instance].uwbTimeout[uwb_index] = 0;
 		place_event = 1;
 
 
@@ -1556,9 +1528,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 //			usb_run();
 		}
 
-
-
-
 	}
 	else if(uwb_index != 255 && instance_data[instance].uwbToRangeWith == uwb_index)
 	{
@@ -1568,14 +1537,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 			//process RTLS_DEMO_MSG_TAG_POLL immediately.
 			if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL)
 			{
-//				uint8 debug_msg[100];
-//				int n = sprintf((char *)&debug_msg, "RX_POLL");
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-
-//				instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
-//				instance_data[instance].uwbTimeout[uwb_index] = 0;
-
 				uint16 frameLength = 0;
 
 				instance_data[instance].tagPollRxTime = dw_event.timeStamp ; //Poll's Rx time
@@ -1592,48 +1553,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				frameLength = ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
 #endif
 
-//				instance_data[instance].msg[uwb_index].messageData[FCODE] = RTLS_DEMO_MSG_ANCH_RESP; //message function code (specifies if message is a poll, response or other...)
-//				//program option octet and parameters (not used currently)
-//				instance_data[instance].msg[uwb_index].messageData[RES_R1] = 0x2; // "activity"
-//				instance_data[instance].msg[uwb_index].messageData[RES_R2] = 0x0; //
-//				instance_data[instance].msg[uwb_index].messageData[RES_R3] = 0x0;
-//
-//
-//				memcpy(&instance_data[instance].msg[uwb_index].destAddr[0], &dw_event.msgu.frame[srcAddr_index], instance_data[instance].addrByteSize); //remember who to send the reply to (set destination address)
-//
-//				//if tof not zero, set tof, else memset 0
-//				//also include next TX_ACCEPT node time (offset from now)
-//				// Write calculated TOF into response message
-//				memcpy(&instance_data[instance].msg[uwb_index].messageData[TOFR], &instance_data[instance].tof[uwb_index], 6); //TODO fix number of bytes...
-//
-//				uint8 num_active = 0;
-//				for(int i = 0; i < instance_data[instance].uwbListLen; i++){
-//					if(!instance_data[instance].uwbTimeout[i]){
-//						num_active++;
-//					}
-//				}
-//				memcpy(&instance_data[instance].msg[uwb_index].messageData[NTAG], &num_active, 1);
-//
-//				//get time till the next RX_ACCEPT
-////				uint32 time_till = 0;
-////				if(instance_data[instance].time_till_next_reported[uwb_index] == 0){
-////					time_till =	instance_data[instance].rx_scheduler.get_time_till_next_rx_accept(&instance_data[instance].rx_scheduler);
-////					instance_data[instance].time_till_next_reported[uwb_index] = 1;
-////				}
-////				memcpy(&instance_data[instance].msg[uwb_index].messageData[TIME_TILL], &time_till, 4);
-//
-//
-////				uint8 debug_msg[100];
-////				uint64 mtof = instance_data[instance].msg[uwb_index].messageData[TOFR];
-////				int n = sprintf((char *)&debug_msg, "TOF in resp %llu", mtof);
-////				send_usbmessage(&debug_msg[0], n);
-////				usb_run();
-//
-//
-////				instance_data[instance].tof[uwb_index] = 0; //clear ToF ..
-////
-//				instance_data[instance].msg[uwb_index].seqNum = instance_data[instance].frameSN++;
-
 				instance_data[instance].msg.messageData[FCODE] = RTLS_DEMO_MSG_ANCH_RESP; //message function code (specifies if message is a poll, response or other...)
 
 				memcpy(&instance_data[instance].msg.destAddr[0], &dw_event.msgu.frame[srcAddr_index], instance_data[instance].addrByteSize); //remember who to send the reply to (set destination address)
@@ -1649,7 +1568,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				instance_data[instance].wait4ack = DWT_RESPONSE_EXPECTED;
 
 				dwt_writetxfctrl(frameLength, 0, 1);
-//				dwt_writetxdata(frameLength, (uint8 *)  &instance_data[instance].msg[uwb_index], 0) ;	// write the frame data
 				dwt_writetxdata(frameLength, (uint8 *)  &instance_data[instance].msg, 0) ;	// write the frame data
 
 #if (IMMEDIATE_RESPONSE == 1)
@@ -1668,64 +1586,22 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 					dw_event.typePend = DWT_SIG_TX_PENDING ; // exit this interrupt and notify the application/instance that TX is in progress.
 					instance_data[instance].timeofTx = time_now;
 				}
-				//report out which message is being sent!
-//				send_txmsgtousb(get_msg_fcode_string((int)instance_data[instance].msg[uwb_index].messageData[FCODE]));
 
-//				int64 mtof = 0;
-//				memcpy(&mtof, &instance_data[instance].msg[uwb_index].messageData[TOFR], sizeof(int64));
-//				int64 mtof2 = 0;
-//				memcpy(&mtof2, &instance_data[instance].tof[uwb_index], sizeof(int64));
-//				uint8 debug_msg[100];
-//				int n = sprintf((char *)&debug_msg, ".instance_data[instance].uwbToRangeWith %d, tof[uwb_index] %lld, .msg[uwb_index].messageData[TOFR] %lld",instance_data[instance].uwbToRangeWith, mtof2, mtof);
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
+				instance_data[instance].tof[uwb_index] = 0; //clear ToF .. //TODO does this need to be here?
 
-
-//				uint32 time_till_cpy = 0;
-//				memcpy(&time_till_cpy, &instance_data[instance].msg[uwb_index].messageData[TIME_TILL], sizeof(uint32));
+			}
+//			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_ANCH_RESP)
+//			{
 //
-//				uint8 debug_msg[200];
-//				int n = 0;
-//				n = sprintf((char*)&debug_msg[0], "time_till %lu, memcpy time_till %lu", time_till, time_till_cpy);
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-
-				instance_data[instance].tof[uwb_index] = 0; //clear ToF ..
-
-
-//				uint8 debug_msg[100];
-//				 n = sprintf((char*)&debug_msg[0], "RX TAG_POLL ACCEPTED ANCH_RESP sent <- uwb %d", uwb_index);
-//				 send_usbmessage(&debug_msg[0], n);
-//				 usb_run();
-			}
-			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_ANCH_RESP)
-			{
-//				uint32 response_time = portGetTickCnt() - instance_data[instance].range_start;
-//				instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
-//				instance_data[instance].uwbTimeout[uwb_index] = 0;
-//				uint8 debug_msg[100];
-//				 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: ANCH_RESP <- uwb_index %d", uwb_index);
-//				 send_usbmessage(&debug_msg[0], n);
-//				 usb_run();
-			}
-			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT)
-			{
-//				instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
-//				instance_data[instance].uwbTimeout[uwb_index] = 0;
-//				uint8 debug_msg[100];
-//				 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: RNG_INIT <- uwb_index %d", uwb_index);
-//				 send_usbmessage(&debug_msg[0], n);
-//				 usb_run();
-			}
-			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_FINAL)
-			{
-//				instance_data[instance].lastCommTimeStamp[uwb_index] = time_now;
-//				instance_data[instance].uwbTimeout[uwb_index] = 0;
-//				uint8 debug_msg[100];
-//				 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: TAG_FINAL <- uwb_index %d", uwb_index);
-//				 send_usbmessage(&debug_msg[0], n);
-//				 usb_run();
-			}
+//			}
+//			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT)
+//			{
+//
+//			}
+//			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_FINAL)
+//			{
+//
+//			}
 //			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_REPORT)
 //			{
 //				instance_data[instance].lastCommTimeStamp[uwb_index] = portGetTickCnt();
@@ -1745,11 +1621,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 		}
 		else if (rxd_event == DWT_SIG_RX_BLINK)
 		{
-//			uint8 debug_msg[100];
-//			 int n = sprintf((char*)&debug_msg[0], "RX CALLBACK ACCEPTED: BLINK <- uwb %d", uwb_index);
-//			 send_usbmessage(&debug_msg[0], n);
-//			 usb_run();
-			
 			place_event = 1;
 		}
 	}

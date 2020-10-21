@@ -66,6 +66,7 @@ struct TDMAHandler
 	//discovery variables
 	DISCOVERY_MODE discovery_mode;
 	uint32 last_blink_time;	   //timestamp of most recent blink
+	uint32 blinkPeriodRand;		//random number used to vary blink message transmission interval
 	uint32 discoveryStartTime; //time that we started listening for other UWBs
 	uint32 discovery_mode_start_time;
 	uint32 discovery_mode_duration;
