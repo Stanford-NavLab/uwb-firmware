@@ -242,6 +242,10 @@ extern "C" {
 #define SYS_MASK_MTXBERR        0x10000000UL    /* Mask Transmit Buffer Error event */
 #define SYS_MASK_MAFFREJ        0x20000000UL    /* Mask Automatic Frame Filtering rejection event   */
 
+/* default SYS_MASK settings that will be used in the application */
+#define SYS_MASK_VAL        (DWT_INT_TFRS | DWT_INT_RFCG | DWT_INT_RXOVRR | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO)
+
+
 /****************************************************************************//**
  * @brief Bit definitions for register SYS_STATUS
 **/
@@ -249,7 +253,8 @@ extern "C" {
 #define SYS_STATUS_OFFSET       0x00
 #define SYS_STATUS_LEN          (5)             /* Note 40 bit register */
 /*masks */
-#define SYS_STATUS_MASK_32      0xFFF7FFFFUL    /* System event Status Register access mask (all unused fields should always be writen as zero) */
+//#define SYS_STATUS_MASK_32      0xFFF7FFFFUL    /* System event Status Register access mask (all unused fields should always be writen as zero) */
+#define SYS_STATUS_MASK_32      0x3FF7FFFF    /* System event Status Register access mask (all unused fields should always be writen as zero) */
 /*offset 0 */
 #define SYS_STATUS_IRQS         0x00000001UL    /* Interrupt Request Status READ ONLY */
 #define SYS_STATUS_CPLOCK       0x00000002UL    /* Clock PLL Lock */

@@ -24,7 +24,6 @@
 #define MASK_40BIT			(0x00FFFFFFFFFF)  // DW1000 counter is 40 bits
 #define MASK_42BIT          (0x000003FFFFFFFFFF) //stm32 microsecond timestamps are 42 bits
 #define MASK_TXDTS			(0x00FFFFFFFE00)  //The TX timestamp will snap to 8 ns resolution - mask lower 9 bits.
-#define SYS_MASK_VAL        (DWT_INT_TFRS | DWT_INT_RFCG | DWT_INT_RXOVRR | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO)
 #define DELAY_CALIB (0)                     // when set to 1 - the LCD display will show information used for TX/RX delay calibration
 
 #define SET_TXRX_DELAY (0)                  //when set to 1 - the DW1000 RX and TX delays are set to the TX_DELAY and RX_DELAY defines
@@ -78,13 +77,13 @@ enum
 #define RTLS_DEMO_MSG_SYNC					(0x22)			// Inform other UWBs to sync their TDMA frame start times
 
 //lengths including the Decaranging Message Function Code byte
-#define TAG_POLL_MSG_LEN                    1				// FunctionCode(1),
-#define ANCH_RESPONSE_MSG_LEN               15 //TODO shorten!              // FunctionCode(1), RespOption (1), OptionParam(2), Number of Tags(1), Measured_TOF_Time(6), Time Till next window reserved for catching a blink message (4)
+#define TAG_POLL_MSG_LEN                    1				// FunctionCode(1)
+#define ANCH_RESPONSE_MSG_LEN               1 				// FunctionCode(1)
 #define TAG_FINAL_MSG_LEN                   16              // FunctionCode(1), Poll_TxTime(5), Resp_RxTime(5), Final_TxTime(5)
 #define RANGINGINIT_MSG_LEN					1				// FunctionCode(1)
-#define RNG_REPORT_MSG_LEN_SHORT		    9			// FunctionCode(1), time of flight (6), short address (2)
-#define RNG_REPORT_MSG_LEN_LONG		    	15			// FunctionCode(1), time of flight (6), long address (8)
-#define SYNC_MSG_LEN						8			// FunctionCode (1), framelength (1), time since frame start (6)
+#define RNG_REPORT_MSG_LEN_SHORT		    9				// FunctionCode(1), time of flight (6), short address (2)
+#define RNG_REPORT_MSG_LEN_LONG		    	15				// FunctionCode(1), time of flight (6), long address (8)
+#define SYNC_MSG_LEN						8				// FunctionCode(1), framelength (1), time since frame start (6)
 
 #define MAX_MAC_MSG_DATA_LEN                (TAG_FINAL_MSG_LEN) //max message len of the above
 
@@ -108,9 +107,6 @@ enum
 #define FRAME_CRTL_AND_ADDRESS_L    (FRAME_DEST_ADDRESS_L + FRAME_SOURCE_ADDRESS_L + FRAME_CTRLP) //21 bytes for 64-bit addresses)
 #define FRAME_CRTL_AND_ADDRESS_S    (FRAME_DEST_ADDRESS_S + FRAME_SOURCE_ADDRESS_S + FRAME_CTRLP) //9 bytes for 16-bit addresses)
 #define FRAME_CRTL_AND_ADDRESS_LS	(FRAME_DEST_ADDRESS_L + FRAME_SOURCE_ADDRESS_S + FRAME_CTRLP) //15 bytes for 1 16-bit address and 1 64-bit address)
-//#define MAX_USER_PAYLOAD_STRING_LL     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_L-TAG_FINAL_MSG_LEN-FRAME_CRC) //127 - 21 - 16 - 2 = 88
-//#define MAX_USER_PAYLOAD_STRING_SS     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_S-TAG_FINAL_MSG_LEN-FRAME_CRC) //127 - 9 - 16 - 2 = 100
-//#define MAX_USER_PAYLOAD_STRING_LS     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_LS-TAG_FINAL_MSG_LEN-FRAME_CRC) //127 - 15 - 16 - 2 = 94
 #define MAX_USER_PAYLOAD_STRING_LL     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_L-FRAME_CRC) //127 - 21 - 2 = 104
 #define MAX_USER_PAYLOAD_STRING_SS     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_S-FRAME_CRC) //127 - 9 - 2 = 116
 #define MAX_USER_PAYLOAD_STRING_LS     (STANDARD_FRAME_SIZE-FRAME_CRTL_AND_ADDRESS_LS-FRAME_CRC) //127 - 15 - 2 = 110
@@ -177,14 +173,13 @@ enum
 // Function code byte offset (valid for all message types).
 #define FCODE                               0               // Function code is 1st byte of messageData
 
-//INF message byte offsets					//TODO remove the +6
-#define TDMA_TSFS                           1+6				// offset to put time since TDMA frame start in the INF message
-#define TDMA_TSFS_REBASE					7+6				// offset to put whether the receiving UWB needs to rebase its TDMA frame to the transmitted TSFS
-#define TDMA_NUMN							8+6				// offset to put the number of this UWB's neighbors in the INF message
-#define TDMA_NUMH							9+6				// offset to put the number of this UWB's hidden neighbors in the INF message
-#define TDMA_FRAMELENGTH                    10+6			// offset to put this UWB's TDMA framelength in the INF message
-#define TDMA_NUMS							11+6			// offset to put the number of this UWB's TDMA slot assignments in the INF message
-//TODO remove the +6 from above!
+//INF message byte offsets
+#define TDMA_TSFS                           1				// offset to put time since TDMA frame start in the INF message
+#define TDMA_TSFS_REBASE					7				// offset to put whether the receiving UWB needs to rebase its TDMA frame to the transmitted TSFS
+#define TDMA_NUMN							8				// offset to put the number of this UWB's neighbors in the INF message
+#define TDMA_NUMH							9				// offset to put the number of this UWB's hidden neighbors in the INF message
+#define TDMA_FRAMELENGTH                    10				// offset to put this UWB's TDMA framelength in the INF message
+#define TDMA_NUMS							11				// offset to put the number of this UWB's TDMA slot assignments in the INF message
 
 // Final message byte offsets.
 #define PTXT                                1
@@ -268,7 +263,7 @@ enum
 #define BLINK_PERIOD_RAND_MS					200
 
 
-#define RANGE_INIT_RAND							2000		//in DW1000 device time
+#define RANGE_INIT_RAND							2000		//in DW1000 device time //TODO tune this number
 
 
 #define RX_CHECK_ON_PERIOD						200 	//TODO modify
@@ -317,9 +312,8 @@ typedef enum inst_states
     TA_TXBLINK_WAIT_SEND,       //10
     TA_TXRANGINGINIT_WAIT_SEND, //11
     TA_TX_SELECT,               //12
-    TA_MODE_SELECT,				//13
-    TA_TXREPORT_WAIT_SEND,		//14
-    TA_TXSUG_WAIT_SEND			//15
+    TA_TXREPORT_WAIT_SEND,		//13
+    TA_TXSUG_WAIT_SEND			//14
 } INST_STATES;
 
 

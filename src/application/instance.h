@@ -25,7 +25,7 @@ extern "C" {
 #include "tdma_handler.h"
 
 
-typedef struct
+typedef struct //TODO go through and see what can be removed
 {
     INST_MODE mode;				        //instance mode (tag or anchor)
     INST_STATES testAppState ;			//state machine - current state
@@ -72,18 +72,17 @@ typedef struct
 
 	//message structures used for transmitted messages
 #if (USING_64BIT_ADDR == 1)
-	srd_msg_dlsl rng_initmsg ;	// ranging init message (destination long, source long)
-    srd_ext_msg_dlsl msg; // simple 802.15.4 frame structure (used for tx message) - using long addresses
-	srd_ext_msg_dssl inf_msg;         	  // extended inf message containing frame lengths and slot assignments
-    srd_ext_msg_dssl report_msg;          // extended report message containing the calculated range
-    srd_ext_msg_dssl sync_msg;		      // extended message indicating the need to resync TDMA frame
-    //TODO make sure the dssl are correct! (ds for broadcast?)
+	srd_msg_dlsl rng_initmsg ;				// ranging init message (destination long, source long)
+    srd_ext_msg_dlsl msg; 					// simple 802.15.4 frame structure (used for tx message) - using long addresses
+	srd_ext_msg_dssl inf_msg;         	  	// extended inf message containing frame lengths and slot assignments
+    srd_ext_msg_dssl report_msg;          	// extended report message containing the calculated range
+    srd_ext_msg_dssl sync_msg;		      	// extended message indicating the need to resync TDMA frame
 #else
-	srd_msg_dlss rng_initmsg ;  // ranging init message (destination long, source short)
-    srd_ext_msg_dsss msg; // simple 802.15.4 frame structure (used for tx message) - using short addresses
-    srd_ext_msg_dsss inf_msg;         	  // extended inf message containing frame lengths and slot assignments
-    srd_ext_msg_dsss report_msg;		  // extended report message containing the calculated range
-    srd_ext_msg_dsss sync_msg;		      // extended message indicating the need to resync TDMA frame
+	srd_msg_dlss rng_initmsg ;  			// ranging init message (destination long, source short)
+    srd_ext_msg_dsss msg; 				  	// simple 802.15.4 frame structure (used for tx message) - using short addresses
+    srd_ext_msg_dsss inf_msg;         	  	// extended inf message containing frame lengths and slot assignments
+    srd_ext_msg_dsss report_msg;		  	// extended report message containing the calculated range
+    srd_ext_msg_dsss sync_msg;		      	// extended message indicating the need to resync TDMA frame
 #endif
 	iso_IEEE_EUI64_blink_msg blinkmsg ; // frame structure (used for tx blink message)
 
@@ -127,13 +126,6 @@ typedef struct
 	int lateTX;
 	int lateRX;
 
-//    double adist[RTD_MED_SZ] ;
-//    double adist4[4] ;
-//    double longTermRangeSum ;
-//    int longTermRangeCount ;
-//    int tofIndex ;
-//    int tofCount ;
-
     uint8 newRangeUWBIndex; //index for most recent ranging exchange
     int newRange;
     uint64 newRangeAncAddress; //anchor address for most recent ranging exchange
@@ -151,19 +143,6 @@ typedef struct
     uint8 uwbListLen ;
 
 	uint8 uwbList[UWB_LIST_SIZE][8];		//index 0 reserved for self, rest for other tracked uwbs
-//	uint8 uwbListType[UWB_LIST_SIZE];       //UWB_LIST_SELF, UWB_LIST_NEIGHBOR, UWB_LIST_HIDDEN, UWB_LIST_INACTIVE
-
-//	uint8 uwbNumActive[UWB_LIST_SIZE];		//number of TAGs each tracked ANCHOR is actively ranging with. //TODO remove?
-
-    // keep track of when final messages so we can drop uwbs that we haven't communicated with in a while
-//    uint32 lastCommTimeStamp[UWB_LIST_SIZE]; //TODO move into tdma_handler?
-//    uint32 lastHiddenTimeStamp[UWB_LIST_SIZE];
-//    uint32 lastTwiceHiddenTimeStamp[UWB_LIST_SIZE];
-//    uint8 uwbTimeout[UWB_LIST_SIZE] ;		//TODO remove and use list type instead
-
-//    uint32 lastRangeTimeStamp[UWB_LIST_SIZE];
-
-//    uint8 time_till_next_reported[UWB_LIST_SIZE]; //used to keep track of whether we reported the RX_ACCEPT node. 0 if no, 1 if yes.
 
     uint32 blink_start;
     uint32 range_start;
@@ -178,19 +157,12 @@ typedef struct
     uint8 dweventIdxIn;
 	uint8 dweventPeek;
 	uint8 monitor;
-	uint32 timeofTx;
+	uint32 timeofTx;		//TODO make sure this is set for every single TX
+	uint32 txDoneTimeoutDuration;
 	uint8 smartPowerEn;
-
-	uint32 currentStateStartTime;
-	INST_STATES lastState;
 
 	uint32 rxCheckOnTime;
 
-	uint32 buildFrameTime;
-
-	uint8 ranging;
-
-	uint64 testTimer;
 	uint16 timerCounter;
 
 
@@ -207,7 +179,6 @@ int reportTOF(instance_data_t *inst, uint8 uwb_index);
 // clear the status/ranging data 
 void instanceclearcounts(void) ;
 void instclearuwblist(void);
-// void instsetuwbtorangewith(int uwbID);
 int instaddactivateuwbinlist(instance_data_t *inst, uint8 *uwbAddr);
 int instcheckactiveuwbinlist(instance_data_t *inst, uint8 *uwbAddr);
 int instfindfirstactiveuwbinlist(instance_data_t *inst, uint8 startindex);
@@ -215,7 +186,6 @@ int instfindnumactiveuwbinlist(instance_data_t *inst);
 int instfindnumneighbors(instance_data_t *inst);
 int instfindnumhidden(instance_data_t *inst);
 int instgetuwblistindex(instance_data_t *inst, uint8 *uwbAddr, uint8 addrByteSize);
-void instremoveuwb(instance_data_t *inst, uint8 uwb_index);
 
 
 void instance_readaccumulatordata(void);

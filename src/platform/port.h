@@ -150,7 +150,6 @@ typedef enum
 void Sleep(uint32_t Delay);
 unsigned long portGetTickCnt(void);
 unsigned long long portGetTickCntMicro(void);
-//uint16_t portGetTIM3(); //TODO remove
 
 #define S1_SWITCH_ON  (1)
 #define S1_SWITCH_OFF (0)

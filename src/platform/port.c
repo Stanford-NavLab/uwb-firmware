@@ -67,29 +67,19 @@ unsigned long long portGetTickCntMicro(void)
 	uint64_t major_incr2 = (uint64_t)time32_incr;
 	uint32_t minor_incr2 = SysTick->VAL;
 
+	unsigned long long microsec;
+
+	//72 comes from SystemCoreClock / CLOCKS_PER_SEC * 1000
 	if(major_incr1 == major_incr2)
 	{
-		//72 comes from SystemCoreClock / CLOCKS_PER_SEC * 1000
-		return  major_incr1*1000 + 1000 - (uint64_t)(minor_incr1/72);
+		microsec = major_incr1*1000 + 1000 - (uint64_t)(minor_incr1/72);
 	}
 	else
 	{
-		//72 comes from SystemCoreClock / CLOCKS_PER_SEC * 1000
-		return  major_incr2*1000 + 1000 - (uint64_t)(minor_incr2/72);
+		microsec = major_incr2*1000 + 1000 - (uint64_t)(minor_incr2/72);
 	}
 
-//	__asm__ volatile("dmb");
-//	//72 comes from SystemCoreClock / CLOCKS_PER_SEC * 1000
-//	return  time64_incr*1000 + 1000 - (uint64_t)(SysTick->VAL/72);
-//
-////	major = SysTickMajor;
-////	minor = SysTick->VAL;
-////	__asm__ volatile("dmb");
-////	if (major != SysTickMajor)
-////	    return SysTickMajor - SysTick->Val;
-////	return major - minor;
-//
-
+	return microsec;
 }
 
 uint16_t portGetTIM3()
@@ -171,32 +161,6 @@ int peripherals_init (void)
 
 	SysTick_Configuration();
 	NVIC_Configuration();
-
-	//TODO remove
-
-//	  /* make sure the peripheral is clocked */
-////	  RCC_APB1PeriphClockCmd (RCC_APB1Periph_TIM3, ENABLE);
-//	  RCC_ClocksTypeDef RCC_Clocks;
-//	  RCC_GetClocksFreq (&RCC_Clocks);
-//	  uint32_t multiplier;
-//	  if (RCC_Clocks.PCLK1_Frequency == RCC_Clocks.SYSCLK_Frequency) {
-//	    multiplier = 1;
-//	  } else {
-//	    multiplier = 2;
-//	  }
-//	  uint32_t TIM3CLK_Frequency = multiplier * RCC_Clocks.PCLK1_Frequency;
-//	  uint32_t TIM3COUNTER_Frequency = 1000;//1000000;
-//	  uint16_t prescaler = (TIM3CLK_Frequency / TIM3COUNTER_Frequency) - 1;
-//	  uint16_t reload = 0xFFFF;//(25) - 1;    // Tevt = 25 us
-//	  TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
-//	  /* set everything back to default values */
-//	  TIM_TimeBaseStructInit (&TIM_TimeBaseStructure);
-//	  /* only changes from the defaults are needed */
-//	  TIM_TimeBaseStructure.TIM_Period = reload;
-//	  TIM_TimeBaseStructure.TIM_Prescaler = prescaler;
-//	  TIM_TimeBaseInit (TIM3, &TIM_TimeBaseStructure);
-//
-//	  TIM_Cmd(TIM3, ENABLE);
 	
 	return 0;
 }
@@ -350,10 +314,6 @@ int RCC_Configuration(void)
 						RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD |
 						RCC_APB2Periph_GPIOE | RCC_APB2Periph_AFIO,
 						ENABLE);
-
-	/* Enable TIM3 clock */ //TODO remove
-//	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3, ENABLE);
-
 
 	return 0;
 }

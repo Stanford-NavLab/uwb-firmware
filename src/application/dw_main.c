@@ -27,7 +27,6 @@ extern int usb_init(void);
 extern void usb_printconfig(int, uint8*, int);
 extern void send_usbmessage(uint8*, int);
 
-							// "1234567890123456" - 16 bytes long LCD
 #define SOFTWARE_VER_STRING    "TDMA Version 1.0" //
 
 #define SWS1_TXSPECT_MODE	0x80  //Continuous TX spectrum mode
@@ -140,10 +139,6 @@ instanceConfig_t chConfig[8] ={
                     }
 };
 
-
-//uint32 inittestapplication(uint8 s1switch);
-
-
 int decarangingmode(uint8 mode_switch)
 {
     int mode = 0;
@@ -205,14 +200,11 @@ uint32 inittestapplication(uint8 mode_switch)
 
     if(mode_switch & SWS1_ANC_MODE)
     {
-//        instance_mode = ANCHOR;
-
         led_on(LED_PC6);
 
     }
     else
     {
-//        instance_mode = TAG;
         led_on(LED_PC7);
     }
 
@@ -310,8 +302,6 @@ int dw_main(void)
 	int toggle = 0;
 	int toggle_counter = 0;
 	int toggle_step = 5;
-//    uint8 dataseq[LCD_BUFF_LEN];
-//    bool new_range = FALSE;
 	uint8 command = 0x0;
 
     led_off(LED_ALL); //turn off all the LEDs
@@ -354,7 +344,7 @@ int dw_main(void)
 		writetoLCD(1, 0, dataseq);
 		memcpy(dataseq, (const uint8 *) "GGRG UWB RANGING", LCD_BUFF_LEN);
 		writetoLCD(40, 1, dataseq); //send some data
-		memcpy(dataseq, (const uint8 *) SOFTWARE_VER_STRING, LCD_BUFF_LEN); // Also set at line #26 (TODO Should make this from single value !!!)
+		memcpy(dataseq, (const uint8 *) SOFTWARE_VER_STRING, LCD_BUFF_LEN);
 		writetoLCD(16, 1, dataseq); //send some data
 	}
 
@@ -422,20 +412,6 @@ int dw_main(void)
 		memset(dataseq, ' ', LCD_BUFF_LEN);
 	}
 
-//	if(enableLCD == TRUE)
-//	{
-//
-//		memcpy(&dataseq[0], (const uint8 *) " DISCOVERY MODE ", LCD_BUFF_LEN);
-//		writetoLCD(LCD_BUFF_LEN, 1, dataseq); //send some data
-//		sprintf((char*)&dataseq[0], "%llX", instance_get_addr());
-//		writetoLCD(LCD_BUFF_LEN, 1, dataseq); //send some data
-//
-//		command = 0x2 ;  //return cursor home
-//		writetoLCD( 1, 0,  &command);
-//	}
-
-
-
     if(enableLCD == TRUE)
 	{
 		memset(dataseq, ' ', LCD_BUFF_LEN);
@@ -444,10 +420,6 @@ int dw_main(void)
 
     port_EnableEXT_IRQ();
 
-    //TODO remove
-    instance_data_t* inst1 = instance_get_local_structure_ptr(0);
-    inst1->testTimer = portGetTickCntMicro();
-
     // main loop
     while(1)
     {
@@ -455,7 +427,7 @@ int dw_main(void)
     	//TODO reenable optimization in the compiler settings!!!
 		instance_data_t* inst = instance_get_local_structure_ptr(0);
 		canSleep = instance_run(); //run the state machine!!!
-		instance_mode = inst->mode; //TODO modify how the rest of this works with DISCOVER, TAG, and ANCHOR!
+		instance_mode = inst->mode;
 
         if(instancenewrange())
         {
@@ -596,7 +568,6 @@ int dw_main(void)
 			dataseq[0] = 0x2 ;  //return cursor home
 			writetoLCD( 1, 0,  dataseq);
 
-			//TODO only update the display if something has changed!
 			if(toggle_counter <= toggle_step)
 			{
 				if(toggle == 2)
@@ -620,8 +591,6 @@ int dw_main(void)
 				toggle_counter = 0;
 			}
 
-
-			//TODO only update the display if something has changed!
 			if(updateLCD == TRUE)
 			{
 				if(toggle == 1)

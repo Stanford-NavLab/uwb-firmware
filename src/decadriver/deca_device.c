@@ -2213,17 +2213,7 @@ uint8 dwt_checkirq(void)
  */
 void dwt_isr(void)
 {
-
-
     uint32 status = dw1000local.cbData.status = dwt_read32bitreg(SYS_STATUS_ID); // Read status register low 32bits
-//    uint8 status_high = dwt_read8bitoffsetreg(SYS_STATUS_ID, 4);
-//    uint32 mask = dwt_read32bitreg(SYS_MASK_ID);
-
-//    uint8 debug_msg[50];
-//	int n = sprintf((char*)&debug_msg[0], "dwt_isr SYS_STATUS: %lu", status);
-//	send_usbmessage(&debug_msg[0], n);
-//	usb_run();
-
 
     uint8 callback_triggered = 0;
 
@@ -2313,22 +2303,6 @@ void dwt_isr(void)
     {
     	callback_triggered = 1;
 
-//    	uint32 and_status = status & SYS_STATUS_ALL_RX_TO;
-//		uint8 debug_msg[100];
-//		int n = 0;
-//		n = sprintf((char*)&debug_msg[0], "rx_timeout!!! and_status: %lu", and_status);
-//		send_usbmessage(&debug_msg[0], n);
-//		usb_run();
-
-//		if(and_status & SYS_STATUS_AFFREJ){
-//			uint32 sys_cfg_reg = dwt_read32bitreg(SYS_CFG_ID);
-//			n = sprintf((char*)&debug_msg[0], "rx_timeout!!! sys_cfg_reg: %lu", sys_cfg_reg);
-//			send_usbmessage(&debug_msg[0], n);
-//			usb_run();
-//		}
-
-
-
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXRFTO); // Clear RX timeout event bits
 
         dw1000local.wait4resp = 0;
@@ -2351,24 +2325,6 @@ void dwt_isr(void)
     {
     	callback_triggered = 1;
 
-//    	uint32 and_status = status & SYS_STATUS_ALL_RX_ERR;
-//		uint8 debug_msg[100];
-//		int n = 0;
-//		n = sprintf((char*)&debug_msg[0], "rx_error!!! and_status: %lu", and_status);
-//		send_usbmessage(&debug_msg[0], n);
-//		usb_run();
-//
-//		n = sprintf((char*)&debug_msg[0], "rx_error!!! sys_status: %lu", status);
-//		send_usbmessage(&debug_msg[0], n);
-//		usb_run();
-//
-//		if(and_status & SYS_STATUS_AFFREJ){
-//			uint32 sys_cfg_reg = dwt_read32bitreg(SYS_CFG_ID);
-//			n = sprintf((char*)&debug_msg[0], "rx_error!!! sys_cfg_reg: %lu", sys_cfg_reg);
-//			send_usbmessage(&debug_msg[0], n);
-//			usb_run();
-//		}
-
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR); // Clear RX error event bits
 
         dw1000local.wait4resp = 0;
@@ -2386,18 +2342,15 @@ void dwt_isr(void)
         }
     }
 
-    //
+    //IRQ line high but no callbacks triggered.
     if(callback_triggered == 0)
     {
-    	//clear status register
-    	uint32 SYS_STATUS_ALL_INT = 1073217534; //TODO cleanup
-    	dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_INT);
+    	//clear and reset SYS_MASK register
+    	dwt_setinterrupt(SYS_MASK_MASK_32, 0); //disable all
+    	dwt_setinterrupt(SYS_MASK_VAL, 1);
 
-//    	uint8 debug_msg[50];
-//		int n = sprintf((char*)&debug_msg[0], "unsubscribed callback");
-//		send_usbmessage(&debug_msg[0], n);
-//		usb_run();
-
+    	//clear SYS_STATUS register
+    	dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_MASK_32);
     }
 
 }
@@ -2687,11 +2640,6 @@ int dwt_starttx(uint8 mode)
         }
         else
         {
-//        	uint8 debug_msg[150];
-//			int n = sprintf((char*)&debug_msg[0], "SYS_STATUS: %u", checkTxOK);
-//			send_usbmessage(&debug_msg[0], n);
-//			usb_run();
-
             // I am taking DSHP set to Indicate that the TXDLYS was set too late for the specified DX_TIME.
             // Remedial Action - (a) cancel delayed send
             temp = (uint8)SYS_CTRL_TRXOFF; // This assumes the bit is in the lowest byte
@@ -2726,113 +2674,21 @@ int dwt_starttx(uint8 mode)
  */
 void dwt_forcetrxoff(void)
 {
-	uint32 SYS_MASK_VAL = 605278336;
-	uint32 SYS_MASK_RESERVED = 0xC0080001;
-	uint32 SYS_STATUS_ALL_INT= 1073217534;
-
     decaIrqStatus_t stat ;
-    uint32 mask;
 
-    mask = dwt_read32bitreg(SYS_MASK_ID) ; // Read set interrupt mask
-//    if(mask != SYS_MASK_VAL){
-//		uint8 mismatch = 1;
-//	}
-
+    dwt_setinterrupt(SYS_MASK_MASK_32, 0); // Clear interrupt mask - so we don't get any unwanted events
 
     // Need to beware of interrupts occurring in the middle of following read modify write cycle
     // We can disable the radio, but before the status is cleared an interrupt can be set (e.g. the
     // event has just happened before the radio was disabled)
     // thus we need to disable interrupt during this operation
     stat = decamutexon() ;
-
-
-	mask &= SYS_MASK_RESERVED;
-    //this is writing to the reserved bits!!!
-	//dwt_write32bitreg(SYS_MASK_ID, 0) ; // Clear interrupt mask - so we don't get any unwanted events
-
-    dwt_write32bitreg(SYS_MASK_ID, mask) ; // Clear interrupt mask - so we don't get any unwanted events
-
     dwt_write8bitoffsetreg(SYS_CTRL_ID, SYS_CTRL_OFFSET, (uint8)SYS_CTRL_TRXOFF) ; // Disable the radio
+	decamutexoff(stat) ;
 
-    // Forcing Transceiver off - so we do not want to see any new events that may have happened
-    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_INT);
-    dwt_syncrxbufptrs();
-
-    mask |= SYS_MASK_VAL;  //set out desired sys_mask values
-    dwt_write32bitreg(SYS_MASK_ID, mask);
-
-
-//    // Reset the IC (might be needed if not getting here from POWER ON)
-//        dwt_softreset();
-//
-//    	//we can enable any configuration loading from OTP/ROM on initialization
-//        result = dwt_initialise(DWT_LOADUCODE) ;
-//
-//        //this is platform dependent - only program if DW EVK/EVB
-//        dwt_setleds(3) ; //configure the GPIOs which control the leds on EVBs
-//
-//        if (DWT_SUCCESS != result)
-//        {
-//            return (-1) ;   // device initialize has failed
-//        }
-//
-//        //enable TX, RX states on GPIOs 6 and 5
-//        dwt_setlnapamode(1,1);
-//
-//        instanceclearcounts() ;
-//
-//        instance_data[instance].sleepingEabled = 1;
-//        instance_data[instance].panID = 0xdeca ;
-//        instance_data[instance].wait4ack = 0;
-//        instance_data[instance].instanceTimerEnabled = 0;
-//
-//        instance_clearevents();
-//
-//        dwt_geteui(instance_data[instance].eui64);
-//
-//        instance_data[instance].canPrintInfo = 0;
-//
-//        instance_data[instance].clockOffset = 0;
-//        instance_data[instance].monitor = 0;
-//
-//    	dwt_setdblrxbuffmode(1);
-
-
-
-
-
-    uint32 new_mask = dwt_read32bitreg(SYS_MASK_ID);
-    new_mask &= SYS_MASK_VAL;
-
-//    uint8 mismatch = 0;
-
-//    while(new_mask != SYS_MASK_VAL){
-//	if(new_mask != SYS_MASK_VAL){
-////		dwt_write32bitreg(SYS_MASK_ID, mask);
-////		new_mask = dwt_read32bitreg(SYS_MASK_ID);
-////		new_mask &= SYS_MASK_VAL;
-//
-//		mismatch = 1;
-//    }
-
-//    if(mismatch == 1){
-//		 uint8 debug_msg[100];
-//		 int n = sprintf((char*)&debug_msg[0], "mismatch occurred!");
-//		 send_usbmessage(&debug_msg[0], n);
-//		 usb_run();
-//    }
-
-//    if(new_mask != mask){
-//    	uint8 mismatch = 1;
-//    }
-//    if(new_mask != mask){
-//    	uint8 mismatch = 1;
-//    }
-
-
-    // Enable/restore interrupts again...
-    decamutexoff(stat) ;
-    dw1000local.wait4resp = 0;
+	// Enable/restore interrupts again...
+	dwt_setinterrupt(SYS_MASK_VAL, 1);
+	dw1000local.wait4resp = 0;
 
 } // end deviceforcetrxoff()
 
@@ -3114,12 +2970,6 @@ void dwt_setinterrupt(uint32 bitmask, uint8 enable)
 
     // Need to beware of interrupts occurring in the middle of following read modify write cycle
     stat = decamutexon() ;
-
-//    C0080001
-//    uint32 reserved_mask = 0xC0080001;
-//	mask &= reserved_mask; //preserve reserved bits
-//	mask |= SYS_MASK_VAL;  //set out desired sys_mask values
-//	dwt_write32bitreg(SYS_MASK_ID, mask);
 
     mask = dwt_read32bitreg(SYS_MASK_ID) ; // Read register
 
