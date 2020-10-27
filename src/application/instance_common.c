@@ -826,7 +826,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 	event_data_t dw_event;
 
 	uint32 time_now = portGetTickCnt();
-	uint64 time_now_us = portGetTickCntMicro();
 
 	//if we got a frame with a good CRC - RX OK
 	rxd_event = DWT_SIG_RX_OKAY;
