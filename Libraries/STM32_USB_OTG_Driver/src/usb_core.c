@@ -1330,19 +1330,19 @@ USB_OTG_STS USB_OTG_CoreInitDev (USB_OTG_CORE_HANDLE *pdev)
   }
   for (i = 0; i <  pdev->cfg.dev_endpoints; i++)
   {
-    USB_OTG_DEPCTL_TypeDef  depctl;
-    depctl.d32 = USB_OTG_READ_REG32(&pdev->regs.OUTEP_REGS[i]->DOEPCTL);
-    if (depctl.b.epena)
+    USB_OTG_DEPCTL_TypeDef  depctl_2;
+    depctl_2.d32 = USB_OTG_READ_REG32(&pdev->regs.OUTEP_REGS[i]->DOEPCTL);
+    if (depctl_2.b.epena)
     {
-      depctl.d32 = 0;
-      depctl.b.epdis = 1;
-      depctl.b.snak = 1;
+      depctl_2.d32 = 0;
+      depctl_2.b.epdis = 1;
+      depctl_2.b.snak = 1;
     }
     else
     {
-      depctl.d32 = 0;
+      depctl_2.d32 = 0;
     }
-    USB_OTG_WRITE_REG32( &pdev->regs.OUTEP_REGS[i]->DOEPCTL, depctl.d32);
+    USB_OTG_WRITE_REG32( &pdev->regs.OUTEP_REGS[i]->DOEPCTL, depctl_2.d32);
     USB_OTG_WRITE_REG32( &pdev->regs.OUTEP_REGS[i]->DOEPTSIZ, 0);
     USB_OTG_WRITE_REG32( &pdev->regs.OUTEP_REGS[i]->DOEPINT, 0xFF);
   }

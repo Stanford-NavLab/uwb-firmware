@@ -96,7 +96,6 @@
     <File name="src" path="" type="2"/>
     <File name="Libraries/STM32_USB_Device_Library/Class/cdc" path="" type="2"/>
     <File name="Libraries/CMSIS" path="" type="2"/>
-    <File name="src/application/comm_scheduler.c" path="src/application/comm_scheduler.c" type="1"/>
     <File name="Libraries/STM32F10x_StdPeriph_Driver/inc/stm32f10x_dac.h" path="Libraries/STM32F10x_StdPeriph_Driver/inc/stm32f10x_dac.h" type="1"/>
     <File name="Libraries/STM32_USB_OTG_Driver/inc/usb_hcd_int.h" path="Libraries/STM32_USB_OTG_Driver/inc/usb_hcd_int.h" type="1"/>
     <File name="Libraries/STM32_USB_Device_Library/Class/cdc/src" path="" type="2"/>
@@ -165,7 +164,6 @@
     <File name="Libraries/STM32F10x_StdPeriph_Driver/src/misc.c" path="Libraries/STM32F10x_StdPeriph_Driver/src/misc.c" type="1"/>
     <File name="Libraries/STM32F10x_StdPeriph_Driver/inc/stm32f10x_cec.h" path="Libraries/STM32F10x_StdPeriph_Driver/inc/stm32f10x_cec.h" type="1"/>
     <File name="Libraries/STM32_USB_OTG_Driver/src/usb_hcd.c" path="Libraries/STM32_USB_OTG_Driver/src/usb_hcd.c" type="1"/>
-    <File name="src/application/main.c" path="src/main.c" type="1"/>
     <File name="src/platform/deca_sleep.c" path="src/platform/deca_sleep.c" type="1"/>
     <File name="Libraries/STM32_USB_OTG_Driver/inc/usb_defines.h" path="Libraries/STM32_USB_OTG_Driver/inc/usb_defines.h" type="1"/>
     <File name="Libraries/CMSIS/CM3/CoreSupport" path="" type="2"/>
@@ -196,10 +194,10 @@
     <File name="Libraries/STM32_USB_OTG_Driver/inc/usb_regs.h" path="Libraries/STM32_USB_OTG_Driver/inc/usb_regs.h" type="1"/>
     <File name="Libraries/STM32_USB_Device_Library" path="" type="2"/>
     <File name="Libraries/STM32_USB_Device_Library/Class" path="" type="2"/>
+    <File name="src/main.c" path="src/main.c" type="1"/>
     <File name="Libraries/CMSIS/CM3/CoreSupport/core_cm3.c" path="Libraries/CMSIS/CM3/CoreSupport/core_cm3.c" type="1"/>
     <File name="Libraries/STM32F10x_StdPeriph_Driver/src/stm32f10x_cec.c" path="Libraries/STM32F10x_StdPeriph_Driver/src/stm32f10x_cec.c" type="1"/>
     <File name="Libraries/STM32F10x_StdPeriph_Driver" path="" type="2"/>
-    <File name="src/application/comm_scheduler.h" path="src/application/comm_scheduler.h" type="1"/>
     <File name="Libraries/STM32_USB_OTG_Driver/inc/usb_hcd.h" path="Libraries/STM32_USB_OTG_Driver/inc/usb_hcd.h" type="1"/>
     <File name="Libraries/STM32_USB_OTG_Driver/inc" path="" type="2"/>
     <File name="Libraries/STM32_USB_Device_Library/Core/inc/usbd_core.h" path="Libraries/STM32_USB_Device_Library/Core/inc/usbd_core.h" type="1"/>

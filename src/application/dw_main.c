@@ -443,6 +443,7 @@ int dw_main(void)
             //set_rangeresult(range_result);
             if(enableLCD == TRUE)
 			{
+//TODO revisit calibration procedure!
 #if (DELAY_CALIB_OUTPUT == 1)
 				dataseq[0] = 0x2 ;  //return cursor home
 				writetoLCD( 1, 0,  dataseq);

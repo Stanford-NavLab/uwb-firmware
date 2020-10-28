@@ -199,22 +199,29 @@ enum
 // This is a bitfield composed of:
 //   - bits 0 to 14: value
 //   - bit 15: unit
-#define RESP_DLY_VAL_SHIFT 0
-#define RESP_DLY_VAL_MASK 0x7FFF
-#define RESP_DLY_UNIT_SHIFT 15
-#define RESP_DLY_UNIT_MASK 0x8000
+//#define RESP_DLY_VAL_SHIFT 0
+//#define RESP_DLY_VAL_MASK 0x7FFF
+//#define RESP_DLY_UNIT_SHIFT 15			//TODO remove
+//#define RESP_DLY_UNIT_MASK 0x8000
 
 // Response time possible units: microseconds or milliseconds.
-#define RESP_DLY_UNIT_US 0
-#define RESP_DLY_UNIT_MS 1
+//#define RESP_DLY_UNIT_US 0				//TODO remove
+//#define RESP_DLY_UNIT_MS 1
 
 // Response delays types present in ranging init message.
 enum
 {
-    RESP_DLY_ANC = 0,
-    RESP_DLY_TAG,
+    RESP_DLY_POLL = 0,
+    RESP_DLY_ANCH_RESP,
+    RESP_DLY_FINAL,
     RESP_DLY_NB
 };
+//enum
+//{
+//    RESP_DLY_ANC = 0,		//TODO remove
+//    RESP_DLY_TAG,
+//    RESP_DLY_NB
+//};
 
 // Convert microseconds to symbols, float version.
 // param  x  value in microseconds
@@ -229,19 +236,19 @@ enum
 #define US_TO_SY_INT(x) (((x) * 10000) / 10256)
 
 // Minimum delay between reception and following transmission.
-#define RX_TO_TX_TIME_US 1500 //TODO tune again (150)
-#define RXTOTXTIME          ((int)(50.0 / 1.0256)) //e.g. Poll RX to Response TX time
+#define RX_TO_TX_TIME_US 200 //1500 //TODO tune again (150)
 
 // Default anchor turn-around time: has to be RX_TO_TX_TIME_US when using
 // immediate response, cannot be less than 170 us when not.
-#define ANC_TURN_AROUND_TIME_US RX_TO_TX_TIME_US
+#define ANC_TURN_AROUND_TIME_US RX_TO_TX_TIME_US		//Poll RX to Response TX time
 #if (IMMEDIATE_RESPONSE == 1) && (ANC_TURN_AROUND_TIME_US != RX_TO_TX_TIME_US)
     #error "When using immediate response, anchor turn-around time has to be equal to RX to TX time!"
 #endif
+
 // Default tag turn-around time: cannot be less than 300 us. Defined as 500 us
 // so that the tag is not transmitting more than one frame by millisecond (for
 // power management purpose).
-#define TAG_TURN_AROUND_TIME_US 2500 //TODO tune again!!! (300)
+#define TAG_TURN_AROUND_TIME_US 300 //ANCH_RESP RX to FINAL TX time
 
 // "Long" response delays value. Over this limit, special processes must be
 // applied.
@@ -249,7 +256,7 @@ enum
 
 // Delay between blink reception and ranging init message. This is the same for
 // all modes.
-#define RNG_INIT_REPLY_DLY_MS (20)
+#define RNG_INIT_REPLY_DLY_MS (20) //TODO tune!
 
 #define MAX(a,b) \
    ({ __typeof__ (a) _a = (a); \

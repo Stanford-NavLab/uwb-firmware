@@ -25,7 +25,7 @@ extern "C" {
 #include "tdma_handler.h"
 
 
-typedef struct //TODO go through and see what can be removed
+typedef struct
 {
     INST_MODE mode;				        //instance mode (tag or anchor)
     INST_STATES testAppState ;			//state machine - current state
@@ -52,15 +52,15 @@ typedef struct //TODO go through and see what can be removed
 	uint64 rnginitReplyDelay ;
 	uint64 finalReplyDelay ;
 	uint64 responseReplyDelay ;
-	int finalReplyDelay_ms ;
+//	int finalReplyDelay_ms ; //TODO remove
 
 	// xx_sy the units are 1.0256 us
-	uint32 txToRxDelayAnc_sy ;    // this is the delay used after sending a response and turning on the receiver to receive final
-	uint32 txToRxDelayTag_sy ;    // this is the delay used after sending a poll and turning on the receiver to receive response
-	int rnginitW4Rdelay_sy ;	// this is the delay used after sending a blink and turning on the receiver to receive the ranging init message
+	uint32 durationTxAnchResp2RxFinal_sy ;    // this is the delay used after sending a response and turning on the receiver to receive final
+	uint32 txToRxDelayPoll_sy ;    // this is the delay used after sending a poll and turning on the receiver to receive response
+	int durationTxBlink2RxRngInit_sy ;	// this is the delay used after sending a blink and turning on the receiver to receive the ranging init message
 
-	int fwtoTime_sy ;	//this is final message duration (longest out of ranging messages)
-	int fwtoTimeB_sy ;	//this is the ranging init message duration
+	int durationFwToFinal_sy ;	//this is final message duration (longest out of ranging messages)
+	int durationFwToRngInit_sy ;	//this is the ranging init message duration
 
 	uint32 delayedReplyTime;		// delayed reply time of delayed TX message - high 32 bits
 
@@ -94,7 +94,7 @@ typedef struct //TODO go through and see what can be removed
 
     uint8 addrByteSize;             // The bytelength used for addresses. 
 
-    uint32 resp_dly[RESP_DLY_NB];
+    uint32 resp_dly_us[RESP_DLY_NB];
 
 	//64 bit timestamps
 	//union of TX timestamps
@@ -133,37 +133,29 @@ typedef struct //TODO go through and see what can be removed
 
     double idistance[UWB_LIST_SIZE];
     double idistanceraw[UWB_LIST_SIZE];
-    
-    //if set to 1 then it means that DW1000 is in DEEP_SLEEP
-    //so the ranging has finished and micro can output on USB/LCD
-    //if sending data to LCD during ranging this limits the speed of ranging
-    uint8 canPrintInfo ;
 
 	uint8 uwbToRangeWith;	//it is the index of the uwbList array which contains the address of the UWB we are ranging with
     uint8 uwbListLen ;
-
 	uint8 uwbList[UWB_LIST_SIZE][8];		//index 0 reserved for self, rest for other tracked uwbs
 
-    uint32 blink_start;
-    uint32 range_start;
-    uint8 blink0range1;
+	uint32 timeofTx;
+	uint32 txDoneTimeoutDuration;
+    uint32 blink_start;			//TODO remove
+    uint32 range_start;			//TODO remove
+    uint64 timeofRX;			//TODO remove
 
-    uint32 blink_duration;      //expected duration of a blink/response exchange  
-    uint32 range_duration;      //expected duration of a range/response/final exchange
+    uint32 blink_duration;      //expected duration of a blink/response exchange  			//TODO remove?
+    uint32 range_duration;      //expected duration of a range/response/final exchange		//TODO remove
 
 	//event queue - used to store DW1000 events as they are processed by the dw_isr/callback functions
     event_data_t dwevent[MAX_EVENT_NUMBER]; //this holds any TX/RX events and associated message data
     uint8 dweventIdxOut;
     uint8 dweventIdxIn;
 	uint8 dweventPeek;
-	uint8 monitor;
-	uint32 timeofTx;		//TODO make sure this is set for every single TX
-	uint32 txDoneTimeoutDuration;
+
 	uint8 smartPowerEn;
 
 	uint32 rxCheckOnTime;
-
-	uint16 timerCounter;
 
 
 } instance_data_t ;

@@ -14,12 +14,12 @@ static bool slot_transition(struct TDMAHandler *this)
 
 	if(inst->mode == TAG ||
 	   inst->mode == ANCHOR ||
-	   (inst->mode == DISCOVERY && (this->discovery_mode == WAIT_SEND_SUG || this->discovery_mode == COLLECT_INF_REG)))//TODO this may be out of date
+	   (inst->mode == DISCOVERY && (this->discovery_mode == WAIT_SEND_SUG || this->discovery_mode == COLLECT_INF_REG)))
 	{
 		uint64 time_now_us = portGetTickCntMicro();
 		uint64 timeSinceSlotStart64 = get_dt64(this->lastSlotStartTime64, time_now_us);
 
-		if(timeSinceSlotStart64 >= this->slotDuration_us) //TODO should i check frame separate from slot?
+		if(timeSinceSlotStart64 >= this->slotDuration_us)
 		{
 			transition = TRUE;
 			this->firstPollSentThisSlot = FALSE;
@@ -31,11 +31,11 @@ static bool slot_transition(struct TDMAHandler *this)
 			//get the slot number and set the start time appropriately
 
 			uint64 timeSinceFrameStart64 = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
-			//TODO this->uwbListTDMAInfo[0].frameStartTime is sometimes getting set to a time in the future... figure out!
 
 			uint64 frameDuration64 = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
 			if(timeSinceFrameStart64 >= frameDuration64)
 			{
+				//TODO remove
 //				uint8 debug_msg[100];
 //////				 int n = sprintf((char*)&debug_msg[0], "NEW FRAME, %llX,  this->frameStartTime: %lu, this->slotDuration*this->framelength: %lu", instance_get_addr(), this->frameStartTime, (this->slotDuration*this->framelength));
 //				int n = sprintf((char*)&debug_msg[0], "%llX, %llu, %llu", instance_get_addr(), this->lastFST, time_now_us);
@@ -54,12 +54,6 @@ static bool slot_transition(struct TDMAHandler *this)
 
 			uint8 slot = timeSinceFrameStart64/(this->slotDuration_us); //integer division rounded down
 			this->lastSlotStartTime64 = this->uwbListTDMAInfo[0].frameStartTime + (uint64)(this->slotDuration_us*slot);
-
-
-//				uint8 debug_msg[100];
-//				int n = sprintf((char*)&debug_msg[0], "NEW SLOT %u, time_now %llu", slot, time_now_us);
-//				 send_usbmessage(&debug_msg[0], n);
-//				 usb_run();
 
 			if(inst->mode != DISCOVERY)
 			{
@@ -240,39 +234,41 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 
 static bool tx_sync_msg(struct TDMAHandler *this)
 {
-	instance_data_t *inst = instance_get_local_structure_ptr(0);
-	uint64 time_now_us = portGetTickCntMicro();
-	uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
-	memcpy(&inst->sync_msg.messageData[SYNC_FRAMELENGTH], &this->uwbListTDMAInfo[0].framelength, sizeof(uint8));
-	memcpy(&inst->sync_msg.messageData[SYNC_TSFS], &myTimeSinceFrameStart_us, 6);
 	int psduLength = 0;
-
-	inst->sync_msg.seqNum = inst->frameSN++;
-
-
 #if (USING_64BIT_ADDR==1)
 	psduLength = SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC;
 #else
 	psduLength = SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
 #endif
 
-	dwt_writetxdata(psduLength, (uint8 *)&inst->sync_msg, 0) ; // write the frame data
+	instance_data_t *inst = instance_get_local_structure_ptr(0);
+	uint64 time_now_us = portGetTickCntMicro();
+	uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
+	memcpy(&inst->sync_msg.messageData[SYNC_FRAMELENGTH], &this->uwbListTDMAInfo[0].framelength, sizeof(uint8));
+	memcpy(&inst->sync_msg.messageData[SYNC_TSFS], &myTimeSinceFrameStart_us, 6);
+	inst->sync_msg.seqNum = inst->frameSN++;
 
+	dwt_setrxaftertxdelay((uint16)0);
+	dwt_setrxtimeout((uint16)0);
 	inst->wait4ack = 0;
 
+	dwt_writetxdata(psduLength, (uint8 *)&inst->sync_msg, 0) ; // write the frame data
 	if(instancesendpacket(psduLength, DWT_START_RX_IMMEDIATE, 0))
 	{
+		inst->previousState = TA_INIT;
+		inst->nextState = TA_INIT;
 		inst->testAppState = TA_RXE_WAIT;
+		inst->wait4ack = 0;
 		return FALSE;
 	}
 	else
 	{
-
 		inst->previousState = inst->testAppState;
 		inst->testAppState = TA_TX_WAIT_CONF;	// wait confirmation
+
 		inst->timeofTx = portGetTickCnt();
+		//TODO retune below
 		inst->txDoneTimeoutDuration = 200; //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
-//		inst->monitor = 1;
 		return TRUE;
 	}
 }
@@ -879,7 +875,6 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 					   (this->uwbListTDMAInfo[j].connectionType == UWB_LIST_NEIGHBOR && this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR) ||
 					   (this->uwbListTDMAInfo[j].connectionType == UWB_LIST_NEIGHBOR && this->uwbListTDMAInfo[i].connectionType == UWB_LIST_HIDDEN))
 					{
-						//TODO make sure this is okay. will i need to ensure the assignments from the message are maintained?
 						if(this->deconflict_uwb_pair(this, &this->uwbListTDMAInfo[i], &this->uwbListTDMAInfo[j]) == TRUE)
 						{
 							tdma_modified = TRUE;
@@ -1296,7 +1291,7 @@ static bool deconflict_uwb_pair(struct TDMAHandler *this, struct TDMAInfo *info_
 
 static void deconflict_slot_pair(struct TDMAHandler *this, struct TDMAInfo *info_a, struct TDMAInfo *info_b, uint8 slot_idx_a, uint8 slot_idx_b)
 {
-	//TODO double check for accruacy!
+	//TODO double check description for accruacy!
 	//procedure for deconflicting slots (PDS)
 	//1.) delete a conflicting slot
 	//		applicable if all but node with fewest slots has more than one slot assignment
@@ -1536,7 +1531,7 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 	this->discovery_mode_start_time = time_now;
 	this->discovery_mode = discovery_mode;
 
-	switch (discovery_mode)//TODO make sure all modes are captured here...
+	switch (discovery_mode)
 	{
 		case WAIT_INF_REG:
 		{
@@ -1761,7 +1756,7 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 		}
 		case SEND_SUG:
 		{
-			this->discovery_mode_duration = this->slotStartDelay_us*2;//TODO make sure this works as intended
+			this->discovery_mode_duration = this->slotStartDelay_us*2;
 			this->discovery_mode_expires = TRUE;
 			break;
 		}
@@ -1903,52 +1898,6 @@ static bool check_timeouts(struct TDMAHandler *this, uint32 time_now)
 			}
 			case UWB_LIST_INACTIVE:
 			{
-				//TODO figure out the why this doesn't work.
-				//specifically when instremoveuwb(inst, i); and i--; are used
-
-
-//				//find the most recent comm...
-//				uint32 newest = 0;
-//				if(info->lastCommNeighbor != 0)
-//				{
-//					newest = info->lastCommNeighbor;
-//				}
-//
-//				if(info->lastCommHidden != 0)
-//				{
-//					if(info->lastCommHidden > newest)//TODO number wrapping
-//					{
-//						newest = info->lastCommHidden;
-//					}
-//				}
-//
-//				if(info->lastCommTwiceHidden != 0)
-//				{
-//					if(info->lastCommTwiceHidden > newest)//TODO number wrapping
-//					{
-//						newest = info->lastCommTwiceHidden;
-//					}
-//				}
-//
-//				if(newest != 0)
-//				{
-//					delta_t = get_dt32(newest, time_now);
-//
-//					if(delta_t > UWB_COMM_TIMEOUT*2)
-//					{
-//						uint64 uwb_addr = 0;
-//						uwb_addr = instance_get_uwbaddr(i);
-//						uint8 debug_msg[100];
-//						int n = sprintf((char*)&debug_msg[0], "REMOVE UWB: %d, %llX", i, uwb_addr);
-//						 send_usbmessage(&debug_msg[0], n);
-//						 usb_run();
-//						instremoveuwb(inst, i); //TODO finish testing to make sure it works like it should.
-//						i--; //TODO is this a probelm if i=1 then i=0?
-//
-//					}
-//				}
-
-
 				break;
 			}
 			default:
