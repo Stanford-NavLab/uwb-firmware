@@ -30,7 +30,7 @@
 #define TX_ANT_DELAY                0
 #define RX_ANT_DELAY                0
 
-#define USING_64BIT_ADDR (0)                  //when set to 0 - the DecaRanging application will use 16-bit addresses
+#define USING_64BIT_ADDR (0)//TODO (0)                  //when set to 0 - the DecaRanging application will use 16-bit addresses
 
 //! callback events
 #define DWT_SIG_RX_NOERR            0
@@ -60,6 +60,7 @@ enum
     POLL,
     RESP,
     FINAL,
+    REPORT,
     SYNC,
     FRAME_TYPE_NB
 };
@@ -78,9 +79,9 @@ enum
 
 //lengths including the Decaranging Message Function Code byte
 #define TAG_POLL_MSG_LEN                    1				// FunctionCode(1)
-#define ANCH_RESPONSE_MSG_LEN               1 				// FunctionCode(1)
+#define ANCH_RESPONSE_MSG_LEN               9//TODO 1 		// FunctionCode(1)
 #define TAG_FINAL_MSG_LEN                   16              // FunctionCode(1), Poll_TxTime(5), Resp_RxTime(5), Final_TxTime(5)
-#define RANGINGINIT_MSG_LEN					1				// FunctionCode(1)
+#define RNG_INIT_MSG_LEN					7//TODO 1		// FunctionCode(1)
 #define RNG_REPORT_MSG_LEN_SHORT		    9				// FunctionCode(1), time of flight (6), short address (2)
 #define RNG_REPORT_MSG_LEN_LONG		    	15				// FunctionCode(1), time of flight (6), long address (8)
 #define SYNC_MSG_LEN						8				// FunctionCode(1), framelength (1), time since frame start (6)
@@ -123,12 +124,14 @@ enum
     #define POLL_FRAME_LEN_BYTES (TAG_POLL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
     #define RESP_FRAME_LEN_BYTES (ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
     #define FINAL_FRAME_LEN_BYTES (TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
+	#define REPORT_FRAME_LEN_BYTES (RNG_REPORT_MSG_LEN_LONG + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
 	#define SYNC_FRAME_LEN_BYTES (SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
 #else
-    #define RNG_INIT_FRAME_LEN_BYTES (RANGINGINIT_MSG_LEN + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
+    #define RNG_INIT_FRAME_LEN_BYTES (RNG_INIT_MSG_LEN + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
     #define POLL_FRAME_LEN_BYTES (TAG_POLL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
     #define RESP_FRAME_LEN_BYTES (ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
     #define FINAL_FRAME_LEN_BYTES (TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
+	#define REPORT_FRAME_LEN_BYTES (RNG_REPORT_MSG_LEN_SHORT + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
 	#define SYNC_FRAME_LEN_BYTES (SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
 #endif
 
@@ -147,23 +150,15 @@ enum
 											//USING_64BIT_ADDR==0: Limiting factor is the max power of 2 that fits in a uint8 (framelength is stored as uint8)
 #define UWB_COMM_TIMEOUT                3000    //ms	//TODO make this a function of UWB_LIST_SIZE, twice the max framelengt? maybe this shouldn't be a define?
 
-//UWB_LIST entry types
+//UWB_LIST types
 #define UWB_LIST_SELF					0 //entry for self in list
 #define UWB_LIST_NEIGHBOR				1 //uwb in list that is active, in range, and are slotted to range with
 #define UWB_LIST_HIDDEN					2 //uwb in list that is active, out of range, and a neighbor is slotted to range with
 #define UWB_LIST_TWICE_HIDDEN			3 //uwb in list that is active, out of range, and a hidden neighbor is slotted to range with
 #define UWB_LIST_INACTIVE               4 //uwb in list that is not active (could have previously been neighbor, hidden, or twice hidden)
 
-#define BLINK_SLEEP_DELAY				0     //ms //how long the tag should sleep after blinking
-#define POLL_SLEEP_DELAY				25     //ms //how long the tag should sleep after ranging
-
-
-
-#define IMMEDIATE_RESPONSE 				1
-
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-// NOTE: the maximum RX timeout is ~ 65ms
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#define BLINK_SLEEP_DELAY				0  //ms //how long the tag should sleep after blinking
+#define POLL_SLEEP_DELAY				25 //ms //how long the tag should sleep after ranging
 
 #define INST_DONE_WAIT_FOR_NEXT_EVENT   	1   //this signifies that the current event has been processed and instance is ready for next one
 #define INST_DONE_WAIT_FOR_NEXT_EVENT_TO    2   //this signifies that the current event has been processed and that instance is waiting for next one with a timeout
@@ -235,28 +230,15 @@ enum
 // values and type for x to avoid overflows.
 #define US_TO_SY_INT(x) (((x) * 10000) / 10256)
 
-// Minimum delay between reception and following transmission.
-#define RX_TO_TX_TIME_US 200 //1500 //TODO tune again (150)
 
-// Default anchor turn-around time: has to be RX_TO_TX_TIME_US when using
-// immediate response, cannot be less than 170 us when not.
-#define ANC_TURN_AROUND_TIME_US RX_TO_TX_TIME_US		//Poll RX to Response TX time
-#if (IMMEDIATE_RESPONSE == 1) && (ANC_TURN_AROUND_TIME_US != RX_TO_TX_TIME_US)
-    #error "When using immediate response, anchor turn-around time has to be equal to RX to TX time!"
-#endif
-
-// Default tag turn-around time: cannot be less than 300 us. Defined as 500 us
-// so that the tag is not transmitting more than one frame by millisecond (for
-// power management purpose).
-#define TAG_TURN_AROUND_TIME_US 300 //ANCH_RESP RX to FINAL TX time
-
-// "Long" response delays value. Over this limit, special processes must be
-// applied.
-#define LONG_RESP_DLY_LIMIT_US 25000
+#define RX_TO_CB_DLY_US 			50
+#define RX_CB_TO_TX_CMD_DLY_US		220
+#define TX_CMD_TO_TX_CB_DLY_US		90	//doesn't include preamble, sfd, phr, and data. saw 81 to 87
+#define MIN_DELAYED_TX_DLY_US   	90	//doesn't include preamble and sfd. //80 is the minimum delay for delayed tx. anything shorter will cause failure
 
 // Delay between blink reception and ranging init message. This is the same for
 // all modes.
-#define RNG_INIT_REPLY_DLY_MS (20) //TODO tune!
+#define RNG_INIT_REPLY_DLY_US 		10000 //TODO tune!
 
 #define MAX(a,b) \
    ({ __typeof__ (a) _a = (a); \
@@ -264,16 +246,14 @@ enum
      _a > _b ? _a : _b; })
 
 
-#define BLINK_DURATION_MS						RNG_INIT_REPLY_DLY_MS + 1
-#define RANGE_DURATION_MS						MAX(18, POLL_SLEEP_DELAY)  //to increase time between ranging, modify POLL_SLEEP_DELAY
 #define BLINK_PERIOD_MS							900     //time to wait between sending blink messages
 #define BLINK_PERIOD_RAND_MS					200
 
 
-#define RANGE_INIT_RAND							2000		//in DW1000 device time //TODO tune this number
+#define RANGE_INIT_RAND_US						20		//TODO tune this number
 
 
-#define RX_CHECK_ON_PERIOD						200 	//TODO modify
+#define RX_CHECK_ON_PERIOD_MS					200 	//TODO modify
 
 // Reception start-up time, in symbols.
 #define RX_START_UP_SY 16

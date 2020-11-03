@@ -29,6 +29,7 @@ extern int usb_init(void);
 extern void usb_printconfig(int, uint8*, int);
 extern void send_usbmessage(uint8*, int);
 
+//TODO remove
 //NOTE: my added USB debug values/functions
 #define USB_DEBUG_BUFF_LEN (100)
 uint8 usbdebugdata[USB_DEBUG_BUFF_LEN]; //data to be sent over usb for debug purposes
@@ -141,21 +142,6 @@ void instanceconfigframeheader(instance_data_t *inst)
 	//blink frames with IEEE EUI-64 tag ID
 	inst->blinkmsg.frameCtrl = 0xC5 ;
 
-
-
-
-////////////////////// OLD definition below	//////////////////////
-//    inst->msg[inst->uwbToRangeWith].panID[0] = (inst->panID) & 0xff;
-//    inst->msg[inst->uwbToRangeWith].panID[1] = inst->panID >> 8;
-//
-//    //set frame type (0-2), SEC (3), Pending (4), ACK (5), PanIDcomp(6)
-//    inst->msg[inst->uwbToRangeWith].frameCtrl[0] = 0x1 /*frame type 0x1 == data*/ | 0x40 /*PID comp*/;
-//#if (USING_64BIT_ADDR==1)
-//    //source/dest addressing modes and frame version
-//    inst->msg[inst->uwbToRangeWith].frameCtrl[1] = 0xC /*dest extended address (64bits)*/ | 0xC0 /*src extended address (64bits)*/;
-//#else
-//    inst->msg[inst->uwbToRangeWith].frameCtrl[1] = 0x8 /*dest short address (16bits)*/ | 0x80 /*src short address (16bits)*/;
-//#endif
 }
 
 
@@ -391,6 +377,16 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
     tdma_handler->check_discovery_mode_expiration(tdma_handler);
 
+
+    if(message ==  DWT_SIG_TX_DONE && inst->testAppState != TA_TX_WAIT_CONF)
+	{
+		//It is possible to get an interrupt which takes the UWB out of TX_WAIT_CONF
+		//before we have to process it a DWT_SIG_TX_DONE event.
+    	//Clear the event in this case
+		instance_getevent(11);
+		done = INST_DONE_WAIT_FOR_NEXT_EVENT;
+	}
+
     switch (inst->testAppState)
     {
         case TA_INIT :
@@ -455,14 +451,15 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 					dwt_setrxtimeout(0);
 					inst->wait4ack = 0;
+					inst->canPrintInfo = TRUE;
 
 					//TODO revisit
 					// If we are using long response delays, disable sleep.
-					if (inst->resp_dly_us[RESP_DLY_POLL] >= LONG_RESP_DLY_LIMIT_US
-						|| inst->resp_dly_us[RESP_DLY_ANCH_RESP] >= LONG_RESP_DLY_LIMIT_US)
-					{
-						inst->sleepingEabled = 0;
-					}
+//					if (inst->resp_dly_us[RESP_DLY_POLL] >= LONG_RESP_DLY_LIMIT_US
+//						|| inst->resp_dly_us[RESP_DLY_ANCH_RESP] >= LONG_RESP_DLY_LIMIT_US)
+//					{
+//						inst->sleepingEabled = 0;
+//					}
 
                 }
                 break;
@@ -564,60 +561,15 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
             break ;
         }// end case TA_TXE_WAIT
         case TA_TXBLINK_WAIT_SEND :
-//        {
-//			int flength = (BLINK_FRAME_CRTL_AND_ADDRESS + FRAME_CRC);
-//
-//			//blink frames with IEEE EUI-64 tag ID
-//			inst->blinkmsg.seqNum = inst->frameSN++;
-//
-//			//using wait for response to do delayed receive
-//			inst->wait4ack = DWT_RESPONSE_EXPECTED;
-//
-//			//TODO modify timeout values to account for max value of RANGE_INIT_RAND
-//			dwt_setrxtimeout((uint16)inst->fwtoTimeB_sy*0);  //units are symbols
-//			//set the delayed rx on time (the ranging init will be sent after this delay)
-//			dwt_setrxaftertxdelay((uint32)inst->rnginitW4Rdelay_sy*0);  //units are 1.0256us - wait for wait4respTIM before RX on (delay RX)
-//
-//
-//			dwt_writetxdata(flength, (uint8 *)  (&inst->blinkmsg), 0) ; // write the frame data
-//			dwt_writetxfctrl(flength, 0, 1);
-//
-//			if(dwt_starttx(DWT_START_TX_IMMEDIATE | inst->wait4ack) == 0) //always using immediate TX and enable delayed RX
-//			{
-//				uint8 debug_msg[100];
-//	//					int n = sprintf((char *)&debug_msg, "TX_BLINK,%llX,NULL", instance_get_addr());
-//				int n = sprintf((char *)&debug_msg, "TX_BLINK,%04llX,NULL", instance_get_addr());
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-//
-//				inst->blink_start = portGetTickCnt();
-//				inst->timeofTx = portGetTickCnt();
-//				inst->txDoneTimeoutDuration = BLINK_SLEEP_DELAY + 20; //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
-//				tdma_handler->last_blink_time = portGetTickCnt();
-//				tdma_handler->blinkPeriodRand = (uint32)rand()%BLINK_PERIOD_RAND_MS;
-//
-//			}
-//
-//			inst->goToSleep = 1; //go to Sleep after this blink
-//			inst->testAppState = TA_TX_WAIT_CONF ; // wait confirmation
-//			inst->previousState = TA_TXBLINK_WAIT_SEND ;
-//			done = INST_DONE_WAIT_FOR_NEXT_EVENT; //will use RX FWTO to time out (set below)
-//
-//			break ;
-//		}// end case TA_TXBLINK_WAIT_SEND
-
 		{
-			int psduLength = BLINK_FRAME_CRTL_AND_ADDRESS + FRAME_CRC;
+			int psduLength = BLINK_FRAME_LEN_BYTES;
 
             //blink frames with IEEE EUI-64 tag ID
 			inst->blinkmsg.seqNum = inst->frameSN++;
 
 
-			//TODO modify timeout values to account for max value of RANGE_INIT_RAND
-			dwt_setrxtimeout((uint16)inst->durationFwToRngInit_sy*0);  //units are symbols
-			//set the delayed rx on time (the ranging init will be sent after this delay)
-			dwt_setrxaftertxdelay((uint32)inst->durationTxBlink2RxRngInit_sy*0);  //units are 1.0256us - wait for wait4respTIM before RX on (delay RX)
-			//using wait for response to do delayed receive
+			dwt_setrxtimeout(0);
+			dwt_setrxaftertxdelay(0);
 			inst->wait4ack = DWT_RESPONSE_EXPECTED;
 
         	dwt_writetxdata(psduLength, (uint8 *)  (&inst->blinkmsg), 0) ; // write the frame data
@@ -643,8 +595,8 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 				inst->blink_start = portGetTickCnt(); //TODO remove
 				inst->timeofTx = portGetTickCnt();
-				//TODO retune this duration!
-				inst->txDoneTimeoutDuration = BLINK_SLEEP_DELAY + 20; //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
+				//TODO check this duration!
+				inst->txDoneTimeoutDuration = inst->durationBlinkTxDoneTimeout_ms;
 				tdma_handler->last_blink_time = portGetTickCnt();
 				tdma_handler->blinkPeriodRand = (uint32)rand()%BLINK_PERIOD_RAND_MS;
 			}
@@ -653,12 +605,14 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 		}// end case TA_TXBLINK_WAIT_SEND
         case TA_TXRANGINGINIT_WAIT_SEND :
         {
-            int psduLength = RANGINGINIT_MSG_LEN;
-#if (USING_64BIT_ADDR == 1)
-            psduLength += FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC;
-#else
-            psduLength += FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC;
-#endif
+        	int psduLength = RNG_INIT_FRAME_LEN_BYTES;
+//            int psduLength = RNG_INIT_MSG_LEN; //TODO remove
+//#if (USING_64BIT_ADDR == 1)
+//            psduLength += FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC;
+//#else
+//            psduLength += FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC;
+//#endif
+
             inst->rng_initmsg.seqNum = inst->frameSN++;
 
             dwt_setrxaftertxdelay(0);
@@ -682,8 +636,8 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 				uint32 time_now = portGetTickCnt();
 				inst->timeofTx = time_now;
-				//TODO retune below
-				inst->txDoneTimeoutDuration = RNG_INIT_REPLY_DLY_MS + 20; //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
+				//TODO check below
+				inst->txDoneTimeoutDuration = inst->durationRngInitTxDoneTimeout_ms;
 				tdma_handler->set_discovery_mode(tdma_handler, WAIT_INF_INIT, time_now);
 			}
 
@@ -724,20 +678,23 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 				done = INST_DONE_WAIT_FOR_NEXT_EVENT; //will use RX FWTO to time out (set below)
 
 				inst->timeofTx = portGetTickCnt();
-				//TODO retune below
-				inst->txDoneTimeoutDuration = 200; //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
+				//TODO check below (INF message changes size, recalculate every time!)
+				uint64 margin_us = 1000;
+				uint64 framelength_us = instance_getmessageduration_us(psduLength);
+				inst->txDoneTimeoutDuration = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + framelength_us + margin_us, 1000);			//tx cmd to tx cb
 			}
 
 			break;
 		}
         case TA_TXPOLL_WAIT_SEND :
         {
-        	int psduLength = 0;
-#if (USING_64BIT_ADDR==1)
-            psduLength = TAG_POLL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC;
-#else
-            psduLength = TAG_POLL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
-#endif
+        	int psduLength = POLL_FRAME_LEN_BYTES;
+//        	int psduLength = 0;//TODO remove
+//#if (USING_64BIT_ADDR==1)
+//            psduLength = TAG_POLL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC;
+//#else
+//            psduLength = TAG_POLL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
+//#endif
 
             inst->msg.seqNum = inst->frameSN++;
 			inst->msg.messageData[FCODE] = RTLS_DEMO_MSG_TAG_POLL; //message function code (specifies if message is a poll, response or other...)
@@ -745,12 +702,15 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
             //enable rx on after tx
             dwt_setrxaftertxdelay(0);
-            dwt_setrxtimeout((uint16)inst->durationFwToFinal_sy*2);    //TODO fix this! remove *2
+            dwt_setrxtimeout(inst->durationPollTimeout);
             inst->wait4ack = DWT_RESPONSE_EXPECTED;
+
+            inst->cmd_poll_us = portGetTickCntMicro();//TODO remove
 
             dwt_writetxdata(psduLength, (uint8 *)  &inst->msg, 0) ; // write the frame data
             if(instancesendpacket(psduLength, DWT_START_TX_IMMEDIATE | inst->wait4ack, 0))
 			{
+            	inst->tx_poll = FALSE;
             	//failed
 				inst->previousState = TA_INIT;
 				inst->nextState = TA_INIT;
@@ -761,103 +721,35 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 			else
 			{
 				//succeded
-//				uint8 debug_msg[100];
-////				int n = sprintf((char *)&debug_msg, "TX_POLL,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
-//				int n = sprintf((char *)&debug_msg, "TX_POLL,%04llX,%04llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
+				uint8 debug_msg[100];
+//				int n = sprintf((char *)&debug_msg, "TX_POLL,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+				int n = sprintf((char *)&debug_msg, "TX_POLL,%04llX,%04llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
+				send_usbmessage(&debug_msg[0], n);
+				usb_run();
 
+				inst->tx_poll = TRUE;
 				inst->testAppState = TA_TX_WAIT_CONF ;
 				inst->previousState = TA_TXPOLL_WAIT_SEND ;
 				done = INST_DONE_WAIT_FOR_NEXT_EVENT; //will use RX FWTO to time out (set below)
 
 				inst->range_start = portGetTickCnt(); //TODO remove
 				inst->timeofTx = portGetTickCnt();
-				//TODO retune below
-				inst->txDoneTimeoutDuration = 200; //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
+				//TODO check below
+				inst->txDoneTimeoutDuration = inst->durationPollTxDoneTimeout_ms;
+				inst->canPrintInfo = FALSE; //don't print to LCD or USB while ranging
 			}
 
             break;
         }
-//        case TA_TXFINAL_WAIT_SEND :
-//        {
-//        	int psduLength = 0;
-//#if (USING_64BIT_ADDR==1)
-//            psduLength = TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC;
-//#else
-//            psduLength = TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
-//#endif
-//
-//            // Embbed into Final message:40-bit respRxTime
-//			// Write Response RX time field of Final message
-//			memcpy(&(inst->msg.messageData[RRXT]), (uint8 *)&inst->anchorRespRxTime, 5);
-//			inst->msg.messageData[FCODE] = RTLS_DEMO_MSG_TAG_FINAL; //message function code (specifies if message is a poll, response or other...)
-//
-//            dwt_setrxaftertxdelay((uint16)0);
-//			dwt_setrxtimeout((uint16)0);
-//            inst->wait4ack = DWT_RESPONSE_EXPECTED;
-//
-////            //TODO remove below
-////            //from RX time till now (need some amount of padding as well...)
-////            uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
-////			dwt_readsystime(sys_time_arr);
-////			uint64 dwt_time_now = 0;
-////			dwt_time_now = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
-////			uint64 diff = (uint64)(convertdevicetimetosec(dwt_time_now - inst->anchorRespRxTime)*1000000.0);
-////			//TODO remove
-////			uint8 debug_msg[100];
-////			int n = sprintf((char*)&debug_msg[0], "TAG_TURNAROUND_US: %llu",diff);
-////			send_usbmessage(&debug_msg[0], n);
-////			usb_run();
-//
-//            //TODO does this number get larger with more UWBS?
-//            //should we call this in rxgoodcallback to minimize time and time variance????
-//            uint64 time_now_us = portGetTickCntMicro();
-//			uint64 diff = get_dt64(inst->timeofRX, time_now_us);
-//			uint8 debug_msg[100];
-//			int n = sprintf((char*)&debug_msg[0], "TAG_TURNAROUND: %llu", diff);
-//			send_usbmessage(&debug_msg[0], n);
-//			usb_run();
-//
-//
-//
-//            dwt_writetxdata(psduLength, (uint8 *)  &inst->msg, 0) ; // write the frame data
-//
-//            if(instancesendpacket(psduLength, DWT_START_TX_DELAYED | inst->wait4ack, inst->delayedReplyTime))
-//			{
-//            	inst->previousState = TA_INIT;
-//            	inst->nextState = TA_INIT;
-//            	inst->testAppState = TA_RXE_WAIT;
-//
-//                inst->wait4ack = 0; //clear the flag as the TX has failed the TRX is off
-//                inst->lateTX++;
-//
-//                //TODO remove
-//				n = sprintf((char*)&debug_msg[0], "FINAL LATE TX");
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-//            }
-//            else
-//            {
-//                inst->testAppState = TA_TX_WAIT_CONF;  // wait confirmation
-//                inst->previousState = TA_TXFINAL_WAIT_SEND;
-//                done = INST_DONE_WAIT_FOR_NEXT_EVENT; //will use RX FWTO to time out  (set below)
-//
-//                inst->timeofTx = portGetTickCnt();
-//                //TODO retune below
-//                inst->txDoneTimeoutDuration = 200; //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
-//            }
-//
-//            break;
-//        }
         case TA_TXREPORT_WAIT_SEND :
 		{
-			int psduLength = 0;
-#if (USING_64BIT_ADDR==1)
-			psduLength = RNG_REPORT_MSG_LEN_LONG + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC;
-#else
-			psduLength = RNG_REPORT_MSG_LEN_SHORT + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
-#endif
+			int psduLength = REPORT_FRAME_LEN_BYTES;
+//			int psduLength = 0;
+//#if (USING_64BIT_ADDR==1)
+//			psduLength = RNG_REPORT_MSG_LEN_LONG + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC;
+//#else
+//			psduLength = RNG_REPORT_MSG_LEN_SHORT + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
+//#endif
 
 			// Write calculated TOF into response message
 			memcpy(&inst->report_msg.messageData[REPORT_TOF], &inst->tof[inst->uwbToRangeWith], 6);
@@ -883,9 +775,11 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 				done = INST_DONE_WAIT_FOR_NEXT_EVENT; //will use RX FWTO to time out  (set below)
 
 				inst->timeofTx = portGetTickCnt();
-				//TODO tune below
-				inst->txDoneTimeoutDuration = 200; //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
+				//TODO check below
+				inst->txDoneTimeoutDuration = inst->durationReportTxDoneTimeout_ms;
 			}
+
+			inst->canPrintInfo = TRUE; //ranging exchange complete, allow print to USB and LCD
 
 			break;
 		}
@@ -906,7 +800,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                 //sometimes the DW1000 tx callback (TXFRS) fails to trigger and the the SYS_STATE register
                 //reads IDLE for for PMSC, RX, and TX so we need another way to timeout since RX FWTO won't be triggered.
                 uint32 dt = get_dt32(inst->timeofTx, portGetTickCnt());
-
                 if(dt > inst->txDoneTimeoutDuration) //duration set at time of tx
                 {
                 	inst->gotTO = 1;
@@ -922,7 +815,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
             done = INST_NOT_DONE_YET;
 
-
             if (inst->gotTO) //timeout
 			{
             	inst_processtxrxtimeout(inst);
@@ -933,30 +825,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 			}
             else
             {
-                inst->txu.txTimeStamp = dw_event->timeStamp;
-
-                if(inst->previousState == TA_TXPOLL_WAIT_SEND) //TAG operations
-                {
-                    uint64 tagCalculatedFinalTxTime ;
-                    // Embed into Final message: 40-bit pollTXTime,  40-bit respRxTime,  40-bit finalTxTime
-
-                    //TODO handle number wrapping??
-                    tagCalculatedFinalTxTime = (inst->txu.txTimeStamp + inst->finalReplyDelay) & MASK_TXDTS;  // time we should send the response
-                    inst->delayedReplyTime = tagCalculatedFinalTxTime >> 8;
-
-                    // Calculate Time Final message will be sent and write this field of Final message
-                    // Sending time will be delayedReplyTime, snapped to ~125MHz or ~250MHz boundary by
-                    // zeroing its low 9 bits, and then having the TX antenna delay added
-                    // getting antenna delay from the device and add it to the Calculated TX Time
-                    tagCalculatedFinalTxTime = tagCalculatedFinalTxTime + inst->txAntennaDelay;
-                    tagCalculatedFinalTxTime &= MASK_40BIT;
-
-                    // Write Calculated TX time field of Final message
-					memcpy(&(inst->msg.messageData[FTXT]), (uint8 *)&tagCalculatedFinalTxTime, 5);
-					// Write Poll TX time field of Final message
-					memcpy(&(inst->msg.messageData[PTXT]), (uint8 *)&inst->txu.tagPollTxTime, 5);
-                }
-                else if(inst->previousState == TA_TXINF_WAIT_SEND)
+                if(inst->previousState == TA_TXINF_WAIT_SEND)
                 {
         			//get the message FCODE
         			uint8 fcode;
@@ -978,15 +847,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 						memcpy(&inst->inf_msg.messageData[FCODE], &fcode, sizeof(uint8));
 					}
                 }
-//                else if(inst->previousState == TA_TXRESPONSE_WAIT_SEND)//TODO remove after getting time
-//                {
-//                	uint64 diff = (uint64)(convertdevicetimetosec(dw_event->timeStamp - inst->tagPollRxTime)*1000000.0);
-//                	//TODO remove
-//					uint8 debug_msg[100];
-//					int n = sprintf((char*)&debug_msg[0], "ANCH_TURNAROUND_US: %llu",diff);
-//					send_usbmessage(&debug_msg[0], n);
-//					usb_run();
-//                }
 
                 inst->testAppState = TA_RXE_WAIT ;       // After sending, tag expects response/report, anchor waits to receive a final/new poll
                 
@@ -1010,7 +870,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 			done = INST_DONE_WAIT_FOR_NEXT_EVENT; //using RX FWTO
 
             inst->testAppState = TA_RX_WAIT_DATA;   // let this state handle it
-            //inst->rxCheckOnTime = timestamp_add32(portGetTickCnt(), RX_CHECK_ON_PERIOD);
             inst->rxCheckOnTime = portGetTickCnt();
 
 
@@ -1032,7 +891,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 					if(inst->mode == DISCOVERY)
 					{
                         //add a small random number to this to reduce chance of collisions
-                        inst->delayedReplyTime = (dw_event->timeStamp + inst->rnginitReplyDelay + (uint32)rand()%RANGE_INIT_RAND) >> 8 ;  // time we should send the blink response
+                        inst->delayedReplyTime = (dw_event->timeStamp + inst->rnginitReplyDelay + convertmicrosectodevicetimeu(rand()%RANGE_INIT_RAND_US)) >> 8 ;  // time we should send the blink response
                         
                         //set destination address
                         memcpy(&inst->rng_initmsg.destAddr[0], &(dw_event->msgu.rxblinkmsg.tagID[0]), BLINK_FRAME_SOURCE_ADDRESS); //remember who to send the reply to
@@ -1097,15 +956,12 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                         	send_usbmessage(&debug_msg[0], n);
 							usb_run();
 
-                            tdma_handler->build_new_network(tdma_handler);
-
-                            tdma_handler->populate_inf_msg(tdma_handler, RTLS_DEMO_MSG_INF_INIT);
-
 							uint32 time_now = portGetTickCnt();
+                            tdma_handler->build_new_network(tdma_handler);
+                            tdma_handler->populate_inf_msg(tdma_handler, RTLS_DEMO_MSG_INF_INIT);
 							tdma_handler->set_discovery_mode(tdma_handler, EXIT, time_now);
 
 							inst->testAppState = TA_TX_SELECT;
-
 							inst->mode = TAG;
                             inst->goToSleep = 0; //don't go to sleep - start ranging instead and then sleep after 1 range is done or poll times out
                             inst->instanceTimerTimeSaved = inst->instanceTimerTime = portGetTickCnt(); //set timer base
@@ -1269,16 +1125,9 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 							}
 
 							break;
-
-//                            inst->anchorRespRxTime = dw_event->timeStamp ; //Response's Rx time
-//
-//                            inst->testAppState = TA_TXFINAL_WAIT_SEND ; // send our response / the final
-
-//                            break;
 						} //RTLS_DEMO_MSG_ANCH_RESP
                         case RTLS_DEMO_MSG_TAG_FINAL :
                         {
-//                            send_rxmsgtousb("RX process: DWT_SIG_RX_OKAY-RTLS_DEMO_MSG_TAG_FINAL ");
                             int64 Rb, Da, Ra, Db ;
                             uint64 tagFinalTxTime  = 0;
                             uint64 tagFinalRxTime  = 0;
@@ -1304,12 +1153,12 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                             // poll response round trip delay time is calculated as
                             // (anchorRespRxTime - tagPollTxTime) - (anchorRespTxTime - tagPollRxTime)
                             Ra = (int64)((anchorRespRxTime - tagPollTxTime) & MASK_40BIT);
-                            Db = (int64)((inst->txu.anchorRespTxTime - inst->tagPollRxTime) & MASK_40BIT);
+                            Db = (int64)((inst->anchorRespTxTime - inst->tagPollRxTime) & MASK_40BIT);
 
                             // response final round trip delay time is calculated as
                             // (tagFinalRxTime - anchorRespTxTime) - (tagFinalTxTime - anchorRespRxTime)
-                            Rb = (int64)((tagFinalRxTime - inst->txu.anchorRespTxTime) & MASK_40BIT);
-                            Da = (int64)((tagFinalTxTime - anchorRespRxTime) & MASK_40BIT);
+                            Rb = (int64)((tagFinalRxTime - inst->anchorRespTxTime) & MASK_40BIT);
+							Da = (int64)((tagFinalTxTime - anchorRespRxTime) & MASK_40BIT);
 
                             RaRbxDaDb = (((double)Ra))*(((double)Rb)) - (((double)Da))*(((double)Db));
                             RbyDb = ((double)Rb + (double)Db);
@@ -1385,10 +1234,11 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 							}
 
                             dwt_setrxaftertxdelay(0);
-							instancesetantennadelays(); //this will update the antenna delay if it has changed
+							instancesetantennadelays(); //this will update the antenna delay if it has changed, TODO remove?
 
                             done = INST_DONE_WAIT_FOR_NEXT_EVENT;
 
+                            inst->canPrintInfo = TRUE; //ranging exchange complete, allow print to USB and LCD
 
 							break;
 						} //RTLS_DEMO_MSG_RNG_REPORT
@@ -1450,26 +1300,16 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                     
                     break;
                 }
-                case DWT_SIG_TX_DONE: //shouldn't happen under normal conditions, but this signal seems to be somewhat buggy
-                {
-                	instance_getevent(11); //get and clear this event
-                	break;
-                }
                 case DWT_SIG_TX_AA_DONE: //ignore this event - just process the rx frame that was received before the ACK response
                 case 0:
                 default:
                 {
                 	//check if RX is on every so often. Turn it on if it isn't.
-//                	uint32 time_now = portGetTickCnt();
-//                	if(time_now >= inst->rxCheckOnTime)
                 	uint32 time_now = portGetTickCnt();
 					uint32 timeSinceRxCheck = get_dt32(inst->rxCheckOnTime, time_now);
-					if(timeSinceRxCheck >= RX_CHECK_ON_PERIOD)
+					if(timeSinceRxCheck >= RX_CHECK_ON_PERIOD_MS)
 					{
-//						inst->rxCheckOnTime = portGetTickCnt() + RX_CHECK_ON_PERIOD;
-//						inst->rxCheckOnTime = timestamp_add32(time_now, RX_CHECK_ON_PERIOD);
 						inst->rxCheckOnTime = time_now;
-
 
 						//read SYS_STATE, getting second byte
 						uint8 regval = dwt_read8bitoffsetreg(SYS_STATE_ID,1);
@@ -1526,7 +1366,6 @@ int instance_init_s()
 
     // if using auto CRC check (DWT_INT_RFCG and DWT_INT_RFCE) are used instead of DWT_INT_RDFR flag
     // other errors which need to be checked (as they disable receiver) are
-//    dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | (DWT_INT_RXOVRR | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO /*| DWT_INT_RXPTO*/), 1);
     dwt_setinterrupt(SYS_MASK_VAL, 1);
 
     //this is platform dependent - only program if DW EVK/EVB
@@ -1546,10 +1385,6 @@ int instance_init_s()
 }
 
 
-
-
-
-
 extern uint8 dwnsSFDlen[];
 
 // Pre-compute frame lengths, timeouts and delays needed in ranging process.
@@ -1562,11 +1397,12 @@ void instance_init_timings(void)
 
 	static const int data_len_bytes[FRAME_TYPE_NB] = {
             BLINK_FRAME_LEN_BYTES, RNG_INIT_FRAME_LEN_BYTES, POLL_FRAME_LEN_BYTES,
-            RESP_FRAME_LEN_BYTES, FINAL_FRAME_LEN_BYTES, SYNC_FRAME_LEN_BYTES};
+            RESP_FRAME_LEN_BYTES, FINAL_FRAME_LEN_BYTES, REPORT_FRAME_LEN_BYTES, SYNC_FRAME_LEN_BYTES};
 
 
     // Margin used for timeouts computation.
-    const int margin_sy = 50;
+//    const int margin_sy = 50;
+    uint64 margin_us = 200;
 
     // All internal computations are done in tens of picoseconds before
     // conversion into microseconds in order to ensure that we keep the needed
@@ -1612,7 +1448,7 @@ void instance_init_timings(void)
         pre_len *= 101763;
 
     inst->storedPreLen = pre_len; //store to be used later with inf messages and frame_sync
-    inst->storePreLen_us = CEIL_DIV(pre_len, 100000);
+    inst->storedPreLen_us = CEIL_DIV(pre_len, 100000);
 
     // Second step is data length for all frame types.
     for (int i = 0; i < FRAME_TYPE_NB; i++)
@@ -1620,29 +1456,57 @@ void instance_init_timings(void)
     	inst->frameLengths_us[i] = instance_getmessageduration_us(data_len_bytes[i]);
     }
 
+    uint64 duration = 0;
+    duration += inst->frameLengths_us[POLL] - inst->storedPreLen_us; 					//poll tx ts to poll tx cb
+    duration += RX_TO_CB_DLY_US + RX_CB_TO_TX_CMD_DLY_US;			  					//poll tx cb to resp tx cmd
+    duration += TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[RESP] + RX_TO_CB_DLY_US; //resp tx cmd to resp rx cb
+    duration += margin_us;
+    inst->durationPollTimeout = (uint16)convertmicrosectodevicetimeu(duration);
+
+    duration = 0;
+    duration += inst->frameLengths_us[RESP] - inst->storedPreLen_us; 					 //resp tx ts to resp tx cb
+    duration += RX_TO_CB_DLY_US + RX_CB_TO_TX_CMD_DLY_US;			  					 //resp tx cb to final tx cmd
+    duration += TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[FINAL] + RX_TO_CB_DLY_US; //final tx cmd to final rx cb
+    duration += margin_us;
+	inst->durationRespTimeout = (uint16)convertmicrosectodevicetimeu(duration);
+
+	duration = 0;
+	duration += inst->frameLengths_us[FINAL] - inst->storedPreLen_us; 					 //final tx ts to final tx cb
+	duration += RX_TO_CB_DLY_US + RX_CB_TO_TX_CMD_DLY_US;			  					 //final tx cb to report tx cmd
+	duration += TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[REPORT] + RX_TO_CB_DLY_US;//report tx cmd to report rx cb
+	duration += margin_us;
+	inst->durationFinalTimeout = (uint16)convertmicrosectodevicetimeu(duration);
+
+//    // Update delay between poll transmission and final transmission.
+//    	uint64 final_delay_us = 0;
+//    	//poll tx ts to poll tx cb
+//    	final_delay_us += inst->frameLengths_us[POLL] - inst->storedPreLen_us;
+//    	//poll tx cb to resp tx cmd
+//    	final_delay_us += RX_TO_CB_DLY_US + RX_CB_TO_TX_CMD_DLY_US;
+//    	//resp tx cmd to final rx cb
+//    	final_delay_us += TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[RESP] + RX_TO_CB_DLY_US;
+
     //TODO fix TO values below
     // Final frame wait timeout time.
-    inst->durationFwToFinal_sy = US_TO_SY_INT(inst->frameLengths_us[FINAL])
-                        + RX_START_UP_SY + margin_sy;
-    // Ranging init frame wait timeout time.
-    inst->durationFwToRngInit_sy = US_TO_SY_INT(inst->frameLengths_us[RNG_INIT])
-                         + RX_START_UP_SY + margin_sy;
+//    inst->durationFwToFinal_sy = US_TO_SY_INT(inst->frameLengths_us[FINAL])
+//                        + RX_START_UP_SY + margin_sy;
+//    // Ranging init frame wait timeout time.
+//    inst->durationFwToRngInit_sy = US_TO_SY_INT(inst->frameLengths_us[RNG_INIT])
+//                         + RX_START_UP_SY + margin_sy;
 
     // Delay between blink transmission and ranging init reception.
-    inst->durationTxBlink2RxRngInit_sy =
-        US_TO_SY_INT((RNG_INIT_REPLY_DLY_MS * 1000) - inst->frameLengths_us[BLINK])
-        - RX_START_UP_SY;
+//    inst->durationTxBlink2RxRngInit_sy =
+//        US_TO_SY_INT((RNG_INIT_REPLY_DLY_US) - inst->frameLengths_us[BLINK])
+//        - RX_START_UP_SY;
     // Delay between anchor's response transmission and final reception.
-    inst->durationTxAnchResp2RxFinal_sy = US_TO_SY_INT(TAG_TURN_AROUND_TIME_US) - RX_START_UP_SY; //TODO remove?
+//    inst->durationTxAnchResp2RxFinal_sy = US_TO_SY_INT(TAG_TURN_AROUND_TIME_US) - RX_START_UP_SY; //TODO remove?
 
 
-	uint32 final_reply_delay_us = 0;
-
-	// POLL response delay.
-	inst->resp_dly_us[RESP_DLY_POLL] = (ANC_TURN_AROUND_TIME_US + inst->frameLengths_us[POLL]) & 0xFFFF;
-
-	// ANCH_RESP response delay.
-	inst->resp_dly_us[RESP_DLY_ANCH_RESP] = (TAG_TURN_AROUND_TIME_US + inst->frameLengths_us[RESP]) & 0xFFFF;
+	// POLL response delay. //TODO remove
+//	inst->resp_dly_us[RESP_DLY_POLL] = (ANC_TURN_AROUND_TIME_US + inst->frameLengths_us[POLL]) & 0xFFFF;
+//
+//	// ANCH_RESP response delay.
+//	inst->resp_dly_us[RESP_DLY_ANCH_RESP] = (TAG_TURN_AROUND_TIME_US + inst->frameLengths_us[RESP]) & 0xFFFF;
 
 //	// FINAL response delay.			//TODO different turnaround time?
 //	inst->resp_dly_us[RESP_DLY_FINAL] = (ANCH_TURN_AROUND_TIME_US + inst->frameLengths_us[FINAL]) & 0xFFFF;
@@ -1650,32 +1514,29 @@ void instance_init_timings(void)
 //	// Update delay between poll transmission and rx enable
 //	inst->txToRxDelayPoll_sy = US_TO_SY_INT((uint64)inst->resp_dly_us[RESP_DLY_POLL] - inst->frameLengths_us[POLL]) - RX_START_UP_SY;
 
-	// Update delay between poll transmission and final transmission.
-	final_reply_delay_us = inst->resp_dly_us[RESP_DLY_POLL] + inst->resp_dly_us[RESP_DLY_ANCH_RESP];
-	inst->finalReplyDelay = convertmicrosectodevicetimeu(final_reply_delay_us);
-	//inst->finalReplyDelay_ms = CEIL_DIV(final_reply_delay_us, 1000); //TODO remove!
+	duration = 0;
+	duration += inst->frameLengths_us[POLL] - inst->storedPreLen_us;						//poll tx ts to poll tx cb
+	duration += RX_TO_CB_DLY_US + RX_CB_TO_TX_CMD_DLY_US; 									//poll tx cb to resp tx cmd
+	duration += TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[RESP] + RX_TO_CB_DLY_US;		//resp tx cmd to resp rx cb
+	duration += RX_CB_TO_TX_CMD_DLY_US + MIN_DELAYED_TX_DLY_US + inst->storedPreLen_us;		//resp rx cb to final tx timestamp
+	inst->finalReplyDelay = convertmicrosectodevicetimeu(duration);
 
     // Delay between blink reception and ranging init message transmission.
-    inst->rnginitReplyDelay = convertmicrosectodevicetimeu(RNG_INIT_REPLY_DLY_MS * 1000);
-
-    // Delay between poll reception and response transmission. Computed from
-    // poll reception timestamp to response transmission timestamp so you have
-    // to add poll frame length to delay that must be respected between frames.
-#if (IMMEDIATE_RESPONSE == 0)
-    inst->responseReplyDelay = convertmicrosectodevicetimeu(ANC_TURN_AROUND_TIME_US + inst->frameLengths_us[POLL]);
-#else
-    inst->responseReplyDelay = 0 ;
-#endif
+    inst->rnginitReplyDelay = convertmicrosectodevicetimeu(RNG_INIT_REPLY_DLY_US);
 
 
-    //TODO remove
-//    // Smart Power is automatically applied by DW chip for frame of which length
-//    // is < 1 ms. Let the application know if it will be used depending on the
-//    // length of the longest frame.
-//    if (inst->frameLengths_us[FINAL] <= 1000)
-//        inst->smartPowerEn = 1;
-//    else
-        inst->smartPowerEn = 0;
+    margin_us = 1000;
+    inst->durationBlinkTxDoneTimeout_ms = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[BLINK] + margin_us, 1000);			//tx cmd to tx cb
+    inst->durationRngInitTxDoneTimeout_ms = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[RNG_INIT] + margin_us, 1000);		//tx cmd to tx cb
+    inst->durationPollTxDoneTimeout_ms = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[POLL] + margin_us, 1000);				//tx cmd to tx cb
+    inst->durationRespTxDoneTimeout_ms = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[RESP] + margin_us, 1000);				//tx cmd to tx cb
+    inst->durationFinalTxDoneTimeout_ms = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[FINAL] + margin_us, 1000);			//tx cmd to tx cb
+    inst->durationReportTxDoneTimeout_ms = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[REPORT] + margin_us, 1000);			//tx cmd to tx cb
+    inst->durationSyncTxDoneTimeout_ms = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[SYNC] + margin_us, 1000);				//tx cmd to tx cb
+
+
+
+    inst->smartPowerEn = 0;
 }
 
 uint32 instance_getmessageduration_us(int data_length_bytes)

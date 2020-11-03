@@ -44,11 +44,18 @@ static bool slot_transition(struct TDMAHandler *this)
 
 			}
 
-			while(timeSinceFrameStart64 >= frameDuration64)
+//			while(timeSinceFrameStart64 >= frameDuration64)
+//			{
+//				this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, frameDuration64);
+//				timeSinceFrameStart64 -= frameDuration64;
+//			}//TODO check and remove
+			if(timeSinceFrameStart64 >= frameDuration64)
 			{
-				this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, frameDuration64);
-				timeSinceFrameStart64 -= frameDuration64;
+				int div = timeSinceFrameStart64/frameDuration64;
+				this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, frameDuration64*div);
+				timeSinceFrameStart64 -= frameDuration64*div;
 			}
+
 
 			this->lastFST = this->uwbListTDMAInfo[0].frameStartTime;
 
@@ -119,7 +126,7 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 	//time from rx timestamp to now
 	uint64 rxfs_process_delay = dwt_getdt(dw_event->timeStamp, dwt_time_now);
 
-	uint64 txrx_delay =  (uint64)(convertdevicetimetosec(tx_antenna_delay + rxfs_process_delay)*1000000.0) + inst->storePreLen_us;
+	uint64 txrx_delay =  (uint64)(convertdevicetimetosec(tx_antenna_delay + rxfs_process_delay)*1000000.0) + inst->storedPreLen_us;
 
 	uint64 hisTimeSinceFrameStart_us = timeSinceFrameStart_us + txrx_delay;
 	this->uwbListTDMAInfo[srcIndex].frameStartTime = timestamp_subtract64(time_now_us, hisTimeSinceFrameStart_us);
@@ -234,12 +241,13 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 
 static bool tx_sync_msg(struct TDMAHandler *this)
 {
-	int psduLength = 0;
-#if (USING_64BIT_ADDR==1)
-	psduLength = SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC;
-#else
-	psduLength = SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
-#endif
+	int psduLength = SYNC_FRAME_LEN_BYTES;
+//	int psduLength = 0; //TODO remove
+//#if (USING_64BIT_ADDR==1)
+//	psduLength = SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC;
+//#else
+//	psduLength = SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
+//#endif
 
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
 	uint64 time_now_us = portGetTickCntMicro();
@@ -267,8 +275,8 @@ static bool tx_sync_msg(struct TDMAHandler *this)
 		inst->testAppState = TA_TX_WAIT_CONF;	// wait confirmation
 
 		inst->timeofTx = portGetTickCnt();
-		//TODO retune below
-		inst->txDoneTimeoutDuration = 200; //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
+		//TODO check below
+		inst->txDoneTimeoutDuration = inst->durationSyncTxDoneTimeout_ms; //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
 		return TRUE;
 	}
 }

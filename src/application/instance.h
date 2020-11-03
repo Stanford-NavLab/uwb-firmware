@@ -44,6 +44,7 @@ typedef struct
 
     // Is sleeping between frames enabled?
     uint8 sleepingEabled; //Ranging Init message can tell tag to stay in IDLE between ranging exchanges
+    bool canPrintInfo;	  //only print to usb and/or LCD display when TRUE
 
 	//timeouts and delays
 	int tagSleepTime_ms; //in milliseconds
@@ -51,16 +52,28 @@ typedef struct
 	//this is the delay used for the delayed transmit (when sending the ranging init, response, and final messages)
 	uint64 rnginitReplyDelay ;
 	uint64 finalReplyDelay ;
-	uint64 responseReplyDelay ;
 //	int finalReplyDelay_ms ; //TODO remove
+	uint64 cmd_poll_us ;//TODO remove
 
 	// xx_sy the units are 1.0256 us
-	uint32 durationTxAnchResp2RxFinal_sy ;    // this is the delay used after sending a response and turning on the receiver to receive final
+//	uint32 durationTxAnchResp2RxFinal_sy ;    // this is the delay used after sending a response and turning on the receiver to receive final
 	uint32 txToRxDelayPoll_sy ;    // this is the delay used after sending a poll and turning on the receiver to receive response
-	int durationTxBlink2RxRngInit_sy ;	// this is the delay used after sending a blink and turning on the receiver to receive the ranging init message
+//	int durationTxBlink2RxRngInit_sy ;	// this is the delay used after sending a blink and turning on the receiver to receive the ranging init message
 
-	int durationFwToFinal_sy ;	//this is final message duration (longest out of ranging messages)
-	int durationFwToRngInit_sy ;	//this is the ranging init message duration
+	uint16 durationPollTimeout;		//rx timeout duration after tx poll
+	uint16 durationRespTimeout;		//rx timeout duration after tx resp
+	uint16 durationFinalTimeout;   	//rx timeout duration after tx final
+
+	uint32 durationBlinkTxDoneTimeout_ms;   	//tx done timeout after tx blink
+	uint32 durationRngInitTxDoneTimeout_ms;   	//tx done timeout after tx rng_init
+	uint32 durationPollTxDoneTimeout_ms;   		//tx done timeout after tx poll
+	uint32 durationRespTxDoneTimeout_ms;   		//tx done timeout after tx resp
+	uint32 durationFinalTxDoneTimeout_ms;   	//tx done timeout after tx final
+	uint32 durationReportTxDoneTimeout_ms;   	//tx done timeout after tx report
+	uint32 durationSyncTxDoneTimeout_ms;   		//tx done timeout after tx sync
+
+
+
 
 	uint32 delayedReplyTime;		// delayed reply time of delayed TX message - high 32 bits
 
@@ -68,7 +81,7 @@ typedef struct
     // in microseconds.
     uint32 frameLengths_us[FRAME_TYPE_NB];
     uint32 storedPreLen;           //precomputed conversion of preamble and sfd
-    uint64 storePreLen_us;		   //precomputed conversion of preamble and sfd in microseconds
+    uint64 storedPreLen_us;		   //precomputed conversion of preamble and sfd in microseconds
 
 	//message structures used for transmitted messages
 #if (USING_64BIT_ADDR == 1)
@@ -98,11 +111,12 @@ typedef struct
 
 	//64 bit timestamps
 	//union of TX timestamps
-	union {
-		uint64 txTimeStamp ;		   // last tx timestamp
-		uint64 tagPollTxTime ;		   // tag's poll tx timestamp
-	    uint64 anchorRespTxTime ;	   // anchor's reponse tx timestamp
-	}txu;
+//	union {
+//		uint64 txTimeStamp ;		   // last tx timestamp
+//		uint64 tagPollTxTime ;		   // tag's poll tx timestamp
+//	    uint64 anchorRespTxTime ;	   // anchor's reponse tx timestamp
+//	}txu;
+	uint64 anchorRespTxTime ;		// anchor's reponse tx timestamp
 	uint64 anchorRespRxTime ;	    // receive time of response message
 	uint64 tagPollRxTime ;          // receive time of poll message
 
@@ -140,6 +154,8 @@ typedef struct
 
 	uint32 timeofTx;
 	uint32 txDoneTimeoutDuration;
+	bool tx_poll;
+	bool tx_anch_resp;
     uint32 blink_start;			//TODO remove
     uint32 range_start;			//TODO remove
     uint64 timeofRX;			//TODO remove

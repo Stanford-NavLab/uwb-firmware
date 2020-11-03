@@ -510,7 +510,7 @@ int dw_main(void)
 //            n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
 //            n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
 
-			if(instance_mode == TAG)
+			if(instance_mode == TAG && inst->canPrintInfo == TRUE)
 			{
 				uint64 aaddr = instancenewrangeancadd();
 				uint64 taddr = instancenewrangetagadd();
@@ -545,7 +545,10 @@ int dw_main(void)
 #endif
         }
 
-        if(enableLCD == TRUE)
+
+        //TODO only write to LCD if we aren't in the middle of  ranging messages
+        //the random sleep messages embedded in the LCD calls makes things slow...
+        if(enableLCD == TRUE && inst->canPrintInfo == TRUE)
 		{
         	toggle_step = 750;
         	memset(dataseq, ' ', LCD_BUFF_LEN);
