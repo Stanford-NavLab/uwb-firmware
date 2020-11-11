@@ -187,7 +187,7 @@ uint32 inittestapplication(uint8 mode_switch)
     result = instance_init() ;
     if (0 > result) return(-1) ; // Some failure has occurred
 
-    result = tdma_init_s();
+
 
     port_set_dw1000_fastrate();
     devID = instancereaddeviceid() ;
@@ -219,6 +219,9 @@ uint32 inittestapplication(uint8 mode_switch)
     instancesettagsleepdelay(POLL_SLEEP_DELAY, BLINK_SLEEP_DELAY); //set the Tag sleep time
 
     instance_init_timings();
+
+    instance_data_t* inst = instance_get_local_structure_ptr(0);
+    result = tdma_init_s(inst->durationSlotMax_us);	//call after instance_init_timings() to get slot duration
 
     return devID;
 }
@@ -512,12 +515,12 @@ int dw_main(void)
 
 			if(instance_mode == TAG && inst->canPrintInfo == TRUE)
 			{
-				uint64 aaddr = instancenewrangeancadd();
-				uint64 taddr = instancenewrangetagadd();
-//				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
-				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
-				send_usbmessage(&dataseq[0], n);
-				usb_run();
+//				uint64 aaddr = instancenewrangeancadd();
+//				uint64 taddr = instancenewrangetagadd();
+////				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
+//				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
+//				send_usbmessage(&dataseq[0], n);
+//				usb_run();
 
 			}
 			else
@@ -546,8 +549,8 @@ int dw_main(void)
         }
 
 
-        //TODO only write to LCD if we aren't in the middle of  ranging messages
-        //the random sleep messages embedded in the LCD calls makes things slow...
+        //only write to LCD if we aren't in the middle of  ranging messages
+        //the random sleep messages embedded in the LCD calls messes up the timing
         if(enableLCD == TRUE && inst->canPrintInfo == TRUE)
 		{
         	toggle_step = 750;
@@ -640,7 +643,7 @@ int dw_main(void)
 //        usb_run();
 #endif
 
-        if(canSleep)__WFI();
+//        if(canSleep)__WFI();
     }
 
 

@@ -21,11 +21,19 @@ static bool slot_transition(struct TDMAHandler *this)
 
 		if(timeSinceSlotStart64 >= this->slotDuration_us)
 		{
+//			uint8 debug_msg[100]; //TODO remove
+////			int n = sprintf((char *)&debug_msg, "new slot, time_now_us: %llu", time_now_us);
+//
+//			int n = sprintf((char *)&debug_msg, "new slot, time_now_us: %llu, state: %s, mode: %s", time_now_us,  get_inst_states_string(inst->testAppState), get_instanceModes_string(inst->mode));
+//			send_usbmessage(&debug_msg[0], n);
+//			usb_run();
+
 			transition = TRUE;
 			this->firstPollSentThisSlot = FALSE;
 			this->firstPollComplete = FALSE;
 			this->secondPollSentThisSlot = FALSE;
 			this->infSentThisSlot = FALSE;
+			inst->canPrintInfo = TRUE;
 
 			//we have transitioned into the next slot.
 			//get the slot number and set the start time appropriately
@@ -36,19 +44,14 @@ static bool slot_transition(struct TDMAHandler *this)
 			if(timeSinceFrameStart64 >= frameDuration64)
 			{
 				//TODO remove
-//				uint8 debug_msg[100];
-//////				 int n = sprintf((char*)&debug_msg[0], "NEW FRAME, %llX,  this->frameStartTime: %lu, this->slotDuration*this->framelength: %lu", instance_get_addr(), this->frameStartTime, (this->slotDuration*this->framelength));
-//				int n = sprintf((char*)&debug_msg[0], "%llX, %llu, %llu", instance_get_addr(), this->lastFST, time_now_us);
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
+				uint8 debug_msg[100];
+////				 int n = sprintf((char*)&debug_msg[0], "NEW FRAME, %llX,  this->frameStartTime: %lu, this->slotDuration*this->framelength: %lu", instance_get_addr(), this->frameStartTime, (this->slotDuration*this->framelength));
+				int n = sprintf((char*)&debug_msg[0], "%llX, %llu, %llu", instance_get_addr(), this->lastFST, time_now_us);
+				send_usbmessage(&debug_msg[0], n);
+				usb_run();
 
 			}
 
-//			while(timeSinceFrameStart64 >= frameDuration64)
-//			{
-//				this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, frameDuration64);
-//				timeSinceFrameStart64 -= frameDuration64;
-//			}//TODO check and remove
 			if(timeSinceFrameStart64 >= frameDuration64)
 			{
 				int div = timeSinceFrameStart64/frameDuration64;
@@ -75,6 +78,7 @@ static bool slot_transition(struct TDMAHandler *this)
 				{
 					//go to RX
 					inst->mode = ANCHOR;
+					inst->wait4ack = 0;
 					inst->testAppState = TA_RXE_WAIT;
 				}
 			}
@@ -111,8 +115,8 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 	dwt_time_now = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
 	uint64 time_now_us = portGetTickCntMicro();
 
-	//time from message to tx
-	//assuming zero since we use DWT_START_TX_IMMEDIATE
+	//time from command tx to tx timestamp
+	uint64 infCmdToTsDelay_us = TX_CMD_TO_TX_CB_DLY_US + inst->storedPreLen_us;
 
 	//tx antenna delay
 	uint64 tx_antenna_delay = (uint64)inst->txAntennaDelay;
@@ -126,7 +130,7 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 	//time from rx timestamp to now
 	uint64 rxfs_process_delay = dwt_getdt(dw_event->timeStamp, dwt_time_now);
 
-	uint64 txrx_delay =  (uint64)(convertdevicetimetosec(tx_antenna_delay + rxfs_process_delay)*1000000.0) + inst->storedPreLen_us;
+	uint64 txrx_delay =  (uint64)(convertdevicetimetosec(tx_antenna_delay + rxfs_process_delay)*1000000.0) + infCmdToTsDelay_us;
 
 	uint64 hisTimeSinceFrameStart_us = timeSinceFrameStart_us + txrx_delay;
 	this->uwbListTDMAInfo[srcIndex].frameStartTime = timestamp_subtract64(time_now_us, hisTimeSinceFrameStart_us);
@@ -242,12 +246,6 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 static bool tx_sync_msg(struct TDMAHandler *this)
 {
 	int psduLength = SYNC_FRAME_LEN_BYTES;
-//	int psduLength = 0; //TODO remove
-//#if (USING_64BIT_ADDR==1)
-//	psduLength = SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC;
-//#else
-//	psduLength = SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
-//#endif
 
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
 	uint64 time_now_us = portGetTickCntMicro();
@@ -256,8 +254,8 @@ static bool tx_sync_msg(struct TDMAHandler *this)
 	memcpy(&inst->sync_msg.messageData[SYNC_TSFS], &myTimeSinceFrameStart_us, 6);
 	inst->sync_msg.seqNum = inst->frameSN++;
 
-	dwt_setrxaftertxdelay((uint16)0);
-	dwt_setrxtimeout((uint16)0);
+	dwt_setrxaftertxdelay(0);	//units are 1.0256us
+	dwt_setrxtimeout(0);		//units are 1.0256us
 	inst->wait4ack = 0;
 
 	dwt_writetxdata(psduLength, (uint8 *)&inst->sync_msg, 0) ; // write the frame data
@@ -275,8 +273,7 @@ static bool tx_sync_msg(struct TDMAHandler *this)
 		inst->testAppState = TA_TX_WAIT_CONF;	// wait confirmation
 
 		inst->timeofTx = portGetTickCnt();
-		//TODO check below
-		inst->txDoneTimeoutDuration = inst->durationSyncTxDoneTimeout_ms; //NOTE timeout duration found experimentally, may need to be changed if the delays in instance.h are modified
+		inst->txDoneTimeoutDuration = inst->durationSyncTxDoneTimeout_ms; //NOTE timeout duration found experimentally
 		return TRUE;
 	}
 }
@@ -341,54 +338,146 @@ static bool tx_select(struct TDMAHandler *this)
 		}
 		else
 		{
-			if(this->firstPollSentThisSlot == TRUE && this->secondPollSentThisSlot == FALSE && this->firstPollComplete == FALSE)
-			{
-				int test = 1;
-				test++;
-			}
 
-			//check which neighbor UWB hasn't been ranged with for the longest amount of time
-			uint32 timeSinceOldestRange = 0;
-			uint32 timeSinceSecondOldestRange = 0;
-			uint8 second_oldest_uwb_index = 255;
+			uint32 timeSinceRange[UWB_LIST_SIZE] = {0}; //0th entry unused
+			uint32 numNeighbors = 0;
+			uint32 time_now = portGetTickCnt();
+
+			//get time since range for each neighbor
 			for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
 			{
 				if(this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR)
 				{
-					uint32 timeSinceRange = get_dt32(this->uwbListTDMAInfo[i].lastRange, portGetTickCnt());
-
-					if(timeSinceOldestRange == 0)
-					{
-						timeSinceOldestRange = timeSinceRange;
-						timeSinceSecondOldestRange = timeSinceRange;
-
-						uwb_index = i;
-						second_oldest_uwb_index = i;
-					}
-					else if(timeSinceRange > timeSinceOldestRange)
-					{
-						timeSinceSecondOldestRange = timeSinceOldestRange;
-						second_oldest_uwb_index = uwb_index;
-						timeSinceOldestRange = timeSinceRange;
-						uwb_index = i;
-					}
-					else if(timeSinceRange > timeSinceSecondOldestRange)
-					{
-						timeSinceSecondOldestRange = timeSinceRange;
-						second_oldest_uwb_index = i;
-					}
-					else if(timeSinceOldestRange == timeSinceSecondOldestRange)
-					{
-						timeSinceSecondOldestRange = timeSinceRange;
-						second_oldest_uwb_index = i;
-					}
+					numNeighbors++;
+					timeSinceRange[i] = get_dt32(this->uwbListTDMAInfo[i].lastRange, time_now);
 				}
 			}
 
-			if(this->firstPollSentThisSlot == TRUE && this->secondPollSentThisSlot == FALSE && this->firstPollComplete == FALSE)
+			if(this->nthOldest > numNeighbors)
 			{
-				uwb_index = second_oldest_uwb_index;
+				this->nthOldest = 1;
 			}
+
+			//get the nth oldest
+			for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
+			{
+				if(this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR)
+				{
+					uint8 numOlder = 0;
+					for(int j = 1; j < inst->uwbListLen; j++)//0 reserved for self
+					{
+						if(i != j)
+						{
+							if(this->uwbListTDMAInfo[j].connectionType == UWB_LIST_NEIGHBOR)
+							{
+								if(timeSinceRange[i] < timeSinceRange[j])
+								{
+									numOlder++;
+								}
+							}
+						}
+					}
+
+					if(numOlder + 1 == this->nthOldest)
+					{
+						uwb_index = i;
+						break;
+					}
+				}
+
+//				if(this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR)
+//				{
+//					uint8 numOlder = 0;
+//					for(int j = 1; j < inst->uwbListLen; j++)//0 reserved for self
+//					{
+//						if(i != j)
+//						{
+//							if(this->uwbListTDMAInfo[j].connectionType == UWB_LIST_NEIGHBOR)
+//							{
+//								if(timeSinceRange[i] <= timeSinceRange[j])
+//								{
+//									numOlder++;
+//								}
+//							}
+//						}
+//					}
+//
+//					bool range = FALSE;
+//					if(this->firstPollSentThisSlot == TRUE)
+//					{
+//						if(this->firstPollComplete == FALSE && this->secondPollSentThisSlot == FALSE)
+//						{
+//							//second poll this slot
+//
+//							if(numOlder + 1 == this->nthOldest)
+//							{
+//								range = TRUE;
+//							}
+//						}
+//					}
+//					else	//first poll this slot
+//					{
+//						//want to range with the oldest index
+//						if(numOlder + 1 == this->nthOldest)
+//						{
+//							range = TRUE;
+//						}
+//					}
+//
+//					if(range == TRUE)
+//					{
+//						uwb_index = i;
+////						this->nthOldest++;
+//						break;
+//					}
+//				}
+			}
+
+//			//TODO make this work right when two or more drop out at the same time
+//			//check which neighbor UWB hasn't been ranged with for the longest amount of time
+//			uint32 timeSinceOldestRange = 0;
+//			uint32 timeSinceSecondOldestRange = 0;
+//			uint8 second_oldest_uwb_index = 255;
+//			for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
+//			{
+//				if(this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR)
+//				{
+//					uint32 timeSinceRange = get_dt32(this->uwbListTDMAInfo[i].lastRange, portGetTickCnt());
+//
+//					if(timeSinceOldestRange == 0)
+//					{
+//						timeSinceOldestRange = timeSinceRange;
+//						timeSinceSecondOldestRange = timeSinceRange;
+//
+//						uwb_index = i;
+//						second_oldest_uwb_index = i;
+//					}
+//					else if(timeSinceRange > timeSinceOldestRange)
+//					{
+//						timeSinceSecondOldestRange = timeSinceOldestRange;
+//						second_oldest_uwb_index = uwb_index;
+//						timeSinceOldestRange = timeSinceRange;
+//						uwb_index = i;
+//					}
+//					else if(timeSinceRange > timeSinceSecondOldestRange)
+//					{
+//						timeSinceSecondOldestRange = timeSinceRange;
+//						second_oldest_uwb_index = i;
+//					}
+//					else if(timeSinceOldestRange == timeSinceSecondOldestRange)
+//					{
+//						timeSinceSecondOldestRange = timeSinceRange;
+//						second_oldest_uwb_index = i;
+//					}
+//				}
+//			}
+//
+//			if(this->firstPollSentThisSlot == TRUE && this->secondPollSentThisSlot == FALSE && this->firstPollComplete == FALSE)
+//			{
+//				uwb_index = second_oldest_uwb_index;
+//			}
+
+
 
 			if(uwb_index == 255 && inst->uwbListLen > 1)
 			{
@@ -429,7 +518,7 @@ static bool tx_select(struct TDMAHandler *this)
 		else if(this->secondPollSentThisSlot == FALSE && this->firstPollComplete == FALSE)
 		{
 			this->secondPollSentThisSlot = TRUE;
-			inst->testAppState = TA_TXPOLL_WAIT_SEND; //select new uwb index!
+			inst->testAppState = TA_TXPOLL_WAIT_SEND;
 		}
 		else if(this->infSentThisSlot == FALSE)
 		{
@@ -1019,7 +1108,8 @@ static void find_assign_slot(struct TDMAHandler *this)
 	while(TRUE)
 	{
 		//GU
-		for(uint8 i = 1; i < info->framelength; i++) //TODO make sure we don't accidentally assign to slot 0
+		uint8 slotsAssigned = 0;
+		for(uint8 i = 1; i < info->framelength; i++)//do not assign to 0th slot
 		{
 			bool assigned = FALSE;
 
@@ -1076,7 +1166,13 @@ static void find_assign_slot(struct TDMAHandler *this)
 			if(assigned == FALSE)
 			{
 				this->assign_slot(info, i, FALSE);
-				assignment_made = TRUE; //TODO just stop here? or get all unassigned slots?
+				assignment_made = TRUE;
+
+				slotsAssigned++;
+				if(slotsAssigned > 1) //assign self up to two empty slots
+				{
+					break;
+				}
 			}
 		}
 
@@ -1531,6 +1627,9 @@ static void enter_discovery_mode(struct TDMAHandler *this)
 	this->set_discovery_mode(this, WAIT_INF_REG, time_now);
 	this->collectInfStartTime = time_now;
 
+	instance_data_t *inst = instance_get_local_structure_ptr(0);
+	inst->canPrintInfo = TRUE;
+
 	this->tdma_free_all_slots(this);
 }
 
@@ -1556,13 +1655,14 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 		}
 		case WAIT_INF_INIT:
 		{
-			this->discovery_mode_duration = 400;//TODO use a smart timeout value
+			this->discovery_mode_duration = this->slotDuration_ms;
 			this->discovery_mode_expires = TRUE;
 			break;
 		}
 		case WAIT_RNG_INIT:
 		{
-			this->discovery_mode_duration = 400;//TODO use a smart timeout value
+			instance_data_t *inst = instance_get_local_structure_ptr(0);
+			this->discovery_mode_duration = inst->durationWaitRangeInit_ms;
 			this->discovery_mode_expires = TRUE;
 			break;
 		}
@@ -1816,7 +1916,7 @@ static void check_discovery_mode_expiration(struct TDMAHandler *this)
 }
 
 
-static bool check_timeouts(struct TDMAHandler *this, uint32 time_now)
+static bool check_timeouts(struct TDMAHandler *this)
 {
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
 	uint32 delta_t = 0;
@@ -1833,9 +1933,9 @@ static bool check_timeouts(struct TDMAHandler *this, uint32 time_now)
 		{
 			case UWB_LIST_NEIGHBOR:
 			{
-				delta_t = get_dt32(info->lastCommNeighbor, time_now);
+				delta_t = get_dt32(info->lastCommNeighbor, portGetTickCnt()); //get time now here in case rx interrupt occurs before get_dt call
 
-				if(delta_t > UWB_COMM_TIMEOUT)
+				if(delta_t > inst->durationUwbCommTimeout_ms)
 				{
 					if(info->lastCommHidden != 0)
 					{
@@ -1870,9 +1970,9 @@ static bool check_timeouts(struct TDMAHandler *this, uint32 time_now)
 			}
 			case UWB_LIST_HIDDEN:
 			{
-				delta_t = get_dt32(info->lastCommHidden, time_now);
+				delta_t = get_dt32(info->lastCommHidden, portGetTickCnt()); //get time now here in case rx interrupt occurs before get_dt call
 
-				if(delta_t > UWB_COMM_TIMEOUT)
+				if(delta_t > inst->durationUwbCommTimeout_ms)
 				{
 					if(info->lastCommTwiceHidden != 0)
 					{
@@ -1892,9 +1992,9 @@ static bool check_timeouts(struct TDMAHandler *this, uint32 time_now)
 			}
 			case UWB_LIST_TWICE_HIDDEN:
 			{
-				delta_t = get_dt32(info->lastCommTwiceHidden, time_now);
+				delta_t = get_dt32(info->lastCommTwiceHidden, portGetTickCnt()); //get time now here in case rx interrupt occurs before get_dt call
 
-				if(delta_t > UWB_COMM_TIMEOUT)
+				if(delta_t > inst->durationUwbCommTimeout_ms)
 				{
 					info->connectionType = UWB_LIST_INACTIVE;
 					this->free_slots(info);
@@ -1946,47 +2046,6 @@ static bool check_timeouts(struct TDMAHandler *this, uint32 time_now)
 
 	return noNeighbors;
 }
-
-
-static void remove_uwbinfo(struct TDMAHandler *this, uint8 uwb_index)
-{
-	instance_data_t *inst = instance_get_local_structure_ptr(0);
-
-	if(uwb_index > 0 && uwb_index < inst->uwbListLen)
-	{
-		this->free_slots(&this->uwbListTDMAInfo[uwb_index]);
-
-		for(int i=uwb_index; i<inst->uwbListLen-1; i++)
-		{
-			struct TDMAInfo *info_a = &this->uwbListTDMAInfo[i];
-			struct TDMAInfo *info_b = &this->uwbListTDMAInfo[i+1];
-
-			info_a->connectionType = info_b->connectionType;
-			info_a->lastCommNeighbor = info_b->lastCommNeighbor;
-			info_a->lastCommHidden = info_b->lastCommHidden;
-			info_a->lastCommTwiceHidden = info_b->lastCommTwiceHidden;
-			info_a->lastRange = info_b->lastRange;
-			info_a->frameStartTime = info_b->frameStartTime;
-			info_a->framelength = info_b->framelength;
-			info_a->slotsLength = info_b->slotsLength;
-			info_a->slots = info_b->slots;
-		}
-
-
-		struct TDMAInfo *info_end = &this->uwbListTDMAInfo[inst->uwbListLen-1]; //maybe this!
-		info_end->connectionType = UWB_LIST_INACTIVE;
-		info_end->lastCommNeighbor = 0;
-		info_end->lastCommHidden = 0;
-		info_end->lastCommTwiceHidden = 0;
-		info_end->lastRange = 0;
-		info_end->frameStartTime = 0;
-		info_end->framelength = MIN_FRAMELENGTH;
-		this->free_slots(info_end);
-	}
-}
-
-
-
 
 
 static void usb_dump_tdma(struct TDMAHandler *this)
@@ -2050,33 +2109,8 @@ static void usb_dump_tdma(struct TDMAHandler *this)
 
 }
 
-//uint8 get_largest_framelength(struct TDMAHandler *this)
-//{
-//	instance_data_t *inst = instance_get_local_structure_ptr(0);
-//
-//	uint8 max_framelength = MIN_FRAMELENGTH;
-//	if(this->myTDMAInfo.framelength > max_framelength)
-//	{
-//		max_framelength = this->myTDMAInfo.framelength;
-//	}
-//
-//	for(int i = 0; i < inst->uwbListLen; i++)
-//	{
-//		if(inst->uwbListType[i] == UWB_LIST_NEIGHBOR)
-//		{
-//			if(this->uwbFramelengths[i] > max_framelength)
-//			{
-//				max_framelength = this->uwbFramelengths[i];
-//			}
-//		}
-//
-//	}
-//
-//	return max_framelength;
-//}
 
-
-static struct TDMAHandler new(){
+static struct TDMAHandler new(uint64 slot_duration){
 	struct TDMAHandler ret = {};
 
 	ret.slot_transition = &slot_transition;
@@ -2103,7 +2137,6 @@ static struct TDMAHandler new(){
 	ret.set_discovery_mode = &set_discovery_mode;
 	ret.check_discovery_mode_expiration = &check_discovery_mode_expiration;
 	ret.check_timeouts = &check_timeouts;
-	ret.remove_uwbinfo = &remove_uwbinfo;
 	ret.usb_dump_tdma = &usb_dump_tdma;
 
 
@@ -2112,11 +2145,11 @@ static struct TDMAHandler new(){
 	ret.deconflict_slot_pair = &deconflict_slot_pair;
 	ret.self_conflict = &self_conflict;
 
-
-	ret.slotDuration_ms = 50; //TODO should be a function of the data rate and the max number of UWBs
-	ret.slotDuration_us = ret.slotDuration_ms*1000;
+	ret.slotDuration_us = slot_duration;
+	ret.slotDuration_ms = slot_duration/1000 + (slot_duration%1000 == 0 ? 0 : 1);
 
 	uint64 time_now_us = portGetTickCntMicro();
+	uint32 time_now = portGetTickCnt();
 
 	ret.maxFramelength = (uint8)MIN_FRAMELENGTH;
 	while(ret.maxFramelength < (int)UWB_LIST_SIZE + 1)
@@ -2134,7 +2167,7 @@ static struct TDMAHandler new(){
 		ret.uwbListTDMAInfo[i].lastCommNeighbor = 0;
 		ret.uwbListTDMAInfo[i].lastCommHidden = 0;
 		ret.uwbListTDMAInfo[i].lastCommTwiceHidden = 0;
-		ret.uwbListTDMAInfo[i].lastRange = 0;
+		ret.uwbListTDMAInfo[i].lastRange = time_now;
 	}
 	ret.uwbListTDMAInfo[0].connectionType = UWB_LIST_SELF;
 
@@ -2144,13 +2177,14 @@ static struct TDMAHandler new(){
     ret.firstPollSentThisSlot = FALSE;
     ret.firstPollComplete = FALSE;
     ret.secondPollSentThisSlot = FALSE;
-    ret.slotStartDelay_us = 4000;
-    ret.frameSyncThreshold_us = 2*ret.slotStartDelay_us;
+    ret.nthOldest = 1;
+    ret.nthOldestPlus = 2;
+    ret.slotStartDelay_us = SLOT_START_BUFFER_US;
+    ret.frameSyncThreshold_us = ret.slotStartDelay_us;
     ret.infMessageLength = 0;
 
     ret.enter_discovery_mode(&ret);
-//    ret.collectInfDuration = ret.maxFramelength*ret.slotDuration;
-    ret.collectInfDuration = 10000; //TODO change this back
+    ret.collectInfDuration = ret.maxFramelength*ret.slotDuration_ms;
 	ret.waitInfDuration = ret.collectInfDuration;
 	ret.blinkPeriodRand = (uint32)rand()%BLINK_PERIOD_RAND_MS;
 

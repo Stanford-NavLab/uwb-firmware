@@ -70,12 +70,12 @@ struct TDMAHandler* tdma_get_local_structure_ptr()
 // function to initialise tdma structures
 //
 // Returns 0 on success and -1 on error
-int tdma_init_s()
+int tdma_init_s(uint64 slot_duration)
 {
 
-    tdma_handler = TDMAHandler.new();
+    tdma_handler = TDMAHandler.new(slot_duration);
 
-    return 0 ;
+    return 0;
 }
 
 
@@ -353,7 +353,7 @@ int instance_init(void)
     
     instance_data[instance].mode =  DISCOVERY;
 //    instance_data[instance].ranging = 0;
-    instance_data[instance].goToSleep = 0;
+//    instance_data[instance].goToSleep = 0;
 
     for(uint8 i=0; i<UWB_LIST_SIZE; i++)
 	{
@@ -384,16 +384,20 @@ int instance_init(void)
 
     instanceclearcounts() ;
 
-    instance_data[instance].sleepingEabled = 1;
     instance_data[instance].panID = 0xdeca ;
     instance_data[instance].wait4ack = 0;
-    instance_data[instance].instanceTimerEnabled = 0;
 
     instance_clearevents();
 
     dwt_geteui(instance_data[instance].eui64);
 
     instance_data[instance].clockOffset = 0;
+
+    instance_data[instance].lcdEnabled = FALSE;
+    if(port_is_switch_on(TA_SW1_4) == S1_SWITCH_ON)
+	{
+		instance_data[instance].lcdEnabled = TRUE;
+	}
 
     return 0 ;
 }
@@ -698,29 +702,28 @@ void inst_processtxrxtimeout(instance_data_t *inst)
 		{
 			inst->testAppState = TA_RXE_WAIT;
 		}
-
-		dwt_setrxtimeout(0);
 	}
 	else if(inst->mode == ANCHOR) //we did not receive the final/ACK - wait for next poll
     {
     	inst->wait4ack = 0;
     	inst->uwbToRangeWith = 255;
 		inst->testAppState = TA_RXE_WAIT ;              // wait for next frame
-		dwt_setrxtimeout(0);
     }
 	else //if(inst->mode == TAG)
     {
 		inst->testAppState = TA_TX_SELECT ;
     }
 
+	inst->canPrintInfo = TRUE;
     inst->previousState = TA_INIT;
-    inst->canPrintInfo = TRUE;
+    dwt_setrxtimeout(0);	//units are 1.0256us
     //timeout - disable the radio (if using SW timeout the rx will not be off)
     dwt_forcetrxoff() ;
 }
 
 void instance_txcallback(const dwt_cb_data_t *txd)
 {
+
 	uint8 txTimeStamp[5] = {0, 0, 0, 0, 0};
 	event_data_t dw_event;
 
@@ -764,12 +767,6 @@ void instance_txcallback(const dwt_cb_data_t *txd)
 	}
 
 	instance_putevent(dw_event);
-
-#if (DEEP_SLEEP == 1)
-	int instance = 0;
-	if (instance_data[instance].sleepingEabled)
-		instance_data[instance].txmsgcount++;
-#endif
 
 }
 
@@ -818,7 +815,7 @@ void instance_rxerrorcallback(const dwt_cb_data_t *rxd)
 	{
 		instance_data[instance].uwbToRangeWith = 255;
 
-		instancerxon(&instance_data[instance], 0, 0); //immediate enable if anchor or listener
+		instancerxon(&instance_data[instance], 0, 0); //immediate enable if anchor
 	}
 
 }
@@ -826,12 +823,6 @@ void instance_rxerrorcallback(const dwt_cb_data_t *rxd)
 
 void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 {
-//	uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
-//	dwt_readsystime(sys_time_arr);
-//	uint64 rxcb_time_now = 0;
-//	rxcb_time_now = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
-//	uint64 time_now_us = portGetTickCntMicro();
-
 	int instance = 0;
 	uint8 rxTimeStamp[5]  = {0, 0, 0, 0, 0};
 	uint8 srcAddr_index = 0;
@@ -840,7 +831,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 	event_data_t dw_event;
 
 	uint32 time_now = portGetTickCnt();
-	instance_data[instance].timeofRX = portGetTickCntMicro();
 
 	//if we got a frame with a good CRC - RX OK
 	rxd_event = DWT_SIG_RX_OKAY;
@@ -964,7 +954,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 #if (USING_64BIT_ADDR==0)
 		memcpy(&blink_address, &dw_event.msgu.rxblinkmsg.tagID[0], instance_data[instance].addrByteSize);
 #else
-//		uint16 blink_address_short = address64to16(&dw_event.msgu.rxblinkmsg.tagID[0]); //TODO remove
 		memcpy(&blink_address, &dw_event.msgu.rxblinkmsg.tagID[0], instance_data[instance].addrByteSize);
 #endif
 
@@ -1003,26 +992,18 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 //		uint64 rxcb_time_now_us = portGetTickCntMicro();
 
 
-		//TODO remove
+//		//TODO remove
 //		uint8 debug_msg[100];
 //		uint16 my_addr = instance_data[instance].uwbShortAdd;
-//		int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
-//		 send_usbmessage(&debug_msg[0], n);
-//		 usb_run();
+////		int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
+////		 send_usbmessage(&debug_msg[0], n);
+////		 usb_run();
 //		int n = 0;
 
 //		uint64 time = (uint64)(convertdevicetimetosec(rxcb_time_now - dw_event.timeStamp)*1000000.0)  + instance_data[instance].storedPreLen_us;
 //		 time -=  inst->frameLengths_us[RNG_INIT ];
 //					 inst->storedPreLen_us
 		 //dwt_time_now - (rx_timestamp - (framelength - preamble_sfd))
-//			 inst->frameLengths_us[i]
-//			 BLINK = 0,
-//			 RNG_INIT,
-//			 POLL,
-//			 RESP,
-//			 FINAL,
-//			 SYNC,
-//			 FRAME_TYPE_NB
 
 
 
@@ -1044,7 +1025,10 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 //		 }
 //		 n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s, rx_to_cb_delay: %llu", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), time);
 
-//		 if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT )
+
+
+
+//		if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT )
 //		 {
 //			n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
 //		 }
@@ -1084,7 +1068,7 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 //		 {
 //			 n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
 //		 }
-
+//
 //		 send_usbmessage(&debug_msg[0], n);
 //		 usb_run();
 
@@ -1176,13 +1160,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 			if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL)
 			{
 				int psduLength = RESP_FRAME_LEN_BYTES;
-//				int psduLength = 0; //TODO remove
-//#if (USING_64BIT_ADDR == 1)
-//				psduLength = ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC;
-//#else
-//				psduLength = ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
-//#endif
-
 
 				instance_data[instance].tagPollRxTime = dw_event.timeStamp ; //Poll's Rx time
 				instance_data[instance].msg.messageData[FCODE] = RTLS_DEMO_MSG_ANCH_RESP; //message function code (specifies if message is a poll, response or other...)
@@ -1190,53 +1167,30 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				instance_data[instance].msg.seqNum = instance_data[instance].frameSN++;
 
 
-				dwt_setrxaftertxdelay(0);  //units are 1.0256us - wait for wait4respTIM before RX on (delay RX)
-				dwt_setrxtimeout(instance_data[instance].durationRespTimeout);
+				dwt_setrxaftertxdelay(0);  										    //units are 1.0256us
+				dwt_setrxtimeout(instance_data[instance].durationRespTimeout_nus*0);//units are 1.0256us
 				instance_data[instance].wait4ack = DWT_RESPONSE_EXPECTED;
-
-				//TODO remove
-//				uint64 time_now_us = portGetTickCntMicro();
-//				uint64 diff = get_dt64(instance_data[instance].timeofRX, time_now_us);
-//				uint8 debug_msg[100];
-//				int n = sprintf((char*)&debug_msg[0], "ANCH_TURNAROUND: %llu", diff);
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-
-//				uint64 tx_dly_us = instance_data[instance].storedPreLen_us + 280;
-//				uint64 tx_dly = convertmicrosectodevicetimeu(tx_dly_us);
-//				uint64 tx_dly = 140000000;
-
-//				uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
-//				dwt_readsystime(sys_time_arr);
-//				uint64 dwt_time_now = 0;
-//				dwt_time_now = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
-//
-//				uint64 diff = convertdevicetimetosec( get_dt64(rxcb_time_now, dwt_time_now))*1000000;
-//				instance_data[instance].delayedReplyTime = (dwt_time_now + tx_dly) >> 8;
-
-//				dwt_time_now = dwt_time_now >> 8;
-//				tx_dly = tx_dly >> 8;
 
 				dwt_writetxdata(psduLength, (uint8 *)  &instance_data[instance].msg, 0) ;	// write the frame data
 				if(instancesendpacket(psduLength, DWT_START_TX_IMMEDIATE | instance_data[instance].wait4ack, 0))
 				{
+					uint8 debug_msg[100];
+					int n = sprintf((char*)&debug_msg[0], "RESP late tx!");
+					send_usbmessage(&debug_msg[0], n);
+					usb_run();
+
 					instance_data[0].tx_anch_resp = FALSE;
-					instance_data[instance].previousState = TA_INIT; //TODO should we place this event??? maybe place an error?
+					instance_data[instance].previousState = TA_INIT;
 					instance_data[instance].nextState = TA_INIT;
 					instance_data[instance].testAppState = TA_RXE_WAIT;
 					instance_data[instance].wait4ack = 0;
 				}
 				else
 				{
-//					pass = TRUE;
-//					uint8 debug_msg[100];
-//					int n = sprintf((char*)&debug_msg[0], "RESP SENT!");
-//					send_usbmessage(&debug_msg[0], n);
-//					usb_run();
 					instance_data[0].tx_anch_resp = TRUE;
 					dw_event.typePend = DWT_SIG_TX_PENDING ; // exit this interrupt and notify the application/instance that TX is in progress.
 					instance_data[instance].timeofTx = time_now;
-					//TODO check below
+
 					instance_data[instance].txDoneTimeoutDuration = instance_data[instance].durationRespTxDoneTimeout_ms;
 					instance_data[instance].canPrintInfo = FALSE; //don't print to LCD or USB while ranging
 				}
@@ -1246,12 +1200,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 			{
 				//process RTLS_DEMO_MSG_ANCH_RESP immediately.
 				int psduLength = FINAL_FRAME_LEN_BYTES;
-//				int psduLength = 0;//TODO remove
-//	#if (USING_64BIT_ADDR==1)
-//				psduLength = TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC;
-//	#else
-//				psduLength = TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC;
-//	#endif
 
 				instance_data[instance].anchorRespRxTime = dw_event.timeStamp ; //Response's Rx time
 				// Embbed into Final message:40-bit respRxTime
@@ -1259,62 +1207,16 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				memcpy(&(instance_data[instance].msg.messageData[RRXT]), (uint8 *)&instance_data[instance].anchorRespRxTime, 5);
 				instance_data[instance].msg.messageData[FCODE] = RTLS_DEMO_MSG_TAG_FINAL; //message function code (specifies if message is a poll, response or other...)
 
-				dwt_setrxaftertxdelay(0);
-				dwt_setrxtimeout(instance_data[instance].durationFinalTimeout);
+				dwt_setrxaftertxdelay(0);										//units are 1.0256us
+				dwt_setrxtimeout(instance_data[instance].durationFinalTimeout_nus*0);	//TODO//units are 1.0256us
 				instance_data[instance].wait4ack = 0;//DWT_RESPONSE_EXPECTED;
-
-				//TODO does this number get larger with more UWBS?
-				//should we call this in rxgoodcallback to minimize time and time variance????
-//				uint64 time_now_us = portGetTickCntMicro();
-//				uint64 diff = get_dt64(instance_data[instance].timeofRX, time_now_us);
-//				uint8 debug_msg[100];
-//				int n = sprintf((char*)&debug_msg[0], "TAG_TURNAROUND: %llu", diff);
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-
-//				//TODO remove below
-//				//from RX time till now (need some amount of padding as well...)
-//				uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
-//				dwt_readsystime(sys_time_arr);
-//				uint64 dwt_time_now = 0;
-//				dwt_time_now = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
-//				dwt_time_now = dwt_time_now >> 8;
-
-//				uint64 tx_dly_us = instance_data[instance].storedPreLen_us + MIN_DELAYED_TX_DLY_US;
-//				uint64 tx_dly = convertmicrosectodevicetimeu(tx_dly_us);
-//
-//				uint64 opt_dly = (dwt_time_now + tx_dly) >> 8;
-//				uint64 actual_dl = instance_data[instance].delayedReplyTime;
-
-//				uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
-//				dwt_readsystime(sys_time_arr);
-//				uint64 dwt_time_now = 0;
-//				dwt_time_now = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
-//
-//				uint64 diff = convertdevicetimetosec( get_dt64(rxcb_time_now, dwt_time_now))*1000000;
-//
-//				instance_data[instance].delayedReplyTime = (dwt_time_now + tx_dly) >> 8;
-//
-
-
-
-//				dwt_time_now = dwt_time_now >> 8;
-//				tx_dly = tx_dly >> 8;
-
-
 
 				dwt_writetxdata(psduLength, (uint8 *)&instance_data[instance].msg, 0) ; // write the frame data
 				if(instancesendpacket(psduLength, DWT_START_TX_DELAYED | instance_data[instance].wait4ack, instance_data[instance].delayedReplyTime))
 				{
-//					//TODO remove
-//					uint8 debug_msg[100];
-//					int n = sprintf((char*)&debug_msg[0], "tx/dwt: %lu/%llu ", instance_data[instance].delayedReplyTime, dwt_time_now);
-//					send_usbmessage(&debug_msg[0], n);
-//					usb_run();
-
 					instance_data[instance].previousState = TA_INIT;
 					instance_data[instance].nextState = TA_INIT;
-					instance_data[instance].testAppState = TA_RXE_WAIT; //TODO should we place this event??? maybe palce an error?
+					instance_data[instance].testAppState = TA_RXE_WAIT;
 
 					instance_data[instance].wait4ack = 0; //clear the flag as the TX has failed the TRX is off
 					instance_data[instance].lateTX++;
@@ -1327,16 +1229,15 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				}
 				else
 				{
-//					uint8 debug_msg[100];//TODO remove
-//					int n = sprintf((char*)&debug_msg[0], "FINAL SENT!");
-//					send_usbmessage(&debug_msg[0], n);
-//					usb_run();
 					dw_event.typePend = DWT_SIG_TX_PENDING ; // exit this interrupt and notify the application/instance that TX is in progress.
 					instance_data[instance].timeofTx = time_now;
-					//TODO check below
+
 					instance_data[instance].txDoneTimeoutDuration = instance_data[instance].durationFinalTxDoneTimeout_ms;
 				}
 			}
+
+			//we received response to our POLL, select oldest range UWB next poll
+			tdma_handler.nthOldest = 1;
 
 			place_event = 1;
 		}
@@ -1349,13 +1250,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 	if(place_event)
 	{
 		instance_putevent(dw_event);
-
-#if (DEEP_SLEEP == 1)
-		if (instance_data[instance].sleepingEabled)
-		{
-			instance_data[instance].rxmsgcount++;
-		}
-#endif
 	}
 	else
 	{
@@ -1461,49 +1355,26 @@ int instance_run(void)
 		message = 0;
 	}
 
-	uint32 time_now = portGetTickCnt();
+//	uint32 time_now = portGetTickCnt();
 
-	//check timeouts.
-	if(tdma_handler.check_timeouts(&tdma_handler, time_now))
+	//only check timeouts if we aren't in the middle of ranging messages
+	//the TDMA reoptimization may mess up the timing
+	if(instance_data[instance].canPrintInfo == TRUE)
 	{
-		//handle case where we timeout and no longer have any neighbors
-		instance_data[instance].mode = DISCOVERY;
-		tdma_handler.enter_discovery_mode(&tdma_handler);
-		inst_processtxrxtimeout(&instance_data[instance]);
-	}
+		//check timeouts.
+		if(tdma_handler.check_timeouts(&tdma_handler))
+		{
+//			uint8 debug_msg[100]; //TODO remove
+//			int n = sprintf((char *)&debug_msg, "ALL TIMEOUT time_now_us: %llu", portGetTickCntMicro());
+//			send_usbmessage(&debug_msg[0], n);
+//			usb_run();
 
-//	//TODO below may not be needed or may need to be updated?
-//    if(done == INST_DONE_WAIT_FOR_NEXT_EVENT_TO) //we are in RX and need to timeout (Tag needs to send another poll if no Rx frame)
-//    {
-//    	if(instance_data[instance].mode == DISCOVERY)
-//    	{
-//    		if(instance_data[instance].previousState == TA_TXBLINK_WAIT_SEND)
-//			{
-//				instance_data[instance].instanceTimerTime += instance_data[instance].tagBlinkSleepTime_ms; //set timeout time
-//				instance_data[instance].instanceTimerEnabled = 1; //start timer
-//			}
-//    	}
-//
-//        if(instance_data[instance].mode == TAG) //Tag (is either in RX or sleeping)
-//        {
-//			instance_data[instance].instanceTimerTime = instance_data[instance].instanceTimerTimeSaved + instance_data[instance].tagSleepTime_ms; //set timeout time
-//			instance_data[instance].instanceTimerEnabled = 1; //start timer
-//        }
-//    }
-//
-//    //check if timer has expired
-//    if(instance_data[instance].instanceTimerEnabled == 1)
-//    {
-//        if(instance_data[instance].instanceTimerTime < portGetTickCnt())
-//        {
-//			event_data_t dw_event;
-//            instance_data[instance].instanceTimerEnabled = 0;
-//			dw_event.rxLength = 0;
-//			dw_event.type = DWT_SIG_RX_TIMEOUT;
-//			dw_event.typeSave = 0x80 | DWT_SIG_RX_TIMEOUT;
-//			instance_putevent(dw_event);
-//        }
-//    }
+			//handle case where we timeo7ut and no longer have any neighbors
+			instance_data[instance].mode = DISCOVERY;
+			tdma_handler.enter_discovery_mode(&tdma_handler);
+			inst_processtxrxtimeout(&instance_data[instance]);
+		}
+	}
 
     return ((done != INST_NOT_DONE_YET) ? 1 : 0);
 }

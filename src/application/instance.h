@@ -42,27 +42,25 @@ typedef struct
 	// "MAC" features
     uint8 frameFilteringEnabled ;	//frame filtering is enabled
 
-    // Is sleeping between frames enabled?
-    uint8 sleepingEabled; //Ranging Init message can tell tag to stay in IDLE between ranging exchanges
+    bool lcdEnabled;
     bool canPrintInfo;	  //only print to usb and/or LCD display when TRUE
 
 	//timeouts and delays
 	int tagSleepTime_ms; //in milliseconds
 	int tagBlinkSleepTime_ms;
 	//this is the delay used for the delayed transmit (when sending the ranging init, response, and final messages)
-	uint64 rnginitReplyDelay ;
-	uint64 finalReplyDelay ;
-//	int finalReplyDelay_ms ; //TODO remove
-	uint64 cmd_poll_us ;//TODO remove
+	uint64 rnginitReplyDelay;
+	uint64 finalReplyDelay;
+	uint64 finalReplyDelay_us;
 
-	// xx_sy the units are 1.0256 us
-//	uint32 durationTxAnchResp2RxFinal_sy ;    // this is the delay used after sending a response and turning on the receiver to receive final
-	uint32 txToRxDelayPoll_sy ;    // this is the delay used after sending a poll and turning on the receiver to receive response
-//	int durationTxBlink2RxRngInit_sy ;	// this is the delay used after sending a blink and turning on the receiver to receive the ranging init message
 
-	uint16 durationPollTimeout;		//rx timeout duration after tx poll
-	uint16 durationRespTimeout;		//rx timeout duration after tx resp
-	uint16 durationFinalTimeout;   	//rx timeout duration after tx final
+	//TODO remove below
+//	uint64 slot_start_us;
+
+	//Receive Frame Wait Timeout Periods, units are 1.0256us (aus stands for near microsecond)
+	uint16 durationPollTimeout_nus;		//rx timeout duration after tx poll
+	uint16 durationRespTimeout_nus;		//rx timeout duration after tx resp
+	uint16 durationFinalTimeout_nus;   	//rx timeout duration after tx final
 
 	uint32 durationBlinkTxDoneTimeout_ms;   	//tx done timeout after tx blink
 	uint32 durationRngInitTxDoneTimeout_ms;   	//tx done timeout after tx rng_init
@@ -72,15 +70,18 @@ typedef struct
 	uint32 durationReportTxDoneTimeout_ms;   	//tx done timeout after tx report
 	uint32 durationSyncTxDoneTimeout_ms;   		//tx done timeout after tx sync
 
+	uint32 durationUwbCommTimeout_ms;			//how long to wait before changing UWB_LIST_TYPE if we haven't communicated with or received an information about a UWB in a while
 
+	uint32 durationWaitRangeInit_ms;				//discovery mode WAIT_RNG_INIT duration
 
+	uint64 durationSlotMax_us;		// longest anticipated time required for a slot based on UWB_LIST_SIZE and S1 switch settings
 
 	uint32 delayedReplyTime;		// delayed reply time of delayed TX message - high 32 bits
 
     // Pre-computed frame lengths for frames involved in the ranging process,
     // in microseconds.
     uint32 frameLengths_us[FRAME_TYPE_NB];
-    uint32 storedPreLen;           //precomputed conversion of preamble and sfd
+    uint32 storedPreLen;           //precomputed conversion of preamble and sfd in DW1000 time units
     uint64 storedPreLen_us;		   //precomputed conversion of preamble and sfd in microseconds
 
 	//message structures used for transmitted messages
@@ -110,27 +111,15 @@ typedef struct
     uint32 resp_dly_us[RESP_DLY_NB];
 
 	//64 bit timestamps
-	//union of TX timestamps
-//	union {
-//		uint64 txTimeStamp ;		   // last tx timestamp
-//		uint64 tagPollTxTime ;		   // tag's poll tx timestamp
-//	    uint64 anchorRespTxTime ;	   // anchor's reponse tx timestamp
-//	}txu;
 	uint64 anchorRespTxTime ;		// anchor's reponse tx timestamp
 	uint64 anchorRespRxTime ;	    // receive time of response message
 	uint64 tagPollRxTime ;          // receive time of poll message
 
 	//application control parameters
-    uint8	wait4ack ;				// if this is set to DWT_RESPONSE_EXPECTED, then the receiver will turn on automatically after TX completion
-	uint8   goToSleep;			// if set the instance will go to sleep before sending the blink/poll message
-    uint8	instanceTimerEnabled;		// enable/start a timer
-    uint32	instanceTimerTime;			// e.g. this timer is used to timeout Tag when in deep sleep so it can send the next poll message
-    uint32	instanceTimerTimeSaved;
-	uint8	gotTO;					// got timeout event
-
+    uint8	wait4ack ;					// if this is set to DWT_RESPONSE_EXPECTED, then the receiver will turn on automatically after TX completion
+	uint8	gotTO;						// got timeout event
 
     //diagnostic counters/data, results and logging
-    
     int64 tof[UWB_LIST_SIZE] ;
     double clockOffset ;
 
@@ -152,16 +141,11 @@ typedef struct
     uint8 uwbListLen ;
 	uint8 uwbList[UWB_LIST_SIZE][8];		//index 0 reserved for self, rest for other tracked uwbs
 
-	uint32 timeofTx;
-	uint32 txDoneTimeoutDuration;
-	bool tx_poll;
-	bool tx_anch_resp;
-    uint32 blink_start;			//TODO remove
-    uint32 range_start;			//TODO remove
-    uint64 timeofRX;			//TODO remove
+	uint32 timeofTx;						//used to calculate tx done callback timeouts
+	uint32 txDoneTimeoutDuration;			//duration used for tx done callback timeouts. (set differently for each tx message)
 
-    uint32 blink_duration;      //expected duration of a blink/response exchange  			//TODO remove?
-    uint32 range_duration;      //expected duration of a range/response/final exchange		//TODO remove
+	bool tx_poll;							//was the last tx message a POLL message?
+	bool tx_anch_resp;						//was the last tx message an ANCH_RESP message?
 
 	//event queue - used to store DW1000 events as they are processed by the dw_isr/callback functions
     event_data_t dwevent[MAX_EVENT_NUMBER]; //this holds any TX/RX events and associated message data
@@ -208,7 +192,7 @@ void setupmacframedata(instance_data_t *inst, int fcode);
 // initialise the instance (application) structures and DW1000 device
 int instance_init(void);
 int instance_init_s();
-int tdma_init_s();
+int tdma_init_s(uint64 slot_duration);
 
 // configure the instance and DW1000 device
 void instance_config(instanceConfig_t *config) ;  
@@ -294,6 +278,7 @@ int instance_starttxtest(int framePeriod);
 
 const char* get_instanceModes_string(enum instanceModes mode);
 const char* get_discovery_modes_string(enum discovery_modes mode);
+const char* get_inst_states_string(enum inst_states state);
 
 instance_data_t* instance_get_local_structure_ptr(unsigned int x);
 struct TDMAHandler* tdma_get_local_structure_ptr();

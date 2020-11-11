@@ -6,31 +6,37 @@
 #include "deca_device_api.h"
 
 /******************************************************************************************************************
-********************* NOTES on Decaranging EVK1000 application features/options ***********************************************************
+********************* Definitions expected to be modified by end-user *********************************************
 *******************************************************************************************************************/
-#define DEEP_SLEEP (0) //To enable deep-sleep set this to 1
-//DEEP_SLEEP mode can be used, for example, by a Tag instance to put the DW1000 into low-power deep-sleep mode
-
-#define CORRECT_RANGE_BIAS  (1)     // Compensate for small bias due to uneven accumulator growth at close up high power
 
 
+#define UWB_LIST_SIZE		    10			//the maximum size of the UWB network
+											//do not use a number larger than 80 if USING_64BIT_ADDR==1
+											//do not use a number larger than 127 if USING_64BIT_ADDR==0
+											//these are the largest UWB network sizes that the firmware will support.
+											//USING_64BIT_ADDR==1: Limiting factor is the max length of the INF messages
+											//USING_64BIT_ADDR==0: Limiting factor is the max power of 2 that fits in a uint8 (TDMA framelength is stored as uint8)
+
+#define SET_TXRX_DELAY 			0           //when set to 1 - the DW1000 RX and TX delays are set to the TX_DELAY and RX_DELAY defines
+#define TX_ANT_DELAY            0
+#define RX_ANT_DELAY            0			//TODO put reasonable initial value? add explanation
+
+#define USING_64BIT_ADDR 		0//TODO	 	//when set to 0 - the DecaRanging application will use 16-bit addresses
+
+#define SPEED_OF_LIGHT      (299704644.54) //(299702547.0)     // in m/s in air //TODO add explanation!
 
 /******************************************************************************************************************
 *******************************************************************************************************************
 *******************************************************************************************************************/
 
+#define CORRECT_RANGE_BIAS  (1)     // Compensate for small bias due to uneven accumulator growth at close up high power
+
 #define NUM_INST            1
-#define SPEED_OF_LIGHT      (299704644.54) //(299702547.0)     // in m/s in air
 #define MASK_40BIT			(0x00FFFFFFFFFF)  // DW1000 counter is 40 bits
 #define MASK_42BIT          (0x000003FFFFFFFFFF) //stm32 microsecond timestamps are 42 bits
 #define MASK_TXDTS			(0x00FFFFFFFE00)  //The TX timestamp will snap to 8 ns resolution - mask lower 9 bits.
 #define DELAY_CALIB (0)                     // when set to 1 - the LCD display will show information used for TX/RX delay calibration
 
-#define SET_TXRX_DELAY (0)                  //when set to 1 - the DW1000 RX and TX delays are set to the TX_DELAY and RX_DELAY defines
-#define TX_ANT_DELAY                0
-#define RX_ANT_DELAY                0
-
-#define USING_64BIT_ADDR (0)//TODO (0)                  //when set to 0 - the DecaRanging application will use 16-bit addresses
 
 //! callback events
 #define DWT_SIG_RX_NOERR            0
@@ -62,6 +68,7 @@ enum
     FINAL,
     REPORT,
     SYNC,
+    INF_MAX,
     FRAME_TYPE_NB
 };
 
@@ -79,9 +86,9 @@ enum
 
 //lengths including the Decaranging Message Function Code byte
 #define TAG_POLL_MSG_LEN                    1				// FunctionCode(1)
-#define ANCH_RESPONSE_MSG_LEN               9//TODO 1 		// FunctionCode(1)
+#define ANCH_RESPONSE_MSG_LEN               1		 		// FunctionCode(1)
 #define TAG_FINAL_MSG_LEN                   16              // FunctionCode(1), Poll_TxTime(5), Resp_RxTime(5), Final_TxTime(5)
-#define RNG_INIT_MSG_LEN					7//TODO 1		// FunctionCode(1)
+#define RNG_INIT_MSG_LEN					1				// FunctionCode(1)
 #define RNG_REPORT_MSG_LEN_SHORT		    9				// FunctionCode(1), time of flight (6), short address (2)
 #define RNG_REPORT_MSG_LEN_LONG		    	15				// FunctionCode(1), time of flight (6), long address (8)
 #define SYNC_MSG_LEN						8				// FunctionCode(1), framelength (1), time since frame start (6)
@@ -120,12 +127,13 @@ enum
 
 // Total frame lengths.
 #if (USING_64BIT_ADDR == 1)
-    #define RNG_INIT_FRAME_LEN_BYTES (RANGINGINIT_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
+    #define RNG_INIT_FRAME_LEN_BYTES (RNG_INIT_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
     #define POLL_FRAME_LEN_BYTES (TAG_POLL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
     #define RESP_FRAME_LEN_BYTES (ANCH_RESPONSE_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
     #define FINAL_FRAME_LEN_BYTES (TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
-	#define REPORT_FRAME_LEN_BYTES (RNG_REPORT_MSG_LEN_LONG + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
-	#define SYNC_FRAME_LEN_BYTES (SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
+	#define REPORT_FRAME_LEN_BYTES (RNG_REPORT_MSG_LEN_LONG + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
+	#define SYNC_FRAME_LEN_BYTES (SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
+	#define INF_FRAME_LEN_BYTES_MAX (11.5 + (ADDR_BYTE_SIZE_L + 3.5)*UWB_LIST_SIZE + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
 #else
     #define RNG_INIT_FRAME_LEN_BYTES (RNG_INIT_MSG_LEN + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
     #define POLL_FRAME_LEN_BYTES (TAG_POLL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
@@ -133,6 +141,7 @@ enum
     #define FINAL_FRAME_LEN_BYTES (TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
 	#define REPORT_FRAME_LEN_BYTES (RNG_REPORT_MSG_LEN_SHORT + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
 	#define SYNC_FRAME_LEN_BYTES (SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
+	#define INF_FRAME_LEN_BYTES_MAX (11.5 + (ADDR_BYTE_SIZE_S + 3.5)*UWB_LIST_SIZE + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
 #endif
 
 #define BLINK_FRAME_CONTROL_BYTES       (1)
@@ -142,13 +151,6 @@ enum
 #define BLINK_FRAME_CTRLP				(BLINK_FRAME_CONTROL_BYTES + BLINK_FRAME_SEQ_NUM_BYTES) //2
 #define BLINK_FRAME_CRTL_AND_ADDRESS    (BLINK_FRAME_SOURCE_ADDRESS + BLINK_FRAME_CTRLP) //10 bytes
 #define BLINK_FRAME_LEN_BYTES           (BLINK_FRAME_CRTL_AND_ADDRESS + BLINK_FRAME_CRC)
-
-#define UWB_LIST_SIZE				    10	//the maximum size of the UWB network
-											//do not use a number larger than 80 if USING_64BIT_ADDR==1 and 127 if USING_64BIT_ADDR==0
-											//these are the largest UWB network sizes that the firmware will support.
-											//USING_64BIT_ADDR==1: Limiting factor is the max length of the INF messages
-											//USING_64BIT_ADDR==0: Limiting factor is the max power of 2 that fits in a uint8 (framelength is stored as uint8)
-#define UWB_COMM_TIMEOUT                3000    //ms	//TODO make this a function of UWB_LIST_SIZE, twice the max framelengt? maybe this shouldn't be a define?
 
 //UWB_LIST types
 #define UWB_LIST_SELF					0 //entry for self in list
@@ -170,11 +172,10 @@ enum
 
 //INF message byte offsets
 #define TDMA_TSFS                           1				// offset to put time since TDMA frame start in the INF message
-#define TDMA_TSFS_REBASE					7				// offset to put whether the receiving UWB needs to rebase its TDMA frame to the transmitted TSFS
-#define TDMA_NUMN							8				// offset to put the number of this UWB's neighbors in the INF message
-#define TDMA_NUMH							9				// offset to put the number of this UWB's hidden neighbors in the INF message
-#define TDMA_FRAMELENGTH                    10				// offset to put this UWB's TDMA framelength in the INF message
-#define TDMA_NUMS							11				// offset to put the number of this UWB's TDMA slot assignments in the INF message
+#define TDMA_NUMN							7				// offset to put the number of this UWB's neighbors in the INF message
+#define TDMA_NUMH							8				// offset to put the number of this UWB's hidden neighbors in the INF message
+#define TDMA_FRAMELENGTH                    9				// offset to put this UWB's TDMA framelength in the INF message
+#define TDMA_NUMS							10				// offset to put the number of this UWB's TDMA slot assignments in the INF message
 
 // Final message byte offsets.
 #define PTXT                                1
@@ -190,19 +191,6 @@ enum
 #define SYNC_FRAMELENGTH					1				// offset to put the framelength in the sync message
 #define SYNC_TSFS							2				// offset to put the time since TDMA frame start in the sync message
 
-// Response delay values coded in ranging init message.
-// This is a bitfield composed of:
-//   - bits 0 to 14: value
-//   - bit 15: unit
-//#define RESP_DLY_VAL_SHIFT 0
-//#define RESP_DLY_VAL_MASK 0x7FFF
-//#define RESP_DLY_UNIT_SHIFT 15			//TODO remove
-//#define RESP_DLY_UNIT_MASK 0x8000
-
-// Response time possible units: microseconds or milliseconds.
-//#define RESP_DLY_UNIT_US 0				//TODO remove
-//#define RESP_DLY_UNIT_MS 1
-
 // Response delays types present in ranging init message.
 enum
 {
@@ -211,12 +199,6 @@ enum
     RESP_DLY_FINAL,
     RESP_DLY_NB
 };
-//enum
-//{
-//    RESP_DLY_ANC = 0,		//TODO remove
-//    RESP_DLY_TAG,
-//    RESP_DLY_NB
-//};
 
 // Convert microseconds to symbols, float version.
 // param  x  value in microseconds
@@ -236,9 +218,15 @@ enum
 #define TX_CMD_TO_TX_CB_DLY_US		90	//doesn't include preamble, sfd, phr, and data. saw 81 to 87
 #define MIN_DELAYED_TX_DLY_US   	90	//doesn't include preamble and sfd. //80 is the minimum delay for delayed tx. anything shorter will cause failure
 
-// Delay between blink reception and ranging init message. This is the same for
-// all modes.
-#define RNG_INIT_REPLY_DLY_US 		10000 //TODO tune!
+
+#define SLOT_START_BUFFER_US				4000				  //set based on experimentally observed frame sync errors
+#define SLOT_BUFFER_EXP_TO_POLL_CMD_US		3*UWB_LIST_SIZE + 108 //found experimentally
+#define MEASURED_SLOT_DURATIONS_US			1.7814*UWB_LIST_SIZE*UWB_LIST_SIZE + 29.39*UWB_LIST_SIZE + 1848.5	//found experimentally
+#define LCD_ENABLE_BUFFER_US				5000
+#define SLOT_END_BUFFER_US					0			          //increase if all messages do not fit into a slot
+#define BLINK_RX_CB_TO_RESP_TX_CMD_DLY_US	1450				  //found experimentally
+
+
 
 #define MAX(a,b) \
    ({ __typeof__ (a) _a = (a); \
@@ -250,7 +238,7 @@ enum
 #define BLINK_PERIOD_RAND_MS					200
 
 
-#define RANGE_INIT_RAND_US						20		//TODO tune this number
+#define RANGE_INIT_RAND_US						1000
 
 
 #define RX_CHECK_ON_PERIOD_MS					200 	//TODO modify
@@ -287,20 +275,19 @@ DISCOVERY_MODE;
 typedef enum inst_states
 {
     TA_INIT,                    //0
-    TA_TXE_WAIT,                //1
-    TA_TXINF_WAIT_SEND,			//2
-    TA_TXPOLL_WAIT_SEND,        //3
-    TA_TXFINAL_WAIT_SEND,       //4
-    TA_TXRESPONSE_WAIT_SEND,    //5
-    TA_TX_WAIT_CONF,            //6
-    TA_RXE_WAIT,                //7
-    TA_RX_WAIT_DATA,            //8
-    TA_SLEEP_DONE,              //9
-    TA_TXBLINK_WAIT_SEND,       //10
-    TA_TXRANGINGINIT_WAIT_SEND, //11
-    TA_TX_SELECT,               //12
-    TA_TXREPORT_WAIT_SEND,		//13
-    TA_TXSUG_WAIT_SEND			//14
+    TA_TXINF_WAIT_SEND,			//1
+    TA_TXPOLL_WAIT_SEND,        //2
+    TA_TXFINAL_WAIT_SEND,       //3
+    TA_TXRESPONSE_WAIT_SEND,
+    TA_TX_WAIT_CONF,
+    TA_RXE_WAIT,
+    TA_RX_WAIT_DATA,
+    TA_SLEEP_DONE,
+    TA_TXBLINK_WAIT_SEND,
+    TA_TXRANGINGINIT_WAIT_SEND,
+    TA_TX_SELECT,
+    TA_TXREPORT_WAIT_SEND,
+    TA_TXSUG_WAIT_SEND
 } INST_STATES;
 
 

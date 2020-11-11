@@ -46,12 +46,14 @@ struct TDMAHandler
 
 	uint64 lastFST;
 	uint64 lastSlotStartTime64;
-	uint32 slotDuration_ms;   //TODO make variable in duration based on UWB_LIST_SIZE
-	uint32 slotDuration_us;   //TODO make variable in duration based on UWB_LIST_SIZE
+	uint32 slotDuration_ms;
+	uint32 slotDuration_us;
 	bool infSentThisSlot;
 	bool firstPollSentThisSlot;
 	bool firstPollComplete;
 	bool secondPollSentThisSlot;
+	uint8 nthOldest;
+	uint8 nthOldestPlus;
 
 	uint64 slotStartDelay_us; //time between slot start and transmission within that slot
 	uint64 frameSyncThreshold_us;
@@ -83,7 +85,7 @@ struct TDMAHandler
     void (*enter_discovery_mode)(struct TDMAHandler *this);
     void (*set_discovery_mode)(struct TDMAHandler *this, DISCOVERY_MODE mode, uint32 time_now);
     void (*check_discovery_mode_expiration)(struct TDMAHandler *this);
-    bool (*check_timeouts)(struct TDMAHandler *this, uint32 time_now);
+    bool (*check_timeouts)(struct TDMAHandler *this);
     void (*remove_uwbinfo)(struct TDMAHandler *this, uint8 uwb_index);
     void (*usb_dump_tdma)(struct TDMAHandler *this);
     bool (*slot_assigned)(struct TDMAInfo *info, uint8 slot);
@@ -108,7 +110,7 @@ struct TDMAHandler
 
 extern const struct TDMAHandlerClass
 {
-	struct TDMAHandler (*new)();
+	struct TDMAHandler (*new)(uint64 slot_duration);
 
 } TDMAHandler;
 
