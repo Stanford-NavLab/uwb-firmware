@@ -374,12 +374,7 @@ void instanceclearcounts(void)
 int instance_init(void)
 {
     int instance = 0 ;
-
     int result;
-    
-//    instance_data[instance].mode =  DISCOVERY;
-//    instance_data[instance].ranging = 0; TODO
-//    instance_data[instance].goToSleep = 0;
 
     for(uint8 i=0; i<UWB_LIST_SIZE; i++)
 	{
@@ -697,12 +692,6 @@ int instance_get_rxl(void) //get number of late Tx frames
 
 void inst_processtxrxtimeout(instance_data_t *inst)
 {
-//	uint8 debug_msg[100]; //TODO
-//	int n = sprintf((char *)&debug_msg, "inst_processtxrxtimeout");
-//	send_usbmessage(&debug_msg[0], n);
-//	usb_run();
-
-
 	if(inst->mode == DISCOVERY)
 	{
 		inst->wait4ack = 0;
@@ -734,7 +723,6 @@ void inst_processtxrxtimeout(instance_data_t *inst)
 		inst->testAppState = TA_TX_SELECT ;
     }
 
-//	inst->canPrintInfo = TRUE; TODO
 	inst->canPrintUSB = TRUE;
 	inst->canPrintLCD = TRUE;
     inst->previousState = TA_INIT;
@@ -746,7 +734,7 @@ void inst_processtxrxtimeout(instance_data_t *inst)
 void instance_irqstuckcallback()
 {
 
-//	uint8 debug_msg[100];
+//	uint8 debug_msg[100]; TODO test this when networks meet!
 //	int n = sprintf((char*)&debug_msg[0], "irq stuck callback");
 //	send_usbmessage(&debug_msg[0], n);
 //	usb_run();
@@ -1000,52 +988,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 	//don't process unknown signals or non-broadcast messages that aren't addressed to this UWB
 	if(rxd_event == DWT_SIG_RX_OKAY)
 	{
-
-//		uint8 debug_msg[100];
-//		int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]));
-//		send_usbmessage(&debug_msg[0], n);
-//		usb_run();
-
-		uint8 idx = instgetuwblistindex(&instance_data[instance], &dw_event.msgu.frame[srcAddr_index], instance_data[instance].addrByteSize);
-
-//		if(instance_data[instance].mode == DISCOVERY){ //TODO
-//		if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_REG ||
-//			dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_INIT ||
-//			dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_SUG ||
-//			dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_UPDATE
-//			)
-//		{
-
-//			uint64 dt = get_dt64(instance_data[instance].report_rx_us, portGetTickCntMicro());
-//			if(dt > tdma_handler.slotDuration_us*0.75){
-//				uint8 debug_msg[100];
-//				int n = sprintf((char*)&debug_msg[0], "NOT BOTH, dt: %llu", dt);
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-//			}
-//			uint8 debug_msg[100];
-//			int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s, ts: %llu, saddr: %016llX", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), portGetTickCntMicro(), instance_get_uwbaddr(idx));
-//			send_usbmessage(&debug_msg[0], n);
-//			usb_run();
-//		}
-//		}
-
-//		if(dw_event.msgu.frame[fcode_index] != RTLS_DEMO_MSG_RNG_REPORT){
-//			instance_data[instance].report_rx_us = portGetTickCntMicro();
-//
-//
-//		}
-
-//		if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL){
-//			uint64 add = 0;
-//			add = (dw_event.msgu.frame[FRAME_CTRLP + 1] << 8) + dw_event.msgu.frame[FRAME_CTRLP];
-//
-//			uint8 debug_msg[100];
-//			int n = sprintf((char*)&debug_msg[0], "POLL destination: %04llX", add);
-//			send_usbmessage(&debug_msg[0], n);
-//			usb_run();
-//		}
-
 		if((dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT ) || 
 		   (dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL ) ||
 		   (dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_ANCH_RESP) ||
@@ -1101,10 +1043,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 			tdma_handler.uwbListTDMAInfo[uwb_index].connectionType = UWB_LIST_NEIGHBOR;
 			tdma_handler.uwbListTDMAInfo[uwb_index].lastCommNeighbor = time_now;
 		}
-
-
-
-
 	}
 
 	bool accept_inf = FALSE;
@@ -1206,11 +1144,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				dwt_writetxdata(psduLength, (uint8 *)  &instance_data[instance].msg, 0) ;	// write the frame data
 				if(instancesendpacket(psduLength, DWT_START_TX_IMMEDIATE | instance_data[instance].wait4ack, 0))
 				{
-//					uint8 debug_msg[100];//TODO
-//					int n = sprintf((char*)&debug_msg[0], "RESP late tx!");
-//					send_usbmessage(&debug_msg[0], n);
-//					usb_run();
-
 					instance_data[0].tx_anch_resp = FALSE;
 					instance_data[instance].previousState = TA_INIT;
 					instance_data[instance].nextState = TA_INIT;
@@ -1224,7 +1157,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 					instance_data[instance].timeofTx = time_now;
 
 					instance_data[instance].txDoneTimeoutDuration = instance_data[instance].durationRespTxDoneTimeout_ms;
-//					instance_data[instance].canPrintInfo = FALSE; //don't print to LCD or USB while ranging
 					instance_data[instance].canPrintUSB = FALSE;
 					instance_data[instance].canPrintLCD = FALSE;
 				}
@@ -1382,11 +1314,7 @@ int instance_run(void)
 		message = 0;
 	}
 
-//	uint32 time_now = portGetTickCnt();
-
 	//only check timeouts if we aren't in the middle of ranging messages
-	//the TDMA reoptimization may mess up the timing
-//	if(instance_data[instance].canPrintInfo == TRUE) TODO
 	if(instance_data[instance].canPrintLCD == TRUE)
 	{
 		//check timeouts.

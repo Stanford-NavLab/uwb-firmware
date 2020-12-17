@@ -27,8 +27,6 @@ extern "C" {
 
 typedef struct
 {
-	//TODO remove this!
-	uint64 report_rx_us;
 
 
     INST_MODE mode;				        //instance mode (tag or anchor)

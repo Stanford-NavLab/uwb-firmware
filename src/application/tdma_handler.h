@@ -37,18 +37,12 @@ FRAME_SYNC_MODE;
 
 struct TDMAHandler
 {
-	//TODO remove these test variables
-	bool toHidden;
-	uint64 toHiddenFST;
-	uint8 toHiddenFL;
-
     //TDMA class variables
     uint8 maxFramelength;
 	uint8 slotAssingmentSelfIndex;
 
 	struct TDMAInfo uwbListTDMAInfo[UWB_LIST_SIZE];
 
-	uint64 lastFST;
 	uint64 lastSlotStartTime64;
 	uint32 slotDuration_ms;
 	uint32 slotDuration_us;

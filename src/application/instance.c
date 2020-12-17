@@ -191,8 +191,6 @@ void instancerxon(instance_data_t *inst, int delayed, uint64 delayedReceiveTime)
 
 int instancesendpacket(uint16 length, uint8 txmode, uint32 dtime)
 {
-
-
     int result = 0;
 
     dwt_writetxfctrl(length, 0, 1);
@@ -207,15 +205,7 @@ int instancesendpacket(uint16 length, uint8 txmode, uint32 dtime)
         result = 1; //late/error
     }
 
-//    if(result != 1){
-//		uint8 debug_msg[100]; //TODO remove
-//		int n = sprintf((char *)&debug_msg, "bytes,xxxx,%04d", length);
-//		send_usbmessage(&debug_msg[0], n);
-//		usb_run();
-//    }
-
     return result;                                              // state changes
-
 }
 
 //debug helper function to print the testAppState
@@ -319,37 +309,6 @@ char* get_msg_fcode_string(int fcode)
     }
 }
 
-//TODO remove!
-#define USB_DEBUG_BUFF_LEN (100)
-uint8 usbdebugdata[USB_DEBUG_BUFF_LEN]; //data to be sent over usb for debug purposes
-int usbdebugdata_size = 0;
-uint8 usbdebugdataprev[USB_DEBUG_BUFF_LEN]; //previous message sent
-int usbdebugdataprev_size = 0;
-uint8 usbrxdebugdata[USB_DEBUG_BUFF_LEN];
-int usbrxdebugdata_size = 0;
-uint8 usbrxdebugdataprev[USB_DEBUG_BUFF_LEN];
-int usbrxdebugdataprev_size = 0;
-uint8 usbtxdebugdata[USB_DEBUG_BUFF_LEN];
-int usbtxdebugdata_size = 0;
-uint8 usbtxdebugdataprev[USB_DEBUG_BUFF_LEN];
-int usbtxdebugdataprev_size = 0;
-
-
-//TODO remove this funciton
-void send_statetousb(instance_data_t *inst, struct TDMAHandler *tdma_handler)
-{
-
-    usbdebugdata_size = sprintf((char*)&usbdebugdata[0], "%s , %s , %s , %s", get_inst_states_string(inst->testAppState), get_inst_states_string(inst->previousState), get_inst_states_string(inst->nextState), get_instanceModes_string(inst->mode));
-
-    if (memcmp(usbdebugdataprev, usbdebugdata, usbdebugdata_size) != 0 || usbdebugdata_size != usbdebugdataprev_size)
-    {
-        send_usbmessage(&usbdebugdata[0], usbdebugdata_size);
-        usb_run();
-        usbdebugdataprev_size = usbdebugdata_size;
-        memcpy(usbdebugdataprev, usbdebugdata, usbdebugdata_size);
-    }
-}
-
 
 
 
@@ -443,7 +402,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 					dwt_setrxtimeout(0);
 					inst->wait4ack = 0;
-//					inst->canPrintInfo = TRUE; TODO
 					inst->canPrintUSB = TRUE;
 					inst->canPrintLCD = TRUE;
                 }
@@ -547,11 +505,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
             dwt_writetxdata(psduLength, (uint8 *)  &inst->rng_initmsg, 0) ; // write the frame data
 			if(instancesendpacket(psduLength, DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED, inst->delayedReplyTime))
 			{
-				uint8 debug_msg[100];
-				int n = sprintf((char*)&debug_msg[0], "RNG_INIT late tx!");
-				send_usbmessage(&debug_msg[0], n);
-				usb_run(); //TODO
-
 				inst->previousState = TA_INIT;
 				inst->nextState = TA_INIT;
 				inst->testAppState = TA_RXE_WAIT ;  // wait to receive a new blink or poll message
@@ -586,19 +539,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 			dwt_setrxtimeout(0);		//units are 1.0256us //no timeout (keep RX on until instructed otherwise)
 			inst->wait4ack = 0;
 
-			//TODO remove
-//			uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
-//			dwt_readsystime(sys_time_arr);
-//			uint64 dwt_time_now = 0;
-//			dwt_time_now = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
-
-//			inst->delayedReplyTime = (dwt_time_now + inst->rnginitReplyDelay + convertmicrosectodevicetimeu(rand()%RANGE_INIT_RAND_US)) >> 8 ;  // time we should send the blink response
-
-
-//			uint64 delayedReplyTime = (dwt_time_now + convertmicrosectodevicetimeu(MIN_DELAYED_TX_DLY_US + inst->storedPreLen_us + 1000)) >> 8;
-
 			dwt_writetxdata(psduLength, (uint8 *)  &inst->inf_msg, 0) ; // write the frame data
-//			if(instancesendpacket(psduLength, DWT_START_TX_DELAYED | inst->wait4ack, delayedReplyTime))
 			if(instancesendpacket(psduLength, DWT_START_TX_IMMEDIATE | inst->wait4ack, 0))
 			{
 				//get the message FCODE
@@ -609,11 +550,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 				{
 					tdma_handler->set_discovery_mode(tdma_handler, WAIT_SEND_SUG, portGetTickCnt());
 				}
-
-				uint8 debug_msg[100]; //TODO
-				int n = sprintf((char*)&debug_msg[0], "TX_INF_LATE");
-				send_usbmessage(&debug_msg[0], n);
-				usb_run();
 
 				inst->previousState = TA_INIT;
 				inst->nextState = TA_INIT;
@@ -627,22 +563,10 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 				inst->timeofTx = portGetTickCnt();
 
-//				uint8 debug_msg[100]; //TODO
-//				int n = sprintf((char*)&debug_msg[0], "tx_INF");
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-
-//				inst->canPrintUSB = TRUE; TODO
-//				inst->canPrintLCD = TRUE;
-
 				uint64 margin_us = 1000;
 				uint64 framelength_us = instance_getmessageduration_us(psduLength);
 				inst->txDoneTimeoutDuration = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + framelength_us + margin_us, 1000);			//tx cmd to tx cb
 			}
-
-//			if(tdma_handler->toHidden == TRUE){
-//				tdma_handler->toHidden = FALSE;
-//			}
 
 			break;
 		}
@@ -686,7 +610,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 				inst->testAppState = TA_TX_WAIT_CONF ;
 				inst->previousState = TA_TXPOLL_WAIT_SEND ;
 				done = INST_DONE_WAIT_FOR_NEXT_EVENT; //will use RX FWTO to time out (set below)
-//				inst->canPrintInfo = FALSE; //don't print to LCD or USB while ranging TODO
 				inst->canPrintUSB = FALSE;
 				inst->canPrintLCD = FALSE;
 
@@ -698,11 +621,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
         }
         case TA_TXREPORT_WAIT_SEND :
 		{
-//			uint8 debug_msg[100];
-//			int n = sprintf((char *)&debug_msg, "TA_TXREPORT_WAIT_SEND");
-//			send_usbmessage(&debug_msg[0], n);
-//			usb_run(); //TODO
-
 			int psduLength = REPORT_FRAME_LEN_BYTES;
 
 			// Write calculated TOF into response message
@@ -731,8 +649,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 				inst->timeofTx = portGetTickCnt();
 
 				inst->txDoneTimeoutDuration = inst->durationReportTxDoneTimeout_ms;
-//				inst->canPrintInfo = TRUE; //ranging complete, allow print to USB and LCD TODO
-				inst->canPrintUSB = TRUE;
+//				inst->canPrintUSB = TRUE;
 				inst->canPrintLCD = FALSE;
 			}
 
@@ -782,11 +699,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
             {
                 if(inst->previousState == TA_TXINF_WAIT_SEND)
                 {
-//                	uint8 debug_msg[100]; //TODO
-//					int n = sprintf((char *)&debug_msg, "confirm tx_inf");
-//					send_usbmessage(&debug_msg[0], n);
-//					usb_run();
-
 					inst->canPrintUSB = TRUE;
 					inst->canPrintLCD = TRUE;
 
@@ -933,13 +845,10 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 							memcpy(&framelength, &messageData[SYNC_FRAMELENGTH], sizeof(uint8));
 							memcpy(&timeSinceFrameStart_us, &messageData[SYNC_TSFS], 6);
 
-//							tdma_handler->update_frame_start(tdma_handler);
-
 							if(inst->mode == ANCHOR || inst->mode == TAG)
 							{
 								//evaluate our frame synchronization to see if we need to snap to the incoming value
 								//and rebroadcast a SYNC message
-								//TODO reenable!!!
 								tdma_handler->frame_sync(tdma_handler, dw_event, framelength, timeSinceFrameStart_us, srcIndex, FS_EVAL);
 							}
 
@@ -956,34 +865,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 							uint64 timeSinceFrameStart_us = 0;
 							memcpy(&framelength, &messageData[TDMA_FRAMELENGTH], sizeof(uint8));
 							memcpy(&timeSinceFrameStart_us, &messageData[TDMA_TSFS], 6);
-
-
-
-//							if(tdma_handler->discovery_mode == COLLECT_INF_REG || tdma_handler->discovery_mode == WAIT_INF_REG){
-//								uint8 debug_msg[100]; TODO
-//								int n = sprintf((char*)&debug_msg[0], "fcode %s", get_msg_fcode_string(fcode));
-//								send_usbmessage(&debug_msg[0], n);
-//								usb_run();
-//							}
-
-
-//							uint8 debug_msg[100]; TODO
-//							int n = sprintf((char*)&debug_msg[0], "fcode %s", get_msg_fcode_string(fcode));
-//							send_usbmessage(&debug_msg[0], n);
-//							usb_run();
-
-//							if( dw_event->msgu.rxmsg_ss.messageData[FCODE] == RTLS_DEMO_MSG_INF_SUG){
-//								uint64 time_now_us = portGetTickCntMicro();
-//								uint64 myTimeSinceSlotStart = get_dt64(tdma_handler->lastSlotStartTime64, time_now_us);
-//								uint64 myTimeSinceFrameStart = get_dt64(tdma_handler->uwbListTDMAInfo[0].frameStartTime, time_now_us);
-//								uint8 slot = myTimeSinceFrameStart/(tdma_handler->slotDuration_us); //integer division rounded down
-//
-//								uint8 debug_msg[100];
-//								int n = sprintf((char*)&debug_msg[0], "SUG tsfs: %llu, mytsfs: %llu, mytsss: %llu, slot: %u", timeSinceFrameStart_us, myTimeSinceFrameStart, myTimeSinceSlotStart, slot);
-//								send_usbmessage(&debug_msg[0], n);
-//								usb_run();
-//							}
-
 
 							//return to discovery mode if no slots assigned to this UWB
 							if(inst->mode == ANCHOR || inst->mode == TAG)
@@ -1051,7 +932,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                         	}
 
 
-                        	//inst->canPrintInfo = TRUE; //INF is last message in slot, we can print after processing TODO
+                        	//INF is last message in slot, we can print after processing
                         	inst->canPrintUSB = TRUE;
 							inst->canPrintLCD = TRUE;
 
@@ -1121,12 +1002,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 						} //RTLS_DEMO_MSG_ANCH_RESP
                         case RTLS_DEMO_MSG_TAG_FINAL :
                         {
-//                        	uint8 debug_msg[100]; TODO
-//							int n = sprintf((char *)&debug_msg, "RTLS_DEMO_MSG_TAG_FINAL");
-//							send_usbmessage(&debug_msg[0], n);
-//							usb_run();
-
-
                             int64 Rb, Da, Ra, Db ;
                             uint64 tagFinalTxTime  = 0;
                             uint64 tagFinalRxTime  = 0;
@@ -1167,13 +1042,10 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                             inst->tof[inst->uwbToRangeWith] = (int64) ( RaRbxDaDb/(RbyDb + RayDa) );
                             inst->newRangeUWBIndex = inst->uwbToRangeWith;
 
-//                            if(inst->tof[inst->newRangeUWBIndex] > 0) //if ToF == 0 - then no new range to report
-//		                    {
-		                        if(reportTOF(inst, inst->newRangeUWBIndex)==0)
-		                        {
-		                            inst->newRange = 1; //TODO comment out to turn off ANCHOR outputting range to USB
-		                        }
-//		                    }
+							if(reportTOF(inst, inst->newRangeUWBIndex)==0)
+							{
+								inst->newRange = 1;
+							}
 
 
                             tdma_handler->uwbListTDMAInfo[inst->uwbToRangeWith].lastRange = portGetTickCnt();
@@ -1191,25 +1063,22 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 							uint8 anchor_index = instgetuwblistindex(inst, &srcAddr[0], inst->addrByteSize);
 
 							//for now only process if we are the TAG that ranged with the reporting ANCHOR
-							//TODO make it so all are processed
-//							if(tag_index == 0)
-//							{
-								inst->tof[anchor_index] = 0;
+							inst->tof[anchor_index] = 0;
 
-								//copy previously calculated ToF
-								memcpy(&inst->tof[anchor_index], &messageData[REPORT_TOF], 6);
+							//copy previously calculated ToF
+							memcpy(&inst->tof[anchor_index], &messageData[REPORT_TOF], 6);
 
-								inst->newRangeAncAddress = instance_get_uwbaddr(anchor_index);
-								inst->newRangeTagAddress = instance_get_uwbaddr(tag_index);
+							inst->newRangeAncAddress = instance_get_uwbaddr(anchor_index);
+							inst->newRangeTagAddress = instance_get_uwbaddr(tag_index);
 
-								inst->newRangeUWBIndex = anchor_index;
-								if(inst->tof[inst->newRangeUWBIndex] > 0) //if ToF == 0 - then no new range to report
+							inst->newRangeUWBIndex = anchor_index;
+							if(inst->tof[inst->newRangeUWBIndex] > 0) //if ToF == 0 - then no new range to report
+							{
+								if(reportTOF(inst, inst->newRangeUWBIndex)==0)
 								{
-									if(reportTOF(inst, inst->newRangeUWBIndex)==0)
-									{
-										inst->newRange = 1;
-									}
+									inst->newRange = 1;
 								}
+							}
 
 							if(tag_index == 0)
 							{
@@ -1235,79 +1104,11 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 								inst->uwbToRangeWith = 255;
 							}
 
-//							inst->canPrintInfo = TRUE; //ranging complete, allow print to USB and LCD TODO
 							inst->canPrintUSB = TRUE;
 							inst->canPrintLCD = FALSE;
-//							dwt_setrxaftertxdelay(0);	//units are 1.0256us
 
-//							done = INST_DONE_WAIT_FOR_NEXT_EVENT; TODO
 							break;
 						} //RTLS_DEMO_MSG_RNG_REPORT
-//                        case RTLS_DEMO_MSG_RNG_REPORT: TODO
-//						{
-//							uint8 tag_index = instgetuwblistindex(inst, &messageData[REPORT_ADDR], inst->addrByteSize);
-//							uint8 anchor_index = instgetuwblistindex(inst, &srcAddr[0], inst->addrByteSize);
-//
-//							//for now only process if we are the TAG that ranged with the reporting ANCHOR
-//							//TODO make it so all are processed
-////							if(tag_index == 0)
-////							{
-//								inst->tof[anchor_index] = 0;
-//
-//								//copy previously calculated ToF
-//								memcpy(&inst->tof[anchor_index], &messageData[REPORT_TOF], 6);
-//
-//								inst->newRangeAncAddress = instance_get_uwbaddr(anchor_index);
-//								inst->newRangeTagAddress = instance_get_uwbaddr(tag_index);
-//
-//								inst->newRangeUWBIndex = anchor_index;
-////								if(inst->tof[inst->newRangeUWBIndex] > 0) //if ToF == 0 - then no new range to report
-////								{
-//									if(reportTOF(inst, inst->newRangeUWBIndex)==0)
-//									{
-//										inst->newRange = 1;
-//									}
-////								}
-//
-//								tdma_handler->uwbListTDMAInfo[inst->uwbToRangeWith].lastRange = portGetTickCnt();
-//
-////								uint8 debug_msg[100];//TODO remove
-//////								int n = sprintf((char *)&debug_msg, "POLL_COMPLETE,%llX,%llX", inst->newRangeTagAddress, inst->newRangeAncAddress);
-////								int n = sprintf((char *)&debug_msg, "POLL_COMPLETE,%04llX,%04llX", inst->newRangeTagAddress, inst->newRangeAncAddress);
-////								send_usbmessage(&debug_msg[0], n);
-////								usb_run();
-//
-//
-//
-//								inst->previousState = TA_INIT;
-//								inst->nextState = TA_INIT; //TODO remove nextState???
-//								inst->uwbToRangeWith = 255;
-//
-//								if(tag_index == 0)
-//								{
-//									tdma_handler->firstPollComplete = TRUE;
-//									inst->testAppState = TA_TX_SELECT;
-//								}
-//								else
-//								{
-//									inst->testAppState = TA_RXE_WAIT ;
-//								}
-////							}
-////							else
-////							{
-////								inst->testAppState = TA_RXE_WAIT ;
-////								inst->previousState = TA_INIT;
-////								inst->nextState = TA_INIT;
-////								inst->uwbToRangeWith = 255;
-////							}
-//
-//							//TODO turn this on after rx INF!
-////							inst->canPrintInfo = TRUE; //ranging complete, allow print to USB and LCD
-//                            dwt_setrxaftertxdelay(0);	//units are 1.0256us
-//
-////                            done = INST_DONE_WAIT_FOR_NEXT_EVENT; TODO
-//							break;
-//						} //RTLS_DEMO_MSG_RNG_REPORT
                         default:
                         {
                             inst->testAppState = TA_RXE_WAIT ;              // wait for next frame
@@ -1332,7 +1133,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                     int n;
                     if(inst->previousState == TA_TXBLINK_WAIT_SEND)
 					{
-//						uint8 debug_msg[100];
+//						uint8 debug_msg[100]; TODO
 //						n = sprintf((char *)&debug_msg, "TX_BLINK_TIMEOUT,%04llX,NULL", instance_get_addr());
 //						send_usbmessage(&debug_msg[0], n);
 //						usb_run();
@@ -1345,7 +1146,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 					}
 					else if(inst->previousState == TA_TXFINAL_WAIT_SEND)
 					{
-//						uint8 debug_msg[100];
+//						uint8 debug_msg[100]; TODO
 ////						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
 //						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%04llX,%04llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
 //						send_usbmessage(&debug_msg[0], n);
@@ -1353,7 +1154,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 					}
 					else if(inst->previousState == TA_TXPOLL_WAIT_SEND)
 					{
-//						uint8 debug_msg[100];
+//						uint8 debug_msg[100]; TODO
 ////						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%llX,%llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
 //						n = sprintf((char *)&debug_msg, "TX_POLL_TIMEOUT,%04llX,%04llX", instance_get_addr(), instance_get_uwbaddr(inst->uwbToRangeWith));
 //						send_usbmessage(&debug_msg[0], n);

@@ -27,64 +27,28 @@ static bool slot_transition(struct TDMAHandler *this)
 			this->firstPollComplete = FALSE;
 			this->secondPollSentThisSlot = FALSE;
 			this->infSentThisSlot = FALSE;
-//			inst->canPrintInfo = TRUE; TODO
 			inst->canPrintUSB = TRUE;
 			inst->canPrintLCD = TRUE;
 
 			//we have transitioned into the next slot.
 			//get the slot number and set the start time appropriately
 
-
-
-
 			uint64 timeSinceFrameStart64 = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
-
 			uint64 frameDuration64 = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
-//			if(timeSinceFrameStart64 >= frameDuration64)
-//			{
-//				//TODO remove
-////				uint8 debug_msg[100];
-//////				 int n = sprintf((char*)&debug_msg[0], "NEW FRAME, %llX,  this->frameStartTime: %lu, this->slotDuration*this->framelength: %lu", instance_get_addr(), this->frameStartTime, (this->slotDuration*this->framelength));
-//////				int n = sprintf((char*)&debug_msg[0], "NEW FRAME, xxxx, xxxx");
-////				int n = sprintf((char*)&debug_msg[0], "%llX, %llu, %llu", instance_get_addr(), this->lastFST, time_now_us);
-////				send_usbmessage(&debug_msg[0], n);
-////				usb_run();
-//
-//			}
-
 			if(timeSinceFrameStart64 >= frameDuration64)
 			{
 				int div = timeSinceFrameStart64/frameDuration64;
 				this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, frameDuration64*div);
 				timeSinceFrameStart64 -= frameDuration64*div;
 			}
-//			uint64 timeSinceFrameStart64 = this->update_frame_start(this);
-
-
-			this->lastFST = this->uwbListTDMAInfo[0].frameStartTime; //TODO remove
 
 			uint8 slot = timeSinceFrameStart64/(this->slotDuration_us); //integer division rounded down
 			this->lastSlotStartTime64 = this->uwbListTDMAInfo[0].frameStartTime + (uint64)(this->slotDuration_us*slot);
-
-
-//			uint8 debug_msg[100]; //TODO
-//			int n = sprintf((char *)&debug_msg, "new slot: %u, ts: %llu", slot, time_now_us);
-//			send_usbmessage(&debug_msg[0], n);
-//			usb_run();
-
-
 
 			if(inst->mode != DISCOVERY)
 			{
 				if(this->slot_assigned(&this->uwbListTDMAInfo[0], slot) == TRUE)
 				{
-//					uint8 debug_msg[100]; //TODO
-//					int n = sprintf((char *)&debug_msg, "MY SLOT STARTS");
-//					send_usbmessage(&debug_msg[0], n);
-//					usb_run();
-
-
-
 					inst->mode = TAG;
 					inst->testAppState = TA_TX_SELECT;
 					//go to TX select, select the oldest uwb, send INF, then send POLL
@@ -122,7 +86,6 @@ static uint64 update_frame_start(struct TDMAHandler *this){
 	if(timeSinceFrameStart_us > 1000000000) //if very large number, assume frame start time accidentally moved ahead of time now
 	{
 		uint64 diff_us = get_dt64(time_now_us, this->uwbListTDMAInfo[0].frameStartTime);
-//		int div = CEIL_DIV(diff_us,frameDuration_us); TODO
 		int div = diff_us/frameDuration_us;
 		if(diff_us%frameDuration_us != 0)
 		{
@@ -144,7 +107,6 @@ static uint64 update_frame_start(struct TDMAHandler *this){
 static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 framelength, uint64 timeSinceFrameStart_us, uint8 srcIndex, FRAME_SYNC_MODE mode)
 {
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
-//	uint64 myTimeSinceFrameStart_us = 0; TODO
 
 	//do not process erroneous tsfs
 	//can happen if frame start time is shifted ahead of time_now_us in transmitting UWB
@@ -180,27 +142,6 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 	this->uwbListTDMAInfo[srcIndex].frameStartTime = timestamp_subtract64(time_now_us, hisTimeSinceFrameStart_us);
 	uint64 myFrameDuration = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
 
-//	if(inst->mode == DISCOVERY){ TODO
-//		uint8 debug_msg[100];
-//		int n = sprintf((char*)&debug_msg[0], "uwb_index: %d, fst: %llu", srcIndex, this->uwbListTDMAInfo[srcIndex].frameStartTime);
-//		send_usbmessage(&debug_msg[0], n);
-//		usb_run();
-//	}
-
-
-
-//	if( dw_event->msgu.rxmsg_ss.messageData[FCODE] == RTLS_DEMO_MSG_INF_SUG){ TODO
-//		uint64 myTimeSinceSlotStart = get_dt64(this->lastSlotStartTime64, time_now_us);
-//		uint64 myTimeSinceFrameStart = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
-//		uint8 slot = myTimeSinceFrameStart/(this->slotDuration_us); //integer division rounded down
-//
-//		uint8 debug_msg[100];
-//		int n = sprintf((char*)&debug_msg[0], "SUG tsfs: %llu, tsfsoffset: %llu, mytsfs: %llu, mytsss: %llu, slot: %u", timeSinceFrameStart_us, hisTimeSinceFrameStart_us, myTimeSinceFrameStart, myTimeSinceSlotStart, slot);
-//		send_usbmessage(&debug_msg[0], n);
-//		usb_run();
-//	}
-
-
 	if(mode == FS_COLLECT)
 	{
 		return;
@@ -212,16 +153,6 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 	else// if(mode == FS_AVERAGE || mode == FS_EVAL)
 	{
 		uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
-
-		//first make sure my frame start time is up to date TODO
-//		if(myTimeSinceFrameStart_us >= myFrameDuration)
-//		{
-//			int div = myTimeSinceFrameStart_us/myFrameDuration;
-//			this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, myFrameDuration*div);
-//			myTimeSinceFrameStart_us -= myFrameDuration*div;
-//		}
-
-//		myTimeSinceFrameStart_us = this->update_frame_start(this);
 
 		//SELF VS INCOMING
 
@@ -272,24 +203,9 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 		//check if frame sync out of tolerance (don't xmit sync message in case of 0th slot misalignment)
 		if(diff_us%(MIN_FRAMELENGTH*this->slotDuration_us) > this->frameSyncThreshold_us){
 			if(MIN_FRAMELENGTH*this->slotDuration_us - diff_us%(MIN_FRAMELENGTH*this->slotDuration_us) > this->frameSyncThreshold_us){
-//				uint64 min_mod = diff_us%(MIN_FRAMELENGTH*this->slotDuration_us);
-//				uint8 debug_msg[100];
-//				int n = sprintf((char*)&debug_msg[0], "diff_us: %llu, min_mod: %llu", diff_us, min_mod);
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
 				this->tx_sync_msg(this);
 			}
 		}
-//		else if(diff_us > this->frameSyncThreshold_us) TODO
-//		{
-//
-//			uint8 debug_msg[100];
-//			int n = sprintf((char*)&debug_msg[0], "diff_us: %llu", diff_us);
-//			send_usbmessage(&debug_msg[0], n);
-//			usb_run();
-//
-//
-//		}
 		else if(mode == FS_EVAL)
 		{
 			return;
@@ -324,22 +240,12 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 	}
 	else
 	{
-		while(myTimeSinceFrameStart_us >= myFrameDuration)//TODO remove one
+		while(myTimeSinceFrameStart_us >= myFrameDuration)
 		{
 			this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, myFrameDuration);
 			myTimeSinceFrameStart_us -= myFrameDuration;
 		}
-		//first make sure my frame start time is up to date
-//		if(myTimeSinceFrameStart_us >= myFrameDuration)
-//		{
-//			int div = myTimeSinceFrameStart_us/myFrameDuration;
-//			this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, myFrameDuration*div);
-//			myTimeSinceFrameStart_us -= myFrameDuration*div;
-//		}
-
-//		myTimeSinceFrameStart_us = this->update_frame_start(this);
 	}
-//	myTimeSinceFrameStart_us = this->update_frame_start(this);
 
 	uint8 slot = myTimeSinceFrameStart_us/this->slotDuration_us; //integer division rounded down
 	this->lastSlotStartTime64 = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, (uint64)(this->slotDuration_us*slot));
@@ -350,28 +256,11 @@ static bool tx_sync_msg(struct TDMAHandler *this)
 {
 	int psduLength = SYNC_FRAME_LEN_BYTES;
 
-//	uint8 debug_msg[100];
-//	int n = sprintf((char*)&debug_msg[0], "stuck tx sync msg");
-//	send_usbmessage(&debug_msg[0], n);
-//	usb_run();
-
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
-	uint64 time_now_us = portGetTickCntMicro(); //TODO
+	uint64 time_now_us = portGetTickCntMicro();
 
-	uint64 myFrameDuration = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength; //TODO remove
 	uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
 
-	//first make sure my frame start time is up to date
-//	if(myTimeSinceFrameStart_us >= myFrameDuration)
-//	{
-//		int div = myTimeSinceFrameStart_us/myFrameDuration;
-//		this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, myFrameDuration*div);
-//		myTimeSinceFrameStart_us -= myFrameDuration*div;
-//	}
-
-//	uint64 myTimeSinceFrameStart_us = this->update_frame_start(this);
-
-//	uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
 	memcpy(&inst->sync_msg.messageData[SYNC_FRAMELENGTH], &this->uwbListTDMAInfo[0].framelength, sizeof(uint8));
 	memcpy(&inst->sync_msg.messageData[SYNC_TSFS], &myTimeSinceFrameStart_us, 6);
 	inst->sync_msg.seqNum = inst->frameSN++;
@@ -698,30 +587,11 @@ static void update_inf_tsfs(struct TDMAHandler *this)
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
 	uint64 time_now_us = portGetTickCntMicro();
 	uint64 timeSinceFrameStart64 = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
-	uint64 frameDuration = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
 
-	//if frameStartTime ahead of time_now_us, just send the erroneously large number over.
-	//the receiver will detect and disregard
-	if(timeSinceFrameStart64 < 10000000)
-	{
-//		timeSinceFrameStart64 = this->update_frame_start(this);
-
-//		while(timeSinceFrameStart64 > frameDuration) //TODO remove (maybe turn this back on for testing!)
-//		{
-//			this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, frameDuration);
-//			timeSinceFrameStart64 -= frameDuration;
-//		}
-	}
-	else
+	if(timeSinceFrameStart64 > 10000000)
 	{
 		timeSinceFrameStart64 = 0;
 	}
-
-//	if(this->toHidden == TRUE){
-//		this->toHidden = FALSE;
-//	}
-
-//	uint64 timeSinceFrameStart64 = this->update_frame_start(this);
 
 	memcpy(&inst->inf_msg.messageData[TDMA_TSFS], &timeSinceFrameStart64, 6);
 }
@@ -1662,7 +1532,6 @@ static void enter_discovery_mode(struct TDMAHandler *this)
 	this->collectInfStartTime = time_now;
 
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
-//	inst->canPrintInfo = TRUE; TODO
 	inst->canPrintUSB = TRUE;
 	inst->canPrintLCD = TRUE;
 
@@ -1739,9 +1608,6 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 					sub_network_membership[i] = 255; //disregard
 					continue;
 				}
-
-				//TODO bring frame start time up here?
-
 
 				//test the ith UWB against the jth subnetwork
 				for(int j=0; j < num_sub_networks; j++)
@@ -1860,10 +1726,8 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 						tnext[i] += frameduration;
 					}
 
-//					if(tnext[i] > tcommon && tnext[i] - tcommon >= shortestFrameDuration) //(should this be the frame buffer???) TODO
-					if(tnext[i] > tcommon && tnext[i] - tcommon >= this->frameSyncThreshold_us) //(should this be the frame buffer???)
+					if(tnext[i] > tcommon && tnext[i] - tcommon >= this->frameSyncThreshold_us)
 					{
-//						tcommon = tnext[i];
 						//increment the value based on tnext[0] to guarantee all uwbs
 						//in this subnetwork will have frame sync errors within the threshold
 						tcommon += shortestFrameDuration;
@@ -1898,7 +1762,6 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 			}
 
 			uint64 myTimeSinceFrameStart = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now);
-//			uint64 myTimeSinceFrameStart = this->update_frame_start(this);
 			uint8 slot = myTimeSinceFrameStart/this->slotDuration_us; //integer division rounded down
 			this->lastSlotStartTime64 = this->uwbListTDMAInfo[0].frameStartTime + (uint64)(this->slotDuration_us*slot);
 
@@ -1983,11 +1846,6 @@ static bool check_timeouts(struct TDMAHandler *this)
 				{
 					if(info->lastCommHidden != 0)
 					{
-						//TODO remove this test variable
-						this->toHidden = TRUE;
-						this->toHiddenFST = this->uwbListTDMAInfo[0].frameStartTime;
-						this->toHiddenFL = this->uwbListTDMAInfo[0].framelength;
-
 						info->connectionType = UWB_LIST_HIDDEN;
 						updateINF = TRUE;
 					}
@@ -2069,41 +1927,8 @@ static bool check_timeouts(struct TDMAHandler *this)
 	//re-optimize our TDMA assignments and repopulate the inf message
 	if(setInactive == TRUE)
 	{
-//		uint64 time_now_us = portGetTickCntMicro();
-//		uint64 timeSinceFrameStart64 = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
-//		uint64 frameDuration64 = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
-//		if(timeSinceFrameStart64 >= frameDuration64)
-//		{
-//			int div = timeSinceFrameStart64/frameDuration64;
-//			timeSinceFrameStart64 -= frameDuration64*div;
-//		}
-//		uint8 slot_now = timeSinceFrameStart64/(this->slotDuration_us);
-//
-//
-//		char slots_bef[10];
-//		for(int s=0; s < this->uwbListTDMAInfo[0].slotsLength; s++){
-//			sprintf((char *)&slots_bef[s*3], ", %d", this->uwbListTDMAInfo[0].slots[s]);
-//		}
-//
-//		uint8 fl_bef = this->uwbListTDMAInfo[0].framelength;
-
 		this->free_slots(&this->uwbListTDMAInfo[0]);
 		this->find_assign_slot(this);
-
-//		char slots_aft[10];
-//		for(int s=0; s < this->uwbListTDMAInfo[0].slotsLength; s++){
-//
-//			sprintf((char *)&slots_aft[s*3], ", %d", this->uwbListTDMAInfo[0].slots[s]);
-//		}
-
-//		uint8 fl_aft = this->uwbListTDMAInfo[0].framelength;
-
-
-//		uint8 debug_msg[100]; //TODO
-//		int n = sprintf((char *)&debug_msg, "set inactive, slot_now: (%d), slots_bef: (%s)/%d, slots_aft: (%s)/%d", slot_now, slots_bef, fl_bef, slots_aft, fl_aft);
-//		send_usbmessage(&debug_msg[0], n);
-//		usb_run();
-
 	}
 
 	//adjust the INF message to reflect any changes
@@ -2191,7 +2016,6 @@ static struct TDMAHandler new(uint64 slot_duration){
 	}
 	ret.uwbListTDMAInfo[0].connectionType = UWB_LIST_SELF;
 
-    ret.lastFST = time_now_us;
     ret.lastSlotStartTime64 = time_now_us;
     ret.infSentThisSlot = FALSE;
     ret.firstPollSentThisSlot = FALSE;
@@ -2207,11 +2031,6 @@ static struct TDMAHandler new(uint64 slot_duration){
     ret.collectInfDuration = ret.maxFramelength*ret.slotDuration_ms*2;
 	ret.waitInfDuration = ret.collectInfDuration;
 	ret.blinkPeriodRand = (uint32)rand()%BLINK_PERIOD_RAND_MS;
-
-	//TODO remove these test variables
-	ret.toHidden = FALSE;
-	ret.toHiddenFST = 0;
-	ret.toHiddenFL = 0;
 
 	return ret;
 }

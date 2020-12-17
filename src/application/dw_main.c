@@ -30,12 +30,6 @@ extern void send_usbmessage(uint8*, int);
 
 #define SOFTWARE_VER_STRING    "TDMA Version 1.0" //
 
-//#define SWS1_TXSPECT_MODE	0x80  //Continuous TX spectrum mode TODO
-//#define SWS1_ANC_MODE 		0x08  //anchor mode
-//#define SWS1_SHF_MODE		0x10  //short frame mode (6.81M) (switch S1-5)
-//#define SWS1_64M_MODE		0x20  //64M PRF mode (switch S1-6)
-//#define SWS1_CH5_MODE		0x40  //channel 5 mode (switch S1-7)
-
 int instance_mode = DISCOVERY;
 
 uint8 s1switch = 0;
@@ -86,16 +80,6 @@ uint32 inittestapplication(uint8 mode_switch)
         return(-1) ;
     }
 
-//    if(mode_switch & SWS1_ANC_MODE) TODO
-//    {
-//        led_on(LED_PC6);
-//
-//    }
-//    else
-//    {
-//        led_on(LED_PC7);
-//    }
-
     instance_init_s();
 	int dr_mode = decarangingmode(mode_switch);
 	instance_data_t* inst = instance_get_local_structure_ptr(0);
@@ -107,7 +91,6 @@ uint32 inittestapplication(uint8 mode_switch)
 
     instance_init_timings();
 
-//    result = tdma_init_s(inst->durationSlotMax_us);	//call after instance_init_timings() to get slot duration
     inst->mode =  DISCOVERY;
 
     return devID;
@@ -444,141 +427,6 @@ int dw_main(void)
 
     port_EnableEXT_IRQ();
 
-
-
-//    uint8 debug_msg[100];//TODO remove
-//	int n = sprintf((char *)&debug_msg, "INITIAL CONFIG");
-//	send_usbmessage(&debug_msg[0], n);
-//	usb_run();
-//	Sleep(5000);
-//
-//	//dump the dwt_registers
-//	dwt_dumpregisterstousb();
-//
-//
-//
-////	port_DisableEXT_IRQ();
-//////	port_set_dw1000_slowrate();
-////	inittestapplication(s1switch);
-//////	dwt_softreset();
-////	Sleep(1000);
-////	//dump the dwt_registers
-////	dwt_dumpregisterstousb();
-//////	port_set_dw1000_fastrate();
-////	port_EnableEXT_IRQ();
-//
-//
-//	port_DisableEXT_IRQ(); //disable IRQ until we configure the device
-//
-//	uint32 devID ;
-//	int result;
-//
-//	port_set_dw1000_slowrate();  //max SPI before PLLs configured is ~4M
-//
-//	dwt_softreset();
-//
-//	//reset the DW1000 by driving the RSTn line low
-//	reset_DW1000();
-//
-//
-//	//result = instance_init() ;
-//	// Reset the IC (might be needed if not getting here from POWER ON)
-////	dwt_softreset();
-//
-//	//we can enable any configuration loading from OTP/ROM on initialization
-//	dwt_initialise(DWT_LOADUCODE) ;
-//
-//	//this is platform dependent - only program if DW EVK/EVB
-//	dwt_setleds(3) ; //configure the GPIOs which control the leds on EVBs
-//
-//	//enable TX, RX states on GPIOs 6 and 5
-//	dwt_setlnapamode(1,1);
-//	//result = instance_init() ;
-//
-//	port_set_dw1000_fastrate();
-//
-////	instance_init_s();
-//	// if using auto CRC check (DWT_INT_RFCG and DWT_INT_RFCE) are used instead of DWT_INT_RDFR flag
-//	// other errors which need to be checked (as they disable receiver) are
-//	dwt_setinterrupt(SYS_MASK_VAL, 1);
-//
-//	//this is platform dependent - only program if DW EVK/EVB
-////	dwt_setleds(3) ; //configure the GPIOs which control the LEDs on EVBs
-//
-//	dwt_setcallbacks(instance_txcallback, instance_rxgoodcallback, instance_rxtimeoutcallback, instance_rxerrorcallback, instance_irqstuckcallback);
-////	instance_init_s();
-//
-//	dr_mode = decarangingmode(s1switch);
-//
-////	chan = inst->chConfig[dr_mode].channelNumber ;
-////	prf = (inst->chConfig[dr_mode].pulseRepFreq == DWT_PRF_16M)? 16 : 64 ;
-//
-//	instance_config(&inst->chConfig[dr_mode]) ;                  // Set operating channel etc
-//	port_EnableEXT_IRQ(); //enable IRQ before starting
-//
-//	n = sprintf((char *)&debug_msg, "INITIAL CONFIG");
-//	send_usbmessage(&debug_msg[0], n);
-//	usb_run();
-//	Sleep(5000);
-//
-//	//dump the dwt_registers
-//	dwt_dumpregisterstousb();
-
-	//FOLLOWING DIFFERENT FOR SOFTRESET ONLY!	    //FOLLOWING DIFFERENT FOR PARTIAL INIT
-	//0x04 SYS_CFG_ID								//
-	//0x06 SYS_TIME_ID (only difference for init)	//XXX
-	//0x08 TX_FCTRL_ID								//
-	//0x0E SYS_MASK_ID								//
-	//0x18 TX_ANTD_ID								//
-	//0x1D TX_POWER_ID								//
-	//0x1F CHAN_CTRL_ID								//
-	//0x21 USR_SFD_ID								//
-	//0x23 AGC_CTRL_ID								//
-	//0x26 GPIO_CTRL_ID								//
-	//0x28 RF_CONT_ID								//
-	//0x2A-0x0B TX_CAL_ID-TC_PGDELAY_OFFSET			//
-	//0x2B FS_CTRL_ID								//
-	//0x2D OTP_IF_ID								//instead 0x2C AON_ID (difference in reserved bits, shouldnt matter!)
-	//0x2E-0x1804 DIG_DIAG_ID-LDE_RXANTD_OFFSET		//
-	//0x2E-0x2804 DIG_DIAG_ID-LDE_REPC_OFFSET		//
-	//0x2F DIG_DIAG_ID								//
-	//0x36 PMSC_ID									//
-
-//	n = sprintf((char *)&debug_msg, "HARD SOFTRESET");
-//	send_usbmessage(&debug_msg[0], n);
-//	usb_run();
-//
-//	port_DisableEXT_IRQ();
-//	port_set_dw1000_slowrate();
-//	reset_DW1000();
-//	Sleep(1000);
-//	//dump the dwt_registers
-//	dwt_dumpregisterstousb();
-//	port_set_dw1000_fastrate();
-//	port_EnableEXT_IRQ();
-
-
-//
-//    port_set_dw1000_slowrate();  //max SPI before PLLs configured is ~4M
-//
-//        //this is called here to wake up the device (i.e. if it was in sleep mode before the restart)
-//        devID = instancereaddeviceid() ;
-//        if(DWT_DEVICE_ID != devID) //if the read of device ID fails, the DW1000 could be asleep
-//        {
-//            port_wakeup_dw1000();
-//
-//            devID = instancereaddeviceid() ;
-//            // SPI not working or Unsupported Device ID
-//            if(DWT_DEVICE_ID != devID)
-//                return(-1) ;
-//            //clear the sleep bit - so that after the hard reset below the DW does not go into sleep
-//            dwt_softreset();
-//        }
-//
-//        //reset the DW1000 by driving the RSTn line low
-//        reset_DW1000();
-
-
     // main loop
     while(1)
     {
@@ -587,7 +435,6 @@ int dw_main(void)
 		instance_run(); //run the state machine!!!
 		instance_mode = inst->mode;
 
-//		if(inst->canPrintInfo == TRUE) TODO
 		if(inst->canPrintUSB == TRUE)
 		{
 			if(instancenewrange())
@@ -611,7 +458,7 @@ int dw_main(void)
 					}
 				}
 
-				//self address, ranging anchor address, ranging tag address, range
+				//self address, ranging anchor address, ranging tag address, range TODO
 //				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X", saddr, aaddr, taddr, rng, rng_raw);
 //				n = sprintf((char*)&dataseq[0], "%016llX,%016llX,%016llX,%08X,%08X", saddr, aaddr, taddr, rng, rng_raw);
 //				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X", saddr, aaddr, taddr, rng);
@@ -619,30 +466,13 @@ int dw_main(void)
 //				n = sprintf((char*)&dataseq[0], "%08d,xxxx,xxxx", rng);
 
 
-	//			if(instance_mode == TAG) //TODO remove
-	//			{
-	//				uint64 aaddr = instancenewrangeancadd();
-	//				uint64 taddr = instancenewrangetagadd();
-	////				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
-//					n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
-	//			}
-
-#ifdef USB_SUPPORT //this is set in the port.h file
-//           	if(instance_mode == TAG) //TODO remove
-//           	{
-//        	 	  send_usbmessage(&dataseq[0], n);
-//        	 	  usb_run();
-//           	}
-
 				send_usbmessage(&dataseq[0], n);
 				usb_run();
-#endif
 			}
         }
 
         //only write to LCD if we aren't in the middle of  ranging messages
         //the sleep messages embedded in the LCD calls mess up the timing otherwise
-//        if(enableLCD == TRUE && inst->canPrintInfo == TRUE)
 		if(enableLCD == TRUE && inst->canPrintLCD == TRUE)
 		{
 
@@ -690,12 +520,6 @@ int dw_main(void)
 
 			if(updateLCD == TRUE)
 			{
-
-//				uint8 debug_msg[100]; //TODO
-//				int n = sprintf((char*)&debug_msg[0], "updateLCD");
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-
 				dataseq[0] = 0x2 ;  //return cursor home
 				writetoLCD( 1, 0,  dataseq);
 
@@ -708,7 +532,7 @@ int dw_main(void)
 						sprintf((char*)&dataseq[0], "%s       ", status);
 						sprintf((char*)&dataseq1[0], "N%02u FL%03u %05.2fm", num_neighbors, framelength, range_result);
 					}
-					else //TODO i think number of hidden nodes might be more useful than FL...
+					else
 					{
 						sprintf((char*)&dataseq[0], "%llX %s", addr, status);
 						sprintf((char*)&dataseq1[0], "N%02u FL%03d %05.2fm", num_neighbors, framelength, range_result);
@@ -730,7 +554,7 @@ int dw_main(void)
 
 				}
 
-				writetoLCD(40, 1, dataseq); //send some data TODO
+				writetoLCD(40, 1, dataseq); //send some data
 				writetoLCD(16, 1, dataseq1); //send some data
 			}
 		}
