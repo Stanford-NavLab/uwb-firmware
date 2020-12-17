@@ -21,6 +21,7 @@
 
 #include "deca_spi.h"
 #include "stdio.h"
+#include "deca_regs.h"
 
 extern void usb_run(void);
 extern int usb_init(void);
@@ -29,13 +30,12 @@ extern void send_usbmessage(uint8*, int);
 
 #define SOFTWARE_VER_STRING    "TDMA Version 1.0" //
 
-#define SWS1_TXSPECT_MODE	0x80  //Continuous TX spectrum mode
-#define SWS1_ANC_MODE 		0x08  //anchor mode
-#define SWS1_SHF_MODE		0x10  //short frame mode (6.81M) (switch S1-5)
-#define SWS1_64M_MODE		0x20  //64M PRF mode (switch S1-6)
-#define SWS1_CH5_MODE		0x40  //channel 5 mode (switch S1-7)
+//#define SWS1_TXSPECT_MODE	0x80  //Continuous TX spectrum mode TODO
+//#define SWS1_ANC_MODE 		0x08  //anchor mode
+//#define SWS1_SHF_MODE		0x10  //short frame mode (6.81M) (switch S1-5)
+//#define SWS1_64M_MODE		0x20  //64M PRF mode (switch S1-6)
+//#define SWS1_CH5_MODE		0x40  //channel 5 mode (switch S1-7)
 
-int dr_mode = 0;
 int instance_mode = DISCOVERY;
 
 uint8 s1switch = 0;
@@ -47,119 +47,6 @@ uint8 dataseq1[LCD_BUFF_LEN];
 
 int ranging = 0;
 
-//Configuration for DecaRanging Modes (8 default use cases selectable by the switch S1 on EVK)
-instanceConfig_t chConfig[8] ={
-                    //mode 1 - S1: 7 off, 6 off, 5 off
-                    {
-                        2,              // channel
-						3,              // preambleCode
-                        DWT_PRF_16M,    // prf
-                        DWT_BR_110K,    // datarate
-                        DWT_PLEN_1024,  // preambleLength
-                        DWT_PAC32,      // pacSize
-                        1,       // non-standard SFD
-                        (1025 + 64 - 32) //SFD timeout
-                    },
-                    //mode 2
-                    {
-                        2,              // channel
-                        3,             // preambleCode
-                        DWT_PRF_16M,    // prf
-                        DWT_BR_6M8,    // datarate
-                        DWT_PLEN_128,   // preambleLength
-                        DWT_PAC8,       // pacSize
-                        0,       // non-standard SFD
-                        (129 + 8 - 8) //SFD timeout
-                    },
-                    //mode 3
-                    {
-                        2,              // channel
-                        9,             // preambleCode
-                        DWT_PRF_64M,    // prf
-                        DWT_BR_110K,    // datarate
-                        DWT_PLEN_1024,  // preambleLength
-                        DWT_PAC32,      // pacSize
-                        1,       // non-standard SFD
-                        (1025 + 64 - 32) //SFD timeout
-                    },
-                    //mode 4
-                    {
-                        2,              // channel
-                        9,             // preambleCode
-                        DWT_PRF_64M,    // prf
-                        DWT_BR_6M8,    // datarate
-                        DWT_PLEN_128,   // preambleLength
-                        DWT_PAC8,       // pacSize
-                        0,       // non-standard SFD
-                        (129 + 8 - 8) //SFD timeout
-                    },
-                    //mode 5
-                    {
-                        5,              // channel
-                        3,             // preambleCode
-                        DWT_PRF_16M,    // prf
-                        DWT_BR_110K,    // datarate
-                        DWT_PLEN_1024,  // preambleLength
-                        DWT_PAC32,      // pacSize
-                        1,       // non-standard SFD
-                        (1025 + 64 - 32) //SFD timeout
-                    },
-                    //mode 6
-                    {
-                        5,              // channel
-                        3,             // preambleCode
-                        DWT_PRF_16M,    // prf
-                        DWT_BR_6M8,    // datarate
-                        DWT_PLEN_128,   // preambleLength
-                        DWT_PAC8,       // pacSize
-                        0,       // non-standard SFD
-                        (129 + 8 - 8) //SFD timeout
-                    },
-                    //mode 7
-                    {
-                        5,              // channel
-                        9,             // preambleCode
-                        DWT_PRF_64M,    // prf
-                        DWT_BR_110K,    // datarate
-                        DWT_PLEN_1024,  // preambleLength
-                        DWT_PAC32,      // pacSize
-                        1,       // non-standard SFD
-                        (1025 + 64 - 32) //SFD timeout
-                    },
-                    //mode 8
-                    {
-                        5,              // channel
-                        9,             // preambleCode
-                        DWT_PRF_64M,    // prf
-                        DWT_BR_6M8,    // datarate
-                        DWT_PLEN_128,   // preambleLength
-                        DWT_PAC8,       // pacSize
-                        0,       // non-standard SFD
-                        (129 + 8 - 8) //SFD timeout
-                    }
-};
-
-int decarangingmode(uint8 mode_switch)
-{
-    int mode = 0;
-
-    if(mode_switch & SWS1_SHF_MODE)
-    {
-        mode = 1;
-    }
-
-    if(mode_switch & SWS1_64M_MODE)
-    {
-        mode = mode + 2;
-    }
-    if(mode_switch & SWS1_CH5_MODE)
-    {
-        mode = mode + 4;
-    }
-
-    return mode;
-}
-
 uint32 inittestapplication(uint8 mode_switch)
 {
     uint32 devID ;
@@ -168,7 +55,7 @@ uint32 inittestapplication(uint8 mode_switch)
     port_set_dw1000_slowrate();  //max SPI before PLLs configured is ~4M
 
     //this is called here to wake up the device (i.e. if it was in sleep mode before the restart)
-    devID = instancereaddeviceid() ;
+    devID = instancereaddeviceid();
     if(DWT_DEVICE_ID != devID) //if the read of device ID fails, the DW1000 could be asleep
     {
         port_wakeup_dw1000();
@@ -184,6 +71,7 @@ uint32 inittestapplication(uint8 mode_switch)
     //reset the DW1000 by driving the RSTn line low
     reset_DW1000();
 
+
     result = instance_init() ;
     if (0 > result) return(-1) ; // Some failure has occurred
 
@@ -198,30 +86,29 @@ uint32 inittestapplication(uint8 mode_switch)
         return(-1) ;
     }
 
-    if(mode_switch & SWS1_ANC_MODE)
-    {
-        led_on(LED_PC6);
-
-    }
-    else
-    {
-        led_on(LED_PC7);
-    }
+//    if(mode_switch & SWS1_ANC_MODE) TODO
+//    {
+//        led_on(LED_PC6);
+//
+//    }
+//    else
+//    {
+//        led_on(LED_PC7);
+//    }
 
     instance_init_s();
-	dr_mode = decarangingmode(mode_switch);
+	int dr_mode = decarangingmode(mode_switch);
+	instance_data_t* inst = instance_get_local_structure_ptr(0);
 
-    chan = chConfig[dr_mode].channelNumber ;
-    prf = (chConfig[dr_mode].pulseRepFreq == DWT_PRF_16M)? 16 : 64 ;
+    chan = inst->chConfig[dr_mode].channelNumber ;
+    prf = (inst->chConfig[dr_mode].pulseRepFreq == DWT_PRF_16M)? 16 : 64 ;
 
-    instance_config(&chConfig[dr_mode]) ;                  // Set operating channel etc
-
-    instancesettagsleepdelay(POLL_SLEEP_DELAY, BLINK_SLEEP_DELAY); //set the Tag sleep time
+    instance_config(&inst->chConfig[dr_mode]) ;                  // Set operating channel etc
 
     instance_init_timings();
 
-    instance_data_t* inst = instance_get_local_structure_ptr(0);
-    result = tdma_init_s(inst->durationSlotMax_us);	//call after instance_init_timings() to get slot duration
+//    result = tdma_init_s(inst->durationSlotMax_us);	//call after instance_init_timings() to get slot duration
+    inst->mode =  DISCOVERY;
 
     return devID;
 }
@@ -297,8 +184,6 @@ int dw_main(void)
 {
     int i = 0;
     double range_result = 0;
-    uint64 range_addr = 0;
-    int canSleep;
 
     //LCD variables
     bool enableLCD = FALSE;
@@ -306,6 +191,99 @@ int dw_main(void)
 	int toggle_counter = 0;
 	int toggle_step = 5;
 	uint8 command = 0x0;
+
+	instance_data_t* inst = instance_get_local_structure_ptr(0);
+
+	//Configuration for DecaRanging Modes (8 default use cases selectable by the switch S1 on EVK)
+	instanceConfig_t cfg1 = {
+            2,              // channel
+			3,              // preambleCode
+            DWT_PRF_16M,    // prf
+            DWT_BR_110K,    // datarate
+            DWT_PLEN_1024,  // preambleLength
+            DWT_PAC32,      // pacSize
+            1,       // non-standard SFD
+            (1025 + 64 - 32) //SFD timeout
+        };
+	inst->chConfig[0] = cfg1;
+	instanceConfig_t cfg2 = {
+			2,              // channel
+			3,             // preambleCode
+			DWT_PRF_16M,    // prf
+			DWT_BR_6M8,    // datarate
+			DWT_PLEN_128,   // preambleLength
+			DWT_PAC8,       // pacSize
+			0,       // non-standard SFD
+			(129 + 8 - 8) //SFD timeout
+		};
+	inst->chConfig[1] = cfg2;
+	instanceConfig_t cfg3 = {
+			2,              // channel
+			9,             // preambleCode
+			DWT_PRF_64M,    // prf
+			DWT_BR_110K,    // datarate
+			DWT_PLEN_1024,  // preambleLength
+			DWT_PAC32,      // pacSize
+			1,       // non-standard SFD
+			(1025 + 64 - 32) //SFD timeout
+		};
+	inst->chConfig[2] = cfg3;
+	instanceConfig_t cfg4 = {
+			2,              // channel
+			9,             // preambleCode
+			DWT_PRF_64M,    // prf
+			DWT_BR_6M8,    // datarate
+			DWT_PLEN_128,   // preambleLength
+			DWT_PAC8,       // pacSize
+			0,       // non-standard SFD
+			(129 + 8 - 8) //SFD timeout
+		};
+	inst->chConfig[3] = cfg4;
+	instanceConfig_t cfg5 = {
+			5,              // channel
+			3,             // preambleCode
+			DWT_PRF_16M,    // prf
+			DWT_BR_110K,    // datarate
+			DWT_PLEN_1024,  // preambleLength
+			DWT_PAC32,      // pacSize
+			1,       // non-standard SFD
+			(1025 + 64 - 32) //SFD timeout
+		};
+	inst->chConfig[4] = cfg5;
+	instanceConfig_t cfg6 = {
+			5,              // channel
+			3,             // preambleCode
+			DWT_PRF_16M,    // prf
+			DWT_BR_6M8,    // datarate
+			DWT_PLEN_128,   // preambleLength
+			DWT_PAC8,       // pacSize
+			0,       // non-standard SFD
+			(129 + 8 - 8) //SFD timeout
+		};
+	inst->chConfig[5] = cfg6;
+	instanceConfig_t cfg7 = {
+			5,              // channel
+			9,             // preambleCode
+			DWT_PRF_64M,    // prf
+			DWT_BR_110K,    // datarate
+			DWT_PLEN_1024,  // preambleLength
+			DWT_PAC32,      // pacSize
+			1,       // non-standard SFD
+			(1025 + 64 - 32) //SFD timeout
+		};
+	inst->chConfig[6] = cfg7;
+	instanceConfig_t cfg8 = {
+			5,              // channel
+			9,             // preambleCode
+			DWT_PRF_64M,    // prf
+			DWT_BR_6M8,    // datarate
+			DWT_PLEN_128,   // preambleLength
+			DWT_PAC8,       // pacSize
+			0,       // non-standard SFD
+			(129 + 8 - 8) //SFD timeout
+		};
+	inst->chConfig[7] = cfg8;
+
 
     led_off(LED_ALL); //turn off all the LEDs
 
@@ -351,6 +329,8 @@ int dw_main(void)
 		writetoLCD(16, 1, dataseq); //send some data
 	}
 
+
+
     Sleep(1000);
 
     port_DisableEXT_IRQ(); 	//disable DW1000 IRQ until we configure the application
@@ -360,7 +340,6 @@ int dw_main(void)
     usb_init();
     Sleep(1000);
     usb_run();
-    Sleep(10000); //TODO remove this for the final build
 #endif
 
     //run DecaRanging application
@@ -380,11 +359,53 @@ int dw_main(void)
 			writetoLCD(1, 0,  &dataseq[0]);
 			memset(dataseq, ' ', LCD_BUFF_LEN);
 			memcpy(dataseq, (const uint8 *) "ERROR           ", LCD_BUFF_LEN);
-			writetoLCD( LCD_BUFF_LEN, 1, dataseq); //send some data
+			writetoLCD( 40, 1, dataseq); //send some data
 			memcpy(dataseq, (const uint8 *) "INIT FAIL       ", LCD_BUFF_LEN);
-			writetoLCD( LCD_BUFF_LEN, 1, dataseq); //send some data
+			writetoLCD( 16, 1, dataseq); //send some data
 		}
 		return 0; //error
+	}
+
+	tdma_init_s(inst->durationSlotMax_us);	//call after instance_init_timings() to get slot duration
+
+	if(enableLCD == TRUE)
+	{
+		dataseq[0] = 0x2 ;  //return cursor home
+		writetoLCD( 1, 0,  dataseq);
+		memset(dataseq, ' ', LCD_BUFF_LEN);
+		memcpy(dataseq, (const uint8 *) "MAX NETWORK SIZE", LCD_BUFF_LEN);
+		writetoLCD(40, 1, dataseq); //send some data
+		memset(dataseq, ' ', LCD_BUFF_LEN);
+		sprintf((char*)&dataseq[0], "%d", UWB_LIST_SIZE);
+		writetoLCD(16, 1, dataseq); //send some data
+
+		Sleep(2000);
+
+		dataseq[0] = 0x2 ;  //return cursor home
+		writetoLCD( 1, 0,  dataseq);
+		memset(dataseq, ' ', LCD_BUFF_LEN);
+		memcpy(dataseq, (const uint8 *) "SLOT DURATION   ", LCD_BUFF_LEN);
+		writetoLCD(40, 1, dataseq); //send some data
+		memset(dataseq, ' ', LCD_BUFF_LEN);
+		sprintf((char*)&dataseq[0], "%llu us", inst->durationSlotMax_us);
+		writetoLCD(16, 1, dataseq); //send some data
+
+		Sleep(2000);
+
+
+
+
+		dataseq[0] = 0x2 ;  //return cursor home
+		writetoLCD( 1, 0,  dataseq);
+		memset(dataseq, ' ', LCD_BUFF_LEN);
+		sprintf((char*)&dataseq[0], "TX DELAY: %.5u ", inst->txAntennaDelay);
+		writetoLCD(40, 1, dataseq); //send some data
+		memset(dataseq, ' ', LCD_BUFF_LEN);
+		sprintf((char*)&dataseq[0], "RX DELAY: %.5u ", inst->rxAntennaDelay);
+		writetoLCD(16, 1, dataseq); //send some data
+
+		Sleep(2000);
+
 	}
 
 	//test EVB1000 - used in EVK1000 production
@@ -423,136 +444,208 @@ int dw_main(void)
 
     port_EnableEXT_IRQ();
 
+
+
+//    uint8 debug_msg[100];//TODO remove
+//	int n = sprintf((char *)&debug_msg, "INITIAL CONFIG");
+//	send_usbmessage(&debug_msg[0], n);
+//	usb_run();
+//	Sleep(5000);
+//
+//	//dump the dwt_registers
+//	dwt_dumpregisterstousb();
+//
+//
+//
+////	port_DisableEXT_IRQ();
+//////	port_set_dw1000_slowrate();
+////	inittestapplication(s1switch);
+//////	dwt_softreset();
+////	Sleep(1000);
+////	//dump the dwt_registers
+////	dwt_dumpregisterstousb();
+//////	port_set_dw1000_fastrate();
+////	port_EnableEXT_IRQ();
+//
+//
+//	port_DisableEXT_IRQ(); //disable IRQ until we configure the device
+//
+//	uint32 devID ;
+//	int result;
+//
+//	port_set_dw1000_slowrate();  //max SPI before PLLs configured is ~4M
+//
+//	dwt_softreset();
+//
+//	//reset the DW1000 by driving the RSTn line low
+//	reset_DW1000();
+//
+//
+//	//result = instance_init() ;
+//	// Reset the IC (might be needed if not getting here from POWER ON)
+////	dwt_softreset();
+//
+//	//we can enable any configuration loading from OTP/ROM on initialization
+//	dwt_initialise(DWT_LOADUCODE) ;
+//
+//	//this is platform dependent - only program if DW EVK/EVB
+//	dwt_setleds(3) ; //configure the GPIOs which control the leds on EVBs
+//
+//	//enable TX, RX states on GPIOs 6 and 5
+//	dwt_setlnapamode(1,1);
+//	//result = instance_init() ;
+//
+//	port_set_dw1000_fastrate();
+//
+////	instance_init_s();
+//	// if using auto CRC check (DWT_INT_RFCG and DWT_INT_RFCE) are used instead of DWT_INT_RDFR flag
+//	// other errors which need to be checked (as they disable receiver) are
+//	dwt_setinterrupt(SYS_MASK_VAL, 1);
+//
+//	//this is platform dependent - only program if DW EVK/EVB
+////	dwt_setleds(3) ; //configure the GPIOs which control the LEDs on EVBs
+//
+//	dwt_setcallbacks(instance_txcallback, instance_rxgoodcallback, instance_rxtimeoutcallback, instance_rxerrorcallback, instance_irqstuckcallback);
+////	instance_init_s();
+//
+//	dr_mode = decarangingmode(s1switch);
+//
+////	chan = inst->chConfig[dr_mode].channelNumber ;
+////	prf = (inst->chConfig[dr_mode].pulseRepFreq == DWT_PRF_16M)? 16 : 64 ;
+//
+//	instance_config(&inst->chConfig[dr_mode]) ;                  // Set operating channel etc
+//	port_EnableEXT_IRQ(); //enable IRQ before starting
+//
+//	n = sprintf((char *)&debug_msg, "INITIAL CONFIG");
+//	send_usbmessage(&debug_msg[0], n);
+//	usb_run();
+//	Sleep(5000);
+//
+//	//dump the dwt_registers
+//	dwt_dumpregisterstousb();
+
+	//FOLLOWING DIFFERENT FOR SOFTRESET ONLY!	    //FOLLOWING DIFFERENT FOR PARTIAL INIT
+	//0x04 SYS_CFG_ID								//
+	//0x06 SYS_TIME_ID (only difference for init)	//XXX
+	//0x08 TX_FCTRL_ID								//
+	//0x0E SYS_MASK_ID								//
+	//0x18 TX_ANTD_ID								//
+	//0x1D TX_POWER_ID								//
+	//0x1F CHAN_CTRL_ID								//
+	//0x21 USR_SFD_ID								//
+	//0x23 AGC_CTRL_ID								//
+	//0x26 GPIO_CTRL_ID								//
+	//0x28 RF_CONT_ID								//
+	//0x2A-0x0B TX_CAL_ID-TC_PGDELAY_OFFSET			//
+	//0x2B FS_CTRL_ID								//
+	//0x2D OTP_IF_ID								//instead 0x2C AON_ID (difference in reserved bits, shouldnt matter!)
+	//0x2E-0x1804 DIG_DIAG_ID-LDE_RXANTD_OFFSET		//
+	//0x2E-0x2804 DIG_DIAG_ID-LDE_REPC_OFFSET		//
+	//0x2F DIG_DIAG_ID								//
+	//0x36 PMSC_ID									//
+
+//	n = sprintf((char *)&debug_msg, "HARD SOFTRESET");
+//	send_usbmessage(&debug_msg[0], n);
+//	usb_run();
+//
+//	port_DisableEXT_IRQ();
+//	port_set_dw1000_slowrate();
+//	reset_DW1000();
+//	Sleep(1000);
+//	//dump the dwt_registers
+//	dwt_dumpregisterstousb();
+//	port_set_dw1000_fastrate();
+//	port_EnableEXT_IRQ();
+
+
+//
+//    port_set_dw1000_slowrate();  //max SPI before PLLs configured is ~4M
+//
+//        //this is called here to wake up the device (i.e. if it was in sleep mode before the restart)
+//        devID = instancereaddeviceid() ;
+//        if(DWT_DEVICE_ID != devID) //if the read of device ID fails, the DW1000 could be asleep
+//        {
+//            port_wakeup_dw1000();
+//
+//            devID = instancereaddeviceid() ;
+//            // SPI not working or Unsupported Device ID
+//            if(DWT_DEVICE_ID != devID)
+//                return(-1) ;
+//            //clear the sleep bit - so that after the hard reset below the DW does not go into sleep
+//            dwt_softreset();
+//        }
+//
+//        //reset the DW1000 by driving the RSTn line low
+//        reset_DW1000();
+
+
     // main loop
     while(1)
     {
     	bool updateLCD = FALSE;
     	//TODO reenable optimization in the compiler settings!!!
-		instance_data_t* inst = instance_get_local_structure_ptr(0);
-		canSleep = instance_run(); //run the state machine!!!
+		instance_run(); //run the state machine!!!
 		instance_mode = inst->mode;
 
-        if(instancenewrange())
-        {
-        	updateLCD = TRUE;
-//        	int n, rng, rng_raw;
-//            uint64 aaddr, taddr;
-//            ranging = 1;
-            //send the new range information to LCD and/or USB
-            range_result = instance_get_idist(inst->newRangeUWBIndex);
-            range_addr = instance_get_uwbaddr(inst->newRangeUWBIndex);
-
-
-            //set_rangeresult(range_result);
-            if(enableLCD == TRUE)
+//		if(inst->canPrintInfo == TRUE) TODO
+		if(inst->canPrintUSB == TRUE)
+		{
+			if(instancenewrange())
 			{
-//TODO revisit calibration procedure!
-#if (DELAY_CALIB_OUTPUT == 1)
-				dataseq[0] = 0x2 ;  //return cursor home
-				writetoLCD( 1, 0,  dataseq);
+				int n;
+				updateLCD = TRUE;
+				//send the new range information to LCD and/or USB
+				double idist = instance_get_idist(inst->newRangeUWBIndex);
+				int rng = (int)(idist*1000.0);
+				int rng_raw = (int)(instance_get_idistraw(inst->newRangeUWBIndex)*1000.0);
 
-				dataseq[0] = 0x2 ;  //return cursor home
-				writetoLCD( 1, 0,  dataseq);
-				memset(dataseq, ' ', LCD_BUFF_LEN);
-				memset(dataseq1, ' ', LCD_BUFF_LEN);
+				uint64 saddr = instance_get_addr();
+				uint64 aaddr = instancenewrangeancadd();
+				uint64 taddr = instancenewrangetagadd();
 
-				toggle_step = 5;
-
-				if(toggle <= toggle_step)
+				if(enableLCD == TRUE)
 				{
-					sprintf((char*)&dataseq[0], "ADDRESS - SELF  ");
-					sprintf((char*)&dataseq1[0], "%llX", instance_get_addr());
-				}
-				else if(toggle <= toggle_step*2)
-				{
-					sprintf((char*)&dataseq[0], "RANGING WITH    ");
-					if(inst->mode == TAG)
-					{
-						sprintf((char*)&dataseq1[0], "%.3u ANCHORS     ", instfindnumactiveuwbinlist(inst));
-					}
-					else if(inst->mode == ANCHOR)
-					{
-						sprintf((char*)&dataseq1[0], "%.3u TAGS        ", instfindnumactiveuwbinlist(inst));
+					//only update range on display if this UWB is one of the UWBs involved in the range measurement
+					if(memcmp(&saddr, &aaddr, sizeof(uint64)) == 0 || memcmp(&saddr, &taddr, sizeof(uint64)) == 0){
+						range_result = idist;
 					}
 				}
-				else
-				{
-					sprintf((char*)&dataseq[0], "TX DELAY: %.5u ", inst->txAntennaDelay);
-					sprintf((char*)&dataseq1[0], "RX DELAY: %.5u ", inst->rxAntennaDelay);
-				}
-				toggle++;
-				if(toggle > toggle_step*3)
-				{
-					toggle = 0;
-				}
 
-				writetoLCD( 40, 1, dataseq); //send some data
-				writetoLCD( 16, 1, dataseq1); //send some data
-#else
-
-//				dataseq[0] = 0x2 ;  //return cursor home
-//				writetoLCD( 1, 0,  dataseq);
-//
-//				memset(dataseq, ' ', LCD_BUFF_LEN);
-//				memset(dataseq1, ' ', LCD_BUFF_LEN);
-//
-//				sprintf((char*)&dataseq[0], "LAST: %4.2f m", range_result);
-//				writetoLCD( 40, 1, dataseq); //send some data
-//				sprintf((char*)&dataseq1[0], "%llX", instance_get_uwbaddr(inst->newRangeUWBIndex));
-//				writetoLCD( 16, 1, dataseq1); //send some data
-#endif
-			}
-
-//            aaddr = instancenewrangeancadd();
-//            taddr = instancenewrangetagadd();
-//            rng = (int) (range_result*1000);
-//            rng_raw = (int) (instance_get_idistraw(inst->newRangeUWBIndex)*1000);
+				//self address, ranging anchor address, ranging tag address, range
+//				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X", saddr, aaddr, taddr, rng, rng_raw);
+//				n = sprintf((char*)&dataseq[0], "%016llX,%016llX,%016llX,%08X,%08X", saddr, aaddr, taddr, rng, rng_raw);
+//				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X", saddr, aaddr, taddr, rng);
+				n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
+//				n = sprintf((char*)&dataseq[0], "%08d,xxxx,xxxx", rng);
 
 
-
-//            n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
-//            n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
-
-			if(instance_mode == TAG && inst->canPrintInfo == TRUE)
-			{
-//				uint64 aaddr = instancenewrangeancadd();
-//				uint64 taddr = instancenewrangetagadd();
-////				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
-//				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
-//				send_usbmessage(&dataseq[0], n);
-//				usb_run();
-
-			}
-			else
-			{
-//				n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
-			}
-
-//            if(instance_mode == TAG)
-//            {
-//                n = sprintf((char*)&dataseq[0], "t %llX %llX %08X %08X", aaddr, taddr, rng, rng_raw);
-//
-//            }
-//            else
-//            {
-////                n = sprintf((char*)&dataseq[0], "a %llX %llX %08X %08X", aaddr, taddr, rng, rng_raw);
-//                n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
-//            }
+	//			if(instance_mode == TAG) //TODO remove
+	//			{
+	//				uint64 aaddr = instancenewrangeancadd();
+	//				uint64 taddr = instancenewrangetagadd();
+	////				int n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%llX,%llX", taddr, aaddr);
+//					n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
+	//			}
 
 #ifdef USB_SUPPORT //this is set in the port.h file
-           if(instance_mode == TAG)
-           {
-//        	   send_usbmessage(&dataseq[0], n);
-           }
-//           send_usbmessage(&dataseq[0], n);
+//           	if(instance_mode == TAG) //TODO remove
+//           	{
+//        	 	  send_usbmessage(&dataseq[0], n);
+//        	 	  usb_run();
+//           	}
+
+				send_usbmessage(&dataseq[0], n);
+				usb_run();
 #endif
+			}
         }
 
-
         //only write to LCD if we aren't in the middle of  ranging messages
-        //the random sleep messages embedded in the LCD calls messes up the timing
-        if(enableLCD == TRUE && inst->canPrintInfo == TRUE)
+        //the sleep messages embedded in the LCD calls mess up the timing otherwise
+//        if(enableLCD == TRUE && inst->canPrintInfo == TRUE)
+		if(enableLCD == TRUE && inst->canPrintLCD == TRUE)
 		{
+
         	toggle_step = 750;
         	memset(dataseq, ' ', LCD_BUFF_LEN);
 			memset(dataseq1, ' ', LCD_BUFF_LEN);
@@ -565,15 +658,12 @@ int dw_main(void)
 			if(instance_mode == DISCOVERY)
 			{
 				strcpy(status, "SEARCHING");
-				range_addr = 0x0000;
 				range_result = 0;
 			}
 			else
 			{
 				strcpy(status, "CONNECTED");
 			}
-			dataseq[0] = 0x2 ;  //return cursor home
-			writetoLCD( 1, 0,  dataseq);
 
 			if(toggle_counter <= toggle_step)
 			{
@@ -600,20 +690,28 @@ int dw_main(void)
 
 			if(updateLCD == TRUE)
 			{
+
+//				uint8 debug_msg[100]; //TODO
+//				int n = sprintf((char*)&debug_msg[0], "updateLCD");
+//				send_usbmessage(&debug_msg[0], n);
+//				usb_run();
+
+				dataseq[0] = 0x2 ;  //return cursor home
+				writetoLCD( 1, 0,  dataseq);
+
+				struct TDMAHandler *tdma_handler = tdma_get_local_structure_ptr();
+				uint8 framelength = tdma_handler->uwbListTDMAInfo[0].framelength;
 				if(toggle == 1)
 				{
 					if(inst->addrByteSize == 8)
 					{
 						sprintf((char*)&dataseq[0], "%s       ", status);
-						sprintf((char*)&dataseq1[0], "N:%02u H:%02u %05.2fm", num_neighbors, num_hidden, range_result);
+						sprintf((char*)&dataseq1[0], "N%02u FL%03u %05.2fm", num_neighbors, framelength, range_result);
 					}
-					else
+					else //TODO i think number of hidden nodes might be more useful than FL...
 					{
-						struct TDMAHandler *tdma_handler = tdma_get_local_structure_ptr();
-						uint8 framelength = tdma_handler->uwbListTDMAInfo[0].framelength;
 						sprintf((char*)&dataseq[0], "%llX %s", addr, status);
-//						sprintf((char*)&dataseq1[0], "N:%02u %04llX:%05.2fm", num_neighbors, range_addr, range_result);
-						sprintf((char*)&dataseq1[0], "N:%02u %04d:%05.2fm", num_neighbors, framelength, range_result);
+						sprintf((char*)&dataseq1[0], "N%02u FL%03d %05.2fm", num_neighbors, framelength, range_result);
 					}
 				}
 				else //if(toggle == 2)
@@ -621,31 +719,22 @@ int dw_main(void)
 					if(inst->addrByteSize == 8)
 					{
 						sprintf((char*)&dataseq[0], "%llX", addr);
-						sprintf((char*)&dataseq1[0], "N:%02u H:%02u %05.2fm", num_neighbors, num_hidden, range_result);
+						sprintf((char*)&dataseq1[0], "H%02u FL%03u %05.2fm", num_neighbors, framelength, range_result);
 					}
 					else
 					{
-						struct TDMAHandler *tdma_handler = tdma_get_local_structure_ptr();
-						uint8 framelength = tdma_handler->uwbListTDMAInfo[0].framelength;
+
 						sprintf((char*)&dataseq[0], "%llX %s", addr, status);
-//						sprintf((char*)&dataseq1[0], "H:%02u %04llX:%05.2fm", num_hidden, range_addr, range_result);
-						sprintf((char*)&dataseq1[0], "H:%02u %04d:%05.2fm", num_hidden, framelength, range_result);
+						sprintf((char*)&dataseq1[0], "H%02u FL%03d %05.2fm", num_hidden, framelength, range_result);
 					}
 
 				}
 
-				writetoLCD(40, 1, dataseq); //send some data
+				writetoLCD(40, 1, dataseq); //send some data TODO
 				writetoLCD(16, 1, dataseq1); //send some data
 			}
 		}
-
-#ifdef USB_SUPPORT //this is set in the port.h file
-//        usb_run();
-#endif
-
-//        if(canSleep)__WFI();
     }
-
 
     return 0;
 }

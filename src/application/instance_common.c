@@ -22,6 +22,7 @@ extern void usb_run(void);
 extern int usb_init(void);
 extern void usb_printconfig(int, uint8*, int);
 extern void send_usbmessage(uint8*, int);
+extern uint32 inittestapplication(uint8 s1switch);
 
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -78,6 +79,27 @@ int tdma_init_s(uint64 slot_duration)
     return 0;
 }
 
+
+int decarangingmode(uint8 mode_switch)
+{
+    int mode = 0;
+
+    if(mode_switch & SWS1_SHF_MODE)
+    {
+        mode = 1;
+    }
+
+    if(mode_switch & SWS1_64M_MODE)
+    {
+        mode = mode + 2;
+    }
+    if(mode_switch & SWS1_CH5_MODE)
+    {
+        mode = mode + 4;
+    }
+
+    return mode;
+}
 
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -182,10 +204,14 @@ int reportTOF(instance_data_t *inst, uint8 uwb_index)
 	distance = distance - dwt_getrangebias(inst->configData.chan, (float) distance_to_correct, inst->configData.prf);
 #endif
 
-	if ((distance < 0) || (distance > 20000.000))    // discount any items with error
+	if (distance > 20000.000)    // discount any items with error
 	{
 		inst->idistance[uwb_index] = 0;
 		return -1;
+	}
+
+	if(distance < 0){
+		distance = 0;
 	}
 
 	inst->idistance[uwb_index] = distance;
@@ -351,8 +377,8 @@ int instance_init(void)
 
     int result;
     
-    instance_data[instance].mode =  DISCOVERY;
-//    instance_data[instance].ranging = 0;
+//    instance_data[instance].mode =  DISCOVERY;
+//    instance_data[instance].ranging = 0; TODO
 //    instance_data[instance].goToSleep = 0;
 
     for(uint8 i=0; i<UWB_LIST_SIZE; i++)
@@ -550,8 +576,6 @@ void instance_config(instanceConfig_t *config)
     //configure the channel parameters
     dwt_configure(&instance_data[instance].configData) ;
 
-    //NOTE: For EVK1000 the OTP stores calibrated antenna and TX power values for configuration modes 3 and 5,
-
     //check if to use the antenna delay calibration values as read from the OTP
     if(dwt_otprevision() <= 1) //in revision 0, 1 of EVB1000/EVK1000
     {
@@ -628,16 +652,6 @@ void instance_config(instanceConfig_t *config)
 #endif
 }
 
-// -------------------------------------------------------------------------------------------------------------------
-// function to set the tag sleep time (in ms)
-//
-void instancesettagsleepdelay(int sleepdelay, int blinksleepdelay) //sleep in ms
-{
-    int instance = 0 ;
-    instance_data[instance].tagSleepTime_ms = sleepdelay ;
-    instance_data[instance].tagBlinkSleepTime_ms = blinksleepdelay ;
-}
-
 
 double instance_get_idist(uint8 uwb_index) //get instantaneous range
 {
@@ -683,6 +697,12 @@ int instance_get_rxl(void) //get number of late Tx frames
 
 void inst_processtxrxtimeout(instance_data_t *inst)
 {
+//	uint8 debug_msg[100]; //TODO
+//	int n = sprintf((char *)&debug_msg, "inst_processtxrxtimeout");
+//	send_usbmessage(&debug_msg[0], n);
+//	usb_run();
+
+
 	if(inst->mode == DISCOVERY)
 	{
 		inst->wait4ack = 0;
@@ -714,12 +734,72 @@ void inst_processtxrxtimeout(instance_data_t *inst)
 		inst->testAppState = TA_TX_SELECT ;
     }
 
-	inst->canPrintInfo = TRUE;
+//	inst->canPrintInfo = TRUE; TODO
+	inst->canPrintUSB = TRUE;
+	inst->canPrintLCD = TRUE;
     inst->previousState = TA_INIT;
     dwt_setrxtimeout(0);	//units are 1.0256us
     //timeout - disable the radio (if using SW timeout the rx will not be off)
     dwt_forcetrxoff() ;
 }
+
+void instance_irqstuckcallback()
+{
+
+//	uint8 debug_msg[100];
+//	int n = sprintf((char*)&debug_msg[0], "irq stuck callback");
+//	send_usbmessage(&debug_msg[0], n);
+//	usb_run();
+
+
+	uint8 s1switch = port_is_boot1_on(0) << 1
+				| port_is_switch_on(TA_SW1_3) << 2
+				| port_is_switch_on(TA_SW1_4) << 3
+				| port_is_switch_on(TA_SW1_5) << 4
+				| port_is_switch_on(TA_SW1_6) << 5
+				| port_is_switch_on(TA_SW1_7) << 6
+				| port_is_switch_on(TA_SW1_8) << 7;
+
+//	port_DisableEXT_IRQ(); //disable IRQ until we configure the device
+//	inittestapplication(s1switch);
+//	port_EnableEXT_IRQ(); //enable IRQ before starting
+
+
+
+
+	instance_data_t* inst = instance_get_local_structure_ptr(0);
+
+	port_DisableEXT_IRQ(); //disable IRQ until we configure the device
+	port_set_dw1000_slowrate();  //max SPI before PLLs configured is ~4M
+
+	dwt_softreset();
+
+	//reset the DW1000 by driving the RSTn line low
+	reset_DW1000();
+
+	//we can enable any configuration loading from OTP/ROM
+	dwt_initialise(DWT_LOADUCODE);
+
+	dwt_setleds(3) ; //configure the GPIOs which control the leds on EVBs
+
+	//enable TX, RX states on GPIOs 6 and 5
+	dwt_setlnapamode(1,1);
+
+	port_set_dw1000_fastrate();
+
+	dwt_setinterrupt(SYS_MASK_VAL, 1);
+	dwt_setcallbacks(instance_txcallback, instance_rxgoodcallback, instance_rxtimeoutcallback, instance_rxerrorcallback, instance_irqstuckcallback);
+	int dr_mode = decarangingmode(s1switch);
+
+	instance_config(&inst->chConfig[dr_mode]) ;    // Set operating channel etc
+	port_EnableEXT_IRQ(); //enable IRQ before starting
+
+	inst_processtxrxtimeout(inst);
+//	inst->uwbToRangeWith = 255;
+//	inst->mode = ANCHOR;    			TODO
+//	inst->testAppState = TA_RXE_WAIT;
+}
+
 
 void instance_txcallback(const dwt_cb_data_t *txd)
 {
@@ -921,6 +1001,51 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 	if(rxd_event == DWT_SIG_RX_OKAY)
 	{
 
+//		uint8 debug_msg[100];
+//		int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]));
+//		send_usbmessage(&debug_msg[0], n);
+//		usb_run();
+
+		uint8 idx = instgetuwblistindex(&instance_data[instance], &dw_event.msgu.frame[srcAddr_index], instance_data[instance].addrByteSize);
+
+//		if(instance_data[instance].mode == DISCOVERY){ //TODO
+//		if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_REG ||
+//			dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_INIT ||
+//			dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_SUG ||
+//			dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_UPDATE
+//			)
+//		{
+
+//			uint64 dt = get_dt64(instance_data[instance].report_rx_us, portGetTickCntMicro());
+//			if(dt > tdma_handler.slotDuration_us*0.75){
+//				uint8 debug_msg[100];
+//				int n = sprintf((char*)&debug_msg[0], "NOT BOTH, dt: %llu", dt);
+//				send_usbmessage(&debug_msg[0], n);
+//				usb_run();
+//			}
+//			uint8 debug_msg[100];
+//			int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s, ts: %llu, saddr: %016llX", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), portGetTickCntMicro(), instance_get_uwbaddr(idx));
+//			send_usbmessage(&debug_msg[0], n);
+//			usb_run();
+//		}
+//		}
+
+//		if(dw_event.msgu.frame[fcode_index] != RTLS_DEMO_MSG_RNG_REPORT){
+//			instance_data[instance].report_rx_us = portGetTickCntMicro();
+//
+//
+//		}
+
+//		if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL){
+//			uint64 add = 0;
+//			add = (dw_event.msgu.frame[FRAME_CTRLP + 1] << 8) + dw_event.msgu.frame[FRAME_CTRLP];
+//
+//			uint8 debug_msg[100];
+//			int n = sprintf((char*)&debug_msg[0], "POLL destination: %04llX", add);
+//			send_usbmessage(&debug_msg[0], n);
+//			usb_run();
+//		}
+
 		if((dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT ) || 
 		   (dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL ) ||
 		   (dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_ANCH_RESP) ||
@@ -965,13 +1090,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 			tdma_handler.uwbListTDMAInfo[uwb_index].connectionType = UWB_LIST_NEIGHBOR;
 			tdma_handler.uwbListTDMAInfo[uwb_index].lastCommNeighbor = time_now;
 		}
-
-//		//TODO remove
-//		uint8 debug_msg[100];
-////		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK RECEIVED: BLINK uwb_index: %d, uwbToRangeWith: %d ", uwb_index, instance_data[instance].uwbToRangeWith);
-//		int n = sprintf((char*)&debug_msg[0], "RX CALLBACK RECEIVED: BLINK,%llX,xxxx", instance_get_addr());
-//		send_usbmessage(&debug_msg[0], n);
-//		usb_run();
 	}
 	else if(rxd_event == DWT_SIG_RX_OKAY)
 	{
@@ -985,92 +1103,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 		}
 
 
-//		uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
-//		dwt_readsystime(sys_time_arr);
-//		uint64 dwt_time_now = 0;
-//		dwt_time_now = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
-//		uint64 rxcb_time_now_us = portGetTickCntMicro();
-
-
-//		//TODO remove
-//		uint8 debug_msg[100];
-//		uint16 my_addr = instance_data[instance].uwbShortAdd;
-////		int n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
-////		 send_usbmessage(&debug_msg[0], n);
-////		 usb_run();
-//		int n = 0;
-
-//		uint64 time = (uint64)(convertdevicetimetosec(rxcb_time_now - dw_event.timeStamp)*1000000.0)  + instance_data[instance].storedPreLen_us;
-//		 time -=  inst->frameLengths_us[RNG_INIT ];
-//					 inst->storedPreLen_us
-		 //dwt_time_now - (rx_timestamp - (framelength - preamble_sfd))
-
-
-
-//		if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT ) //SAW 41 to 44 for all of these below
-//		 {
-//			time -=  instance_data[instance].frameLengths_us[RNG_INIT];
-//		 }
-//		 else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL )
-//		 {
-//			 time -=  instance_data[instance].frameLengths_us[POLL];
-//		 }
-//		 else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_ANCH_RESP)
-//		 {
-//			 time -=  instance_data[instance].frameLengths_us[RESP];
-//		 }
-//		 else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_FINAL)
-//		 {
-//			 time -=  instance_data[instance].frameLengths_us[FINAL];
-//		 }
-//		 n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s, rx_to_cb_delay: %llu", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), time);
-
-
-
-
-//		if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_INIT )
-//		 {
-//			n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
-//		 }
-//		 else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL )
-//		 {
-//			 n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
-//		 }
-//		 else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_ANCH_RESP)
-//		 {
-//			 n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
-//		 }
-//		 else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_FINAL)
-//		 {
-//			 n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
-//		 }
-//		 else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_REG)
-//		 {
-//			 n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
-//		 }
-//		 else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_INIT)
-//		 {
-//			 n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
-//		 }
-//		 else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_SUG)
-//		 {
-//			 n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
-//		 }
-//		 else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_INF_UPDATE)
-//		 {
-//			 n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
-//		 }
-//		 else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_RNG_REPORT)
-//		 {
-//			 n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
-//		 }
-//		 else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_SYNC)
-//		 {
-//			 n = sprintf((char*)&debug_msg[0], "RX CB RX: DWT_SIG_RX_OKAY-%s,%04X,uwb_index: %04d, uwb_trw: %04d", get_msg_fcode_string(dw_event.msgu.frame[fcode_index]), my_addr,uwb_index, instance_data[instance].uwbToRangeWith);
-//		 }
-//
-//		 send_usbmessage(&debug_msg[0], n);
-//		 usb_run();
 
 
 	}
@@ -1168,16 +1200,16 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 
 
 				dwt_setrxaftertxdelay(0);  										    //units are 1.0256us
-				dwt_setrxtimeout(instance_data[instance].durationRespTimeout_nus*0);//units are 1.0256us
+				dwt_setrxtimeout(0);												//units are 1.0256us
 				instance_data[instance].wait4ack = DWT_RESPONSE_EXPECTED;
 
 				dwt_writetxdata(psduLength, (uint8 *)  &instance_data[instance].msg, 0) ;	// write the frame data
 				if(instancesendpacket(psduLength, DWT_START_TX_IMMEDIATE | instance_data[instance].wait4ack, 0))
 				{
-					uint8 debug_msg[100];
-					int n = sprintf((char*)&debug_msg[0], "RESP late tx!");
-					send_usbmessage(&debug_msg[0], n);
-					usb_run();
+//					uint8 debug_msg[100];//TODO
+//					int n = sprintf((char*)&debug_msg[0], "RESP late tx!");
+//					send_usbmessage(&debug_msg[0], n);
+//					usb_run();
 
 					instance_data[0].tx_anch_resp = FALSE;
 					instance_data[instance].previousState = TA_INIT;
@@ -1192,7 +1224,9 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 					instance_data[instance].timeofTx = time_now;
 
 					instance_data[instance].txDoneTimeoutDuration = instance_data[instance].durationRespTxDoneTimeout_ms;
-					instance_data[instance].canPrintInfo = FALSE; //don't print to LCD or USB while ranging
+//					instance_data[instance].canPrintInfo = FALSE; //don't print to LCD or USB while ranging
+					instance_data[instance].canPrintUSB = FALSE;
+					instance_data[instance].canPrintLCD = FALSE;
 				}
 
 			}
@@ -1208,7 +1242,7 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				instance_data[instance].msg.messageData[FCODE] = RTLS_DEMO_MSG_TAG_FINAL; //message function code (specifies if message is a poll, response or other...)
 
 				dwt_setrxaftertxdelay(0);										//units are 1.0256us
-				dwt_setrxtimeout(instance_data[instance].durationFinalTimeout_nus*0);	//TODO//units are 1.0256us
+				dwt_setrxtimeout(0);											//units are 1.0256us
 				instance_data[instance].wait4ack = 0;//DWT_RESPONSE_EXPECTED;
 
 				dwt_writetxdata(psduLength, (uint8 *)&instance_data[instance].msg, 0) ; // write the frame data
@@ -1220,18 +1254,11 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 
 					instance_data[instance].wait4ack = 0; //clear the flag as the TX has failed the TRX is off
 					instance_data[instance].lateTX++;
-
-					//TODO remove
-					uint8 debug_msg[100];
-					int n = sprintf((char*)&debug_msg[0], "FINAL LATE TX");
-					send_usbmessage(&debug_msg[0], n);
-					usb_run();
 				}
 				else
 				{
 					dw_event.typePend = DWT_SIG_TX_PENDING ; // exit this interrupt and notify the application/instance that TX is in progress.
 					instance_data[instance].timeofTx = time_now;
-
 					instance_data[instance].txDoneTimeoutDuration = instance_data[instance].durationFinalTxDoneTimeout_ms;
 				}
 			}
@@ -1359,17 +1386,13 @@ int instance_run(void)
 
 	//only check timeouts if we aren't in the middle of ranging messages
 	//the TDMA reoptimization may mess up the timing
-	if(instance_data[instance].canPrintInfo == TRUE)
+//	if(instance_data[instance].canPrintInfo == TRUE) TODO
+	if(instance_data[instance].canPrintLCD == TRUE)
 	{
 		//check timeouts.
 		if(tdma_handler.check_timeouts(&tdma_handler))
 		{
-//			uint8 debug_msg[100]; //TODO remove
-//			int n = sprintf((char *)&debug_msg, "ALL TIMEOUT time_now_us: %llu", portGetTickCntMicro());
-//			send_usbmessage(&debug_msg[0], n);
-//			usb_run();
-
-			//handle case where we timeo7ut and no longer have any neighbors
+			//handle case where we timeout and no longer have any neighbors
 			instance_data[instance].mode = DISCOVERY;
 			tdma_handler.enter_discovery_mode(&tdma_handler);
 			inst_processtxrxtimeout(&instance_data[instance]);

@@ -37,6 +37,10 @@ FRAME_SYNC_MODE;
 
 struct TDMAHandler
 {
+	//TODO remove these test variables
+	bool toHidden;
+	uint64 toHiddenFST;
+	uint8 toHiddenFL;
 
     //TDMA class variables
     uint8 maxFramelength;
@@ -75,6 +79,7 @@ struct TDMAHandler
     //class functions
 	bool (*slot_transition)(struct TDMAHandler *this);
 	void (*frame_sync)(struct TDMAHandler *this, event_data_t *dw_event, uint8 framelength, uint64 timeSinceFrameStart_us, uint8 srcIndex, FRAME_SYNC_MODE mode);
+	uint64 (*update_frame_start)(struct TDMAHandler *this);
 	bool (*tx_sync_msg)(struct TDMAHandler *this);
 	void (*update_inf_tsfs)(struct TDMAHandler *this);
 	bool (*tx_select)(struct TDMAHandler *this);
@@ -87,7 +92,6 @@ struct TDMAHandler
     void (*check_discovery_mode_expiration)(struct TDMAHandler *this);
     bool (*check_timeouts)(struct TDMAHandler *this);
     void (*remove_uwbinfo)(struct TDMAHandler *this, uint8 uwb_index);
-    void (*usb_dump_tdma)(struct TDMAHandler *this);
     bool (*slot_assigned)(struct TDMAInfo *info, uint8 slot);
     bool (*assign_slot)(struct TDMAInfo *info, uint8 slot, bool safeAssign);
     void (*free_slot)(struct TDMAInfo *info, uint8 slot);

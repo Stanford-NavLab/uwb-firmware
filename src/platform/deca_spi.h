@@ -22,6 +22,7 @@ extern "C" {
 
 #define DECA_MAX_SPI_HEADER_LENGTH      (3)                     // max number of bytes in header (for formating & sizing)
 #define EVB1000_LCD_SUPPORT				(1)
+#define SPI_STUCK_CNT					 10000
 /*! ------------------------------------------------------------------------------------------------------------------
  * Function: openspi()
  *

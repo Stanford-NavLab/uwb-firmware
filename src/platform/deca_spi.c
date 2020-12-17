@@ -75,7 +75,15 @@ int writetospi
     {
     	SPIx->DR = headerBuffer[i];
 
-    	while ((SPIx->SR & SPI_I2S_FLAG_RXNE) == (uint16_t)RESET);
+    	int count = 0;
+    	while ((SPIx->SR & SPI_I2S_FLAG_RXNE) == (uint16_t)RESET){
+    		count++;
+    		if(count > SPI_STUCK_CNT){
+    			SPIx_CS_GPIO->BSRR = SPIx_CS;
+    			decamutexoff(stat) ;
+    			return -1;
+    		}
+    	}
 
     	SPIx->DR ;
     }
@@ -84,7 +92,15 @@ int writetospi
     {
      	SPIx->DR = bodyBuffer[i];
 
-    	while((SPIx->SR & SPI_I2S_FLAG_RXNE) == (uint16_t)RESET);
+     	int count = 0;
+    	while((SPIx->SR & SPI_I2S_FLAG_RXNE) == (uint16_t)RESET){
+    		count++;
+			if(count > SPI_STUCK_CNT){
+				SPIx_CS_GPIO->BSRR = SPIx_CS;
+				decamutexoff(stat) ;
+				return -1;
+			}
+    	}
 
 		SPIx->DR ;
 	}
@@ -130,7 +146,15 @@ int readfromspi
     {
     	SPIx->DR = headerBuffer[i];
 
-     	while((SPIx->SR & SPI_I2S_FLAG_RXNE) == (uint16_t)RESET);
+    	int count = 0;
+     	while((SPIx->SR & SPI_I2S_FLAG_RXNE) == (uint16_t)RESET){
+     		count++;
+			if(count > SPI_STUCK_CNT){
+				SPIx_CS_GPIO->BSRR = SPIx_CS;
+				decamutexoff(stat) ;
+				return -1;
+			}
+     	}
 
      	readBuffer[0] = SPIx->DR ; // Dummy read as we write the header
     }
@@ -139,7 +163,15 @@ int readfromspi
     {
     	SPIx->DR = 0;  // Dummy write as we read the message body
 
-    	while((SPIx->SR & SPI_I2S_FLAG_RXNE) == (uint16_t)RESET){};
+    	int count = 0;
+    	while((SPIx->SR & SPI_I2S_FLAG_RXNE) == (uint16_t)RESET){
+    		count++;
+			if(count > SPI_STUCK_CNT){
+				SPIx_CS_GPIO->BSRR = SPIx_CS;
+				decamutexoff(stat) ;
+				return -1;
+			}
+    	}
 
 	   	readBuffer[i] = SPIx->DR ;//port_SPIx_receive_data(); //this clears RXNE bit
     }
@@ -171,7 +203,7 @@ void writetoLCD
 	{
 		if(bodylength == 1)
 		{
-			if(bodyBuffer[0] & 0x3) //if this is command = 1 or 2 - exsecution time is > 1ms
+			if(bodyBuffer[0] & 0x3) //if this is command = 1 or 2 - execution time is > 1ms
 				sleep = 1 ;
 		}
     	port_LCD_RS_clear();

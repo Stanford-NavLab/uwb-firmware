@@ -27,6 +27,10 @@ extern "C" {
 
 typedef struct
 {
+	//TODO remove this!
+	uint64 report_rx_us;
+
+
     INST_MODE mode;				        //instance mode (tag or anchor)
     INST_STATES testAppState ;			//state machine - current state
     INST_STATES nextState ;				//state machine - next state
@@ -44,23 +48,17 @@ typedef struct
 
     bool lcdEnabled;
     bool canPrintInfo;	  //only print to usb and/or LCD display when TRUE
+    bool canPrintLCD;
+    bool canPrintUSB;
 
 	//timeouts and delays
-	int tagSleepTime_ms; //in milliseconds
-	int tagBlinkSleepTime_ms;
 	//this is the delay used for the delayed transmit (when sending the ranging init, response, and final messages)
 	uint64 rnginitReplyDelay;
 	uint64 finalReplyDelay;
 	uint64 finalReplyDelay_us;
 
-
-	//TODO remove below
-//	uint64 slot_start_us;
-
 	//Receive Frame Wait Timeout Periods, units are 1.0256us (aus stands for near microsecond)
 	uint16 durationPollTimeout_nus;		//rx timeout duration after tx poll
-	uint16 durationRespTimeout_nus;		//rx timeout duration after tx resp
-	uint16 durationFinalTimeout_nus;   	//rx timeout duration after tx final
 
 	uint32 durationBlinkTxDoneTimeout_ms;   	//tx done timeout after tx blink
 	uint32 durationRngInitTxDoneTimeout_ms;   	//tx done timeout after tx rng_init
@@ -72,7 +70,7 @@ typedef struct
 
 	uint32 durationUwbCommTimeout_ms;			//how long to wait before changing UWB_LIST_TYPE if we haven't communicated with or received an information about a UWB in a while
 
-	uint32 durationWaitRangeInit_ms;				//discovery mode WAIT_RNG_INIT duration
+	uint32 durationWaitRangeInit_ms;			//discovery mode WAIT_RNG_INIT duration
 
 	uint64 durationSlotMax_us;		// longest anticipated time required for a slot based on UWB_LIST_SIZE and S1 switch settings
 
@@ -157,8 +155,11 @@ typedef struct
 
 	uint32 rxCheckOnTime;
 
+	instanceConfig_t chConfig[8];
 
 } instance_data_t ;
+
+
 
 //-------------------------------------------------------------------------------------------------------------
 //
@@ -193,6 +194,7 @@ void setupmacframedata(instance_data_t *inst, int fcode);
 int instance_init(void);
 int instance_init_s();
 int tdma_init_s(uint64 slot_duration);
+int decarangingmode(uint8 mode_switch);
 
 // configure the instance and DW1000 device
 void instance_config(instanceConfig_t *config) ;  
@@ -213,9 +215,8 @@ void instance_rxerrorcallback(const dwt_cb_data_t *rxd);
 void instance_rxtimeoutcallback(const dwt_cb_data_t *rxd);
 void instance_rxgoodcallback(const dwt_cb_data_t *rxd);
 void instance_txcallback(const dwt_cb_data_t *txd);
+void instance_irqstuckcallback();
 
-// sets the Tag sleep delay time (the time Tag "sleeps" between each ranging attempt)
-void instancesettagsleepdelay(int rangingsleep, int blinkingsleep);
 void instancesetreplydelay(int datalength);
 
 // Pre-compute frame lengths, timeouts and delays needed in ranging process.

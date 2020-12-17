@@ -10,20 +10,21 @@
 *******************************************************************************************************************/
 
 
-#define UWB_LIST_SIZE		    10			//the maximum size of the UWB network
+#define UWB_LIST_SIZE		    127			//the maximum size of the UWB network
 											//do not use a number larger than 80 if USING_64BIT_ADDR==1
-											//do not use a number larger than 127 if USING_64BIT_ADDR==0
+											//do not use a number larger than 80 if USING_64BIT_ADDR==0
 											//these are the largest UWB network sizes that the firmware will support.
 											//USING_64BIT_ADDR==1: Limiting factor is the max length of the INF messages
-											//USING_64BIT_ADDR==0: Limiting factor is the max power of 2 that fits in a uint8 (TDMA framelength is stored as uint8)
+											//USING_64BIT_ADDR==0: Limiting factor is the memory required to store TDMAInfo objects for each UWB
 
-#define SET_TXRX_DELAY 			0           //when set to 1 - the DW1000 RX and TX delays are set to the TX_DELAY and RX_DELAY defines
-#define TX_ANT_DELAY            0
-#define RX_ANT_DELAY            0			//TODO put reasonable initial value? add explanation
+#define SET_TXRX_DELAY 			1           //when set to 1 - the DW1000 RX and TX delays are set to the TX_DELAY and RX_DELAY defines
+#define TX_ANT_DELAY            16477
+#define RX_ANT_DELAY            16477			//TODO put reasonable initial value? add explanation
 
-#define USING_64BIT_ADDR 		0//TODO	 	//when set to 0 - the DecaRanging application will use 16-bit addresses
+#define USING_64BIT_ADDR 		0	 		//when set to 0 - the DecaRanging application will use 16-bit addresses
 
-#define SPEED_OF_LIGHT      (299704644.54) //(299702547.0)     // in m/s in air //TODO add explanation!
+#define SPEED_OF_LIGHT      	299704644.539f //(299702547.0)     //  (299,792.458 km/s in vacuum) / (1.000293)  in m/s in air //TODO add explanation!
+
 
 /******************************************************************************************************************
 *******************************************************************************************************************
@@ -35,8 +36,6 @@
 #define MASK_40BIT			(0x00FFFFFFFFFF)  // DW1000 counter is 40 bits
 #define MASK_42BIT          (0x000003FFFFFFFFFF) //stm32 microsecond timestamps are 42 bits
 #define MASK_TXDTS			(0x00FFFFFFFE00)  //The TX timestamp will snap to 8 ns resolution - mask lower 9 bits.
-#define DELAY_CALIB (0)                     // when set to 1 - the LCD display will show information used for TX/RX delay calibration
-
 
 //! callback events
 #define DWT_SIG_RX_NOERR            0
@@ -133,7 +132,7 @@ enum
     #define FINAL_FRAME_LEN_BYTES (TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
 	#define REPORT_FRAME_LEN_BYTES (RNG_REPORT_MSG_LEN_LONG + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
 	#define SYNC_FRAME_LEN_BYTES (SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
-	#define INF_FRAME_LEN_BYTES_MAX (11.5 + (ADDR_BYTE_SIZE_L + 3.5)*UWB_LIST_SIZE + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
+	#define INF_FRAME_LEN_BYTES_MAX (11 + (ADDR_BYTE_SIZE_L + 4)*UWB_LIST_SIZE + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
 #else
     #define RNG_INIT_FRAME_LEN_BYTES (RNG_INIT_MSG_LEN + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
     #define POLL_FRAME_LEN_BYTES (TAG_POLL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
@@ -141,7 +140,7 @@ enum
     #define FINAL_FRAME_LEN_BYTES (TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
 	#define REPORT_FRAME_LEN_BYTES (RNG_REPORT_MSG_LEN_SHORT + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
 	#define SYNC_FRAME_LEN_BYTES (SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
-	#define INF_FRAME_LEN_BYTES_MAX (11.5 + (ADDR_BYTE_SIZE_S + 3.5)*UWB_LIST_SIZE + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
+	#define INF_FRAME_LEN_BYTES_MAX (11 + (ADDR_BYTE_SIZE_S + 4)*UWB_LIST_SIZE + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
 #endif
 
 #define BLINK_FRAME_CONTROL_BYTES       (1)
@@ -221,7 +220,7 @@ enum
 
 #define SLOT_START_BUFFER_US				4000				  //set based on experimentally observed frame sync errors
 #define SLOT_BUFFER_EXP_TO_POLL_CMD_US		3*UWB_LIST_SIZE + 108 //found experimentally
-#define MEASURED_SLOT_DURATIONS_US			1.7814*UWB_LIST_SIZE*UWB_LIST_SIZE + 29.39*UWB_LIST_SIZE + 1848.5	//found experimentally
+#define MEASURED_SLOT_DURATIONS_US			(float)(1.7814f*(float)(UWB_LIST_SIZE)*(float)(UWB_LIST_SIZE) + 29.39f*(float)(UWB_LIST_SIZE) + 1848.5f)	//found experimentally
 #define LCD_ENABLE_BUFFER_US				5000
 #define SLOT_END_BUFFER_US					0			          //increase if all messages do not fit into a slot
 #define BLINK_RX_CB_TO_RESP_TX_CMD_DLY_US	1450				  //found experimentally
@@ -241,7 +240,7 @@ enum
 #define RANGE_INIT_RAND_US						1000
 
 
-#define RX_CHECK_ON_PERIOD_MS					200 	//TODO modify
+#define RX_CHECK_ON_PERIOD_MS					200
 
 // Reception start-up time, in symbols.
 #define RX_START_UP_SY 16
@@ -251,6 +250,14 @@ enum
 
 typedef uint64_t        uint64 ;
 typedef int64_t         int64 ;
+
+
+// S1 swtich setting definitions
+#define SWS1_TXSPECT_MODE	0x80  //Continuous TX spectrum mode
+#define SWS1_ANC_MODE 		0x08  //anchor mode
+#define SWS1_SHF_MODE		0x10  //short frame mode (6.81M) (switch S1-5)
+#define SWS1_64M_MODE		0x20  //64M PRF mode (switch S1-6)
+#define SWS1_CH5_MODE		0x40  //channel 5 mode (switch S1-7)
 
 
 typedef enum instanceModes{DISCOVERY, TAG, ANCHOR, NUM_MODES} INST_MODE;

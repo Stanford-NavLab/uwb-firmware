@@ -16,6 +16,7 @@
 #include "deca_param_types.h"
 #include "deca_regs.h"
 #include "deca_device_api.h"
+#include "port.h"
 
 
 #include <stdio.h>
@@ -85,6 +86,7 @@ typedef struct
     dwt_cb_t    cbRxOk;             // Callback for RX good frame event
     dwt_cb_t    cbRxTo;             // Callback for RX timeout events
     dwt_cb_t    cbRxErr;            // Callback for RX error events
+    irq_cb_t    cbIrqStuck;			// Callback for irq line stuck high
 } dwt_local_data_t ;
 
 static dwt_local_data_t dw1000local ; // Static local device data
@@ -1640,7 +1642,6 @@ int dwt_otpwriteandverify(uint32 value, uint16 address)
     // Firstly set the system clock to crystal
     _dwt_enableclocks(FORCE_SYS_XTI); //set system clock to XTI
 
-    //
     //!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!!!!!!!
     //Set the supply to 3.7V
     //
@@ -2158,17 +2159,19 @@ void dwt_setrxaftertxdelay(uint32 rxDelayTime)
  * @param cbRxOk - the pointer to the RX good frame event callback function
  * @param cbRxTo - the pointer to the RX timeout events callback function
  * @param cbRxErr - the pointer to the RX error events callback function
+ * @param cbIrqStuck - the pointer to the IRQ line stuck function
  *
  * output parameters
  *
  * no return value
  */
-void dwt_setcallbacks(dwt_cb_t cbTxDone, dwt_cb_t cbRxOk, dwt_cb_t cbRxTo, dwt_cb_t cbRxErr)
+void dwt_setcallbacks(dwt_cb_t cbTxDone, dwt_cb_t cbRxOk, dwt_cb_t cbRxTo, dwt_cb_t cbRxErr, irq_cb_t cbIrqStuck)
 {
     dw1000local.cbTxDone = cbTxDone;
     dw1000local.cbRxOk = cbRxOk;
     dw1000local.cbRxTo = cbRxTo;
     dw1000local.cbRxErr = cbRxErr;
+    dw1000local.cbIrqStuck = cbIrqStuck;
 }
 
 /*! ------------------------------------------------------------------------------------------------------------------
@@ -2185,6 +2188,22 @@ void dwt_setcallbacks(dwt_cb_t cbTxDone, dwt_cb_t cbRxOk, dwt_cb_t cbRxTo, dwt_c
 uint8 dwt_checkirq(void)
 {
     return (dwt_read8bitoffsetreg(SYS_STATUS_ID, SYS_STATUS_OFFSET) & SYS_STATUS_IRQS); // Reading the lower byte only is enough for this operation
+}
+
+/*! ------------------------------------------------------------------------------------------------------------------
+ * @fn irq_stuck_callback()
+ *
+ * @brief the irq line sometimes gets stuck high. when it does, this callback will be issued so the application try to
+ * recover.
+ * input parameters
+ *
+ * output parameters
+ *
+ * no return value
+ */
+void irq_stuck_callback()
+{
+	 dw1000local.cbIrqStuck();
 }
 
 /*! ------------------------------------------------------------------------------------------------------------------
@@ -4022,7 +4041,7 @@ void dwt_dumpregisterstousb(){
 		idx = i;
 		send_usbmessage(&debug_msg[i], div);
 		usb_run();
-		deca_sleep(10);
+		deca_sleep(100);
 	}
 	if(idx + 1 < n_char)
 	{

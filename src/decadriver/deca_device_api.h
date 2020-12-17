@@ -186,6 +186,10 @@ typedef struct
 // Call-back type for all events
 typedef void (*dwt_cb_t)(const dwt_cb_data_t *);
 
+// Call-back type for all events
+typedef void (*irq_cb_t)(void);
+
+
 /*! ------------------------------------------------------------------------------------------------------------------
  * Structure typedef: dwt_config_t
  *
@@ -1026,12 +1030,13 @@ int dwt_spicswakeup(uint8 *buff, uint16 length);
  * @param cbRxOk - the pointer to the RX good frame event callback function
  * @param cbRxTo - the pointer to the RX timeout events callback function
  * @param cbRxErr - the pointer to the RX error events callback function
+ * @param cbIrqStuck - the pointer to the IRQ line stuck function
  *
  * output parameters
  *
  * no return value
  */
-void dwt_setcallbacks(dwt_cb_t cbTxDone, dwt_cb_t cbRxOk, dwt_cb_t cbRxTo, dwt_cb_t cbRxErr);
+void dwt_setcallbacks(dwt_cb_t cbTxDone, dwt_cb_t cbRxOk, dwt_cb_t cbRxTo, dwt_cb_t cbRxErr, irq_cb_t cbIrqStuck);
 
 /*! ------------------------------------------------------------------------------------------------------------------
  * @fn dwt_checkirq()
@@ -1071,6 +1076,19 @@ uint8 dwt_checkirq(void);
  * no return value
  */
 void dwt_isr(void);
+
+/*! ------------------------------------------------------------------------------------------------------------------
+ * @fn irq_stuck_callback()
+ *
+ * @brief the irq line sometimes gets stuck high. when it does, this callback will be issued so the application try to
+ * recover.
+ * input parameters
+ *
+ * output parameters
+ *
+ * no return value
+ */
+void irq_stuck_callback();
 
 /*! ------------------------------------------------------------------------------------------------------------------
  * @fn dwt_isr_lplisten()
