@@ -2,14 +2,14 @@
 
 ## Table of Contents
 
-[Overview](###Building from Source) <br/>
-[UWB Configuration](###UWB Configuration) <br/>
-[LCD](###LCD) <br/>
-[Flashing the Binary](###Flashing the Binary) <br/>
-[Building from Source](###Building from Source) <br/>
-[Interfacing with the iBQR](###Interfacing with Linux) <br/>
-[Calibration](###Calibration)<br/>
-[Firmware Definitions](###Firmware Definitions) <br/>
+[Overview](###building-from-source) <br/>
+[UWB Configuration](###uwb-configuration) <br/>
+[LCD](###lcd) <br/>
+[Flashing the Binary](###flashing-the-binary) <br/>
+[Building from Source](###building-from-source) <br/>
+[Interfacing with the iBQR](###interfacing-with-linux) <br/>
+[Calibration](###calibration)<br/>
+[Firmware Definitions](###firmware-definitions) <br/>
 
 ### Overview
 
@@ -86,7 +86,7 @@ This is the final screen that will be displayed by the UWB. The address (ADDR) a
 
 There are two ways to flash the binary, the ST-LINK Utility and CoIDE. The ST-LINK Utility can be used to flash an already compiled binary and CoIDE can both compile and flash the binary. A compiled copy of the firmware (EVK1000.bin) can be found in the root directory of this repository. Instructions for flashing with the ST-LINK Utility are in this section. Instructions for flashing with CoIDE are found in [Building from Source](### Building from Source)  
 
-**_NOTE:_** Calibration data for each UWB must be set in the firmware before compilation. The precompiled binary is meant for general use and will only provide a reasonable guess for what the calibration values might be. See [Calibration](### Calibration) for more information
+**_NOTE:_** Calibration data for each UWB must be set in the firmware before compilation. The precompiled binary is meant for general use and will only provide a reasonable guess for what the calibration values might be. See [Calibration](###calibration) for more information
 
 **_NOTE:_** The STM32 ST-Link Utility can be downloaded from the [ST Link Utility Software Page](https://www.st.com/content/st_com/en/products/development-tools/software-development-tools/stm32-software-development-tools/stm32-programmers/stsw-link004.html#get-software) and is also included in this repository in the [STLINK directory](STLINK).
 
@@ -109,9 +109,9 @@ To build the software from the source code, open the [DecaRanging.coproj file](D
 
 <img src="img/CoIDE toolchain.PNG" width="480">
 
-Then simply click the *Build* button and the EVK1000/Debug/bin/ directory will be created and the compiled binary will be placed inside. The binary can then be flashed according to [Flashing the Binary](#flashing-the-binary) or by pressing the *Download Code to Flash* button in CoIDE.
+Then simply click the *Build* button and the EVK1000/Debug/bin/ directory will be created and the compiled binary will be placed inside. The binary can then be flashed according to [Flashing the Binary](###flashing-the-binary) or by pressing the *Download Code to Flash* button in CoIDE.
 
-**_NOTE:_** Calibration data for each UWB must be set in the firmware before compilation. See [Calibration](### Calibration) for more information
+**_NOTE:_** Calibration data for each UWB must be set in the firmware before compilation. See [Calibration](###calibration) for more information
 
 <img src="img/CoIDE.PNG" width="480">
 
@@ -173,7 +173,7 @@ When building and flashing the firmware be sure to copy/paste all of the calibra
 
 ### Firmware Definitions
 
-Near the top of the [src/applicaiton/application_definitions.h](src/applicaiton/application_definitions.h) file is a section mared as *Definitions expected to be modified by end-user*. Most of them are detailed in the [Calibration](### Calibration) section. The rest are described here.
+Near the top of the [src/applicaiton/application_definitions.h](src/applicaiton/application_definitions.h) file is a section mared as *Definitions expected to be modified by end-user*. Most of them are detailed in the [Calibration](###calibration) section. The rest are described here.
 
 `UWB_LIST_SIZE` is used to specify the maximum network size. Setting this number to a larger value will increase the allowable network size but will decrease the ranging cycle frequency, regardless of how many UWBs are actually connected. To maximise ranging cycle frequency, set this value no larger than the expected network size. The default value is 10. Due to hardware and firmware limitations, It should not be set greater than 80. 
 
