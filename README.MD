@@ -2,22 +2,25 @@
 
 ## Table of Contents
 
-[Overview](### Building from Source) <br/>
-[UWB Configuration](### UWB Configuration) <br/>
-[LCD](### LCD) <br/>
-[Flashing the Binary](### Flashing the Binary) <br/>
-[Building from Source](### Building from Source) <br/>
-[Interfacing with the iBQR](### Interfacing with Linux) <br/>
-[Calibration](### Calibration)<br/>
-[Firmware Definitions](### Firmware Definitions) <br/>
+[Overview](###Building from Source) <br/>
+[UWB Configuration](###UWB Configuration) <br/>
+[LCD](###LCD) <br/>
+[Flashing the Binary](###Flashing the Binary) <br/>
+[Building from Source](###Building from Source) <br/>
+[Interfacing with the iBQR](###Interfacing with Linux) <br/>
+[Calibration](###Calibration)<br/>
+[Firmware Definitions](###Firmware Definitions) <br/>
 
 ### Overview
 
 This software is a modification of the firmware supplied by Decawave for their EVK1000 evaluation board. The main enhancement provided by this software is network coordination which enables the UWBs to take turns ranging with each other. UWBs can be added and removed from the network in an ad-hoc manner and the network will reconfigure to optimize ranging cycle frequency. Additionally, ranging measurements are broadcast to the network so each UWB is aware of the ranging measurements between each UWB pair in its proximity, eliminating the need for a secondary communication channel. 
 <br/>
+<br/>
 Using the UWBs is simple. Once a UWB has been flashed with this firmware and the proper switch configurations have been set, simply apply power to two ore more UWBs and they will begin ranging with each other. The ranging data can then be accessed via USB. The `uwb_interface` ROS package to written to read the USB ranging data and publish it to a ROS node.
 <br/>
-As much of the original firmware functionality, as possible, has been preserved so as significant amount of the information provided in the EVK1000 User Manual still applies to this software. The software and documentation for the EVK1000 evaluation kit and DW1000 transceiver can be found at the links below. It can also be found in the [Decawave directory](Decawave).
+<br/>
+As much of the original firmware functionality, as possible, has been preserved so a significant amount of the information provided in the EVK1000 User Manual still applies to this software. The software and documentation for the EVK1000 evaluation kit and DW1000 transceiver can be found at the links below. It can also be found in the [Decawave directory](Decawave).
+<br/>
 <br/>
 [EVK1000 Product Page](https://www.decawave.com/product/evk1000-evaluation-kit/) <br/>
 [Decawave Software Page](https://www.decawave.com/software/) <br/>
@@ -25,7 +28,7 @@ As much of the original firmware functionality, as possible, has been preserved 
 
 ### UWB Configuration
 
-The EVB1000 allows for a numer of operational configurations via the S1 microswitches. TO ensure proper operattions, each UWB in a network must be configured identically. The table below summarizes the configurable and required S1 switch positions.   
+The EVB1000 allows for a numer of operational configurations via the S1 microswitches. To ensure proper operattions, each UWB in a network must be configured identically. The table below summarizes the configurable and required S1 switch positions. The EVB1000 also has the S2 and S3 microswitches as well as 5 jumpers. The required configuration for these itmes are in the images below. 
 
 Switch | Function           | OFF            | ON             | Notes
 ------ | ------------------ | -------------- | -------------- | --------
@@ -40,13 +43,11 @@ S1-8   |                    | Required       |                |
 
 <img src="img/EVK1000 config front.PNG" width="480">
 
-The EVB1000 also has the S2 and S3 microswitches as well as 5 jumpers. The required configuration for these itmes are in the image below. 
-
 <img src="img/EVK1000 config rear.PNG" width="480">
 
 ### LCD
 
-The onboard LCD can be toggled via the S1-4 microswitch. The LCD is expected to be off during nominal operations since it increases power consumption and decreases ranging cycle frequency. If enabled, the LCD will display a series of screens on boot. 
+The onboard LCD is toggled via the S1-4 microswitch. The LCD is expected to be off during nominal operations since it increases power consumption and decreases ranging cycle frequency. If enabled, the LCD will display a series of screens on boot. 
 
 ```
 GGRG UWB RANGING
@@ -66,19 +67,20 @@ SLOT DURATION
 XXXXX us
 ```
 
-Network coordination is acheived by assigning timeslots to UWBs. This values is the duration of a single timeslot and represents the minimum time between ranging measurements within the network. This value is a function of the maximum network size and the settings configured by microswitches S1-4 through S1-7. 
+Network coordination is acheived by assigning timeslots to UWBs. The slot duration value is the duration of a single timeslot. The network will acheive no more than one ranging measurement per slot. This value is a function of the maximum network size and the settings configured by microswitches S1-4 through S1-7. 
 
 ```
 TX DELAY: XXXXX
 RX DELAY: XXXXX
 ```
-The TX and RX delay values displayed are the calibration values set for the current configuration of microswitches S1-4 through S1-7.. 
+The TX and RX delay values displayed are the calibration values set for the current configuration of microswitches S1-4 through S1-7.
 
 ```
 ADDR STATUS
 NXX FLXXX XX.XXm
 ```
-This is the final screen that will be displayed by the UWB. The address (ADDR) and status will be displayed on the top line. Status will be either SEARCHING or CONNECTED to network connection status. The second line will display the most recent range measurement in meters along with some information related to network coordination. NXX is the number of neighboring UWBs (within communication distance of the UWB). NXX with alternate with HXX which is the number of hidden UWBs (not within communication distance of hte UWB, but within communication distance of a neighboring UWB). FLXXX is the TDMA framelength.
+
+This is the final screen that will be displayed by the UWB. The address (ADDR) and status will be displayed on the top line. Status will be either SEARCHING or CONNECTED to show network connection status. The second line will display the most recent range measurement in meters along with some information related to network coordination. NXX is the number of neighboring UWBs (within communication distance of the UWB). NXX with alternate with HXX which is the number of hidden UWBs (not within communication distance of the UWB, but within communication distance of a neighboring UWB). FLXXX is the TDMA framelength.
 
 ### Flashing the Binary
 
@@ -121,7 +123,7 @@ The UWB ranging data is accessable via USB. The `uwb_interface` ROS package for 
 rosrun uwb_interface uwb_interface_node -p /dev/ttyAMC0
 ```
 
-**_NOTE:_** Roscore must be running first. 
+**_NOTE:_** Roscore must be running first. <br/>
 **_NOTE:_** The argument after `-p` is the path to the USB port connection and may not be the same as listed above. See the `tx2-ros-examples` repository for more information.
 
 ### Calibration
@@ -133,7 +135,7 @@ The ranging algorithm depends on RX and TX timestamps to accurately determine th
 The firmware definitions that control which values are loaded into the DW1000 are found near the top of [src/applicaiton/application_definitions.h](src/applicaiton/application_definitions.h). The default (uncalibrated) values are shown below
 
 ```
-#define SET_TXRX_DELAY 			    0
+#define SET_TXRX_DELAY              0
 
 //S1 5-6-7 OFF-OFF-OFF
 #define TX_ANT_DELAY_000            0
@@ -164,7 +166,7 @@ The firmware definitions that control which values are loaded into the DW1000 ar
 
 For the calibration definitions to be applied, the `SET_TXRX_DELAY` must be set to `1`. If set to `0`, the firmware will provide a reasonable guess of what the calibration values might be. For previously calibrated UWBs, the [calibration](calibration) directory contains text files with the calibration values which can be copied and pasted into the firmware prior to building. 
 
-The files in the calibration directory are listed by UWB address. Each UWB's address can be found by setting LCD ON (S1-4 ON) and powering on the UWB after the firmware has been loaded. After several seconds, either the long address (16 characters) or the short address (last 4 characters of the long address) will be displayed on the top row of the LCD.      
+The files in the calibration directory are listed by UWB address. Each UWB's address can be found by turning the LCD on and powering the UWB after the firmware has been loaded. After several seconds, either the long address (16 characters) or the short address (last 4 characters of the long address) will be displayed on the top row of the LCD.      
 
 **_NOTE:_** The calibration values differ for each combintaion of switch settings, S1-5, S1-6, and S1-7. 
 When building and flashing the firmware be sure to copy/paste all of the calibration settings from the calibration file. After final calibration, make sure any changes are saved to the calibration files and uploaded to the repository.
@@ -175,4 +177,4 @@ Near the top of the [src/applicaiton/application_definitions.h](src/applicaiton/
 
 `UWB_LIST_SIZE` is used to specify the maximum network size. Setting this number to a larger value will increase the allowable network size but will decrease the ranging cycle frequency, regardless of how many UWBs are actually connected. To maximise ranging cycle frequency, set this value no larger than the expected network size. The default value is 10. Due to hardware and firmware limitations, It should not be set greater than 80. 
 
-`USING_64BIT_ADDR` is used to specify whether to use 64-bit (long) or 16-bit (short) addresses. In general, 16-bit address should be used. It requires less data to be transmitted, increasing ranging cycle frequency and decreasing power consumption. The only case where 64-bit addresses must be used is when two or more UWBs share the same short address.
+`USING_64BIT_ADDR` is used to specify whether to use 64-bit (long) or 16-bit (short) addresses. In general, 16-bit address should be used. It requires less data to be transmitted, increasing ranging cycle frequency, and decreasing power consumption. The only case where 64-bit addresses must be used is when two or more UWBs share the same short address.
