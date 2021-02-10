@@ -2691,25 +2691,58 @@ int dwt_starttx(uint8 mode)
  *
  * no return value
  */
+//void dwt_forcetrxoff(void) //TODO, this is different! see below:
+//{
+//    decaIrqStatus_t stat ;
+//
+//    dwt_setinterrupt(SYS_MASK_MASK_32, 0); // Clear interrupt mask - so we don't get any unwanted events
+//
+//    // Need to beware of interrupts occurring in the middle of following read modify write cycle
+//    // We can disable the radio, but before the status is cleared an interrupt can be set (e.g. the
+//    // event has just happened before the radio was disabled)
+//    // thus we need to disable interrupt during this operation
+//    stat = decamutexon() ;
+//    dwt_write8bitoffsetreg(SYS_CTRL_ID, SYS_CTRL_OFFSET, (uint8)SYS_CTRL_TRXOFF) ; // Disable the radio
+//	decamutexoff(stat) ;
+//
+//	// Enable/restore interrupts again...
+//	dwt_setinterrupt(SYS_MASK_VAL, 1);
+//	dw1000local.wait4resp = 0;
+//
+//} // end deviceforcetrxoff()
+
 void dwt_forcetrxoff(void)
 {
     decaIrqStatus_t stat ;
+    uint32 mask;
 
-    dwt_setinterrupt(SYS_MASK_MASK_32, 0); // Clear interrupt mask - so we don't get any unwanted events
+    mask = dwt_read32bitreg(SYS_MASK_ID) ; // Read set interrupt mask
 
     // Need to beware of interrupts occurring in the middle of following read modify write cycle
     // We can disable the radio, but before the status is cleared an interrupt can be set (e.g. the
     // event has just happened before the radio was disabled)
     // thus we need to disable interrupt during this operation
     stat = decamutexon() ;
-    dwt_write8bitoffsetreg(SYS_CTRL_ID, SYS_CTRL_OFFSET, (uint8)SYS_CTRL_TRXOFF) ; // Disable the radio
-	decamutexoff(stat) ;
 
-	// Enable/restore interrupts again...
-	dwt_setinterrupt(SYS_MASK_VAL, 1);
-	dw1000local.wait4resp = 0;
+    dwt_write32bitreg(SYS_MASK_ID, 0) ; // Clear interrupt mask - so we don't get any unwanted events
+
+    dwt_write8bitoffsetreg(SYS_CTRL_ID, SYS_CTRL_OFFSET, (uint8)SYS_CTRL_TRXOFF) ; // Disable the radio
+
+    // Forcing Transceiver off - so we do not want to see any new events that may have happened
+    dwt_write32bitreg(SYS_STATUS_ID, (SYS_STATUS_ALL_TX | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_GOOD));
+
+    dwt_syncrxbufptrs();
+
+    dwt_write32bitreg(SYS_MASK_ID, mask) ; // Set interrupt mask to what it was
+
+    // Enable/restore interrupts again...
+    decamutexoff(stat) ;
+    dw1000local.wait4resp = 0;
 
 } // end deviceforcetrxoff()
+
+
+
 
 /*! ------------------------------------------------------------------------------------------------------------------
  * @fn dwt_syncrxbufptrs()
@@ -3082,11 +3115,17 @@ void dwt_readeventcounters(dwt_deviceentcnts_t *counters)
  */
 void dwt_rxreset(void)
 {
+//	//TODO - checking soft reset!
+//	_dwt_enableclocks(FORCE_SYS_XTI); // NOTE: Set system clock to XTAL
+	
     // Set RX reset
     dwt_write8bitoffsetreg(PMSC_ID, PMSC_CTRL0_SOFTRESET_OFFSET, PMSC_CTRL0_RESET_RX);
 
     // Clear RX reset
     dwt_write8bitoffsetreg(PMSC_ID, PMSC_CTRL0_SOFTRESET_OFFSET, PMSC_CTRL0_RESET_CLEAR);
+
+//	//TODO
+//	_dwt_enableclocks(ENABLE_ALL_SEQ); // Restore system clock
 }
 
 /*! ------------------------------------------------------------------------------------------------------------------
@@ -3122,6 +3161,9 @@ void dwt_softreset(void)
     dwt_write8bitoffsetreg(PMSC_ID, PMSC_CTRL0_SOFTRESET_OFFSET, PMSC_CTRL0_RESET_CLEAR);
 
     dw1000local.wait4resp = 0;
+	
+//	//TODO
+//	_dwt_enableclocks(ENABLE_ALL_SEQ); // Restore system clock
 }
 
 /*! ------------------------------------------------------------------------------------------------------------------

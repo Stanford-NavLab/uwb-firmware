@@ -178,7 +178,7 @@ int dw_main(void)
 	instance_data_t* inst = instance_get_local_structure_ptr(0);
 
 	//Configuration for DecaRanging Modes (8 default use cases selectable by the switch S1 on EVK)
-	instanceConfig_t cfg1 = {
+	instanceConfig_t cfg1 = { //TODO would I need to configure extended length here??
             2,              // channel
 			3,              // preambleCode
             DWT_PRF_16M,    // prf
@@ -443,8 +443,8 @@ int dw_main(void)
 				updateLCD = TRUE;
 				//send the new range information to LCD and/or USB
 				double idist = instance_get_idist(inst->newRangeUWBIndex);
-				int rng = (int)(idist*1000.0);
-				int rng_raw = (int)(instance_get_idistraw(inst->newRangeUWBIndex)*1000.0);
+				int rng = (int)(idist*1000);
+				int rng_raw = (int)(instance_get_idistraw(inst->newRangeUWBIndex)*1000);
 
 				uint64 saddr = instance_get_addr();
 				uint64 aaddr = instancenewrangeancadd();
@@ -459,21 +459,21 @@ int dw_main(void)
 				}
 
 				//self address, ranging anchor address, ranging tag address, range TODO
-//				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X", saddr, aaddr, taddr, rng, rng_raw);
-//				n = sprintf((char*)&dataseq[0], "%016llX,%016llX,%016llX,%08X,%08X", saddr, aaddr, taddr, rng, rng_raw);
+				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X", saddr, aaddr, taddr, rng); //TODO make this 04 or something! (and update the interface nodes as well...)
+//				n = sprintf((char*)&dataseq[0], "%016llX,%016llX,%016llX,%08i,%08i", saddr, aaddr, taddr, rng, rng_raw);
 //				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X", saddr, aaddr, taddr, rng);
-				n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
+//				n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
 //				n = sprintf((char*)&dataseq[0], "%08d,xxxx,xxxx", rng);
 
 
 				send_usbmessage(&dataseq[0], n);
-				usb_run();
+				usb_run(); //TODO
 			}
         }
 
         //only write to LCD if we aren't in the middle of  ranging messages
         //the sleep messages embedded in the LCD calls mess up the timing otherwise
-		if(enableLCD == TRUE && inst->canPrintLCD == TRUE)
+		if(enableLCD == TRUE && inst->canPrintLCD == TRUE) //TODO it is switchign every time, fix me!
 		{
 
         	toggle_step = 750;
@@ -534,7 +534,7 @@ int dw_main(void)
 					}
 					else
 					{
-						sprintf((char*)&dataseq[0], "%llX %s", addr, status);
+						sprintf((char*)&dataseq[0], "%04llX %s", addr, status);
 						sprintf((char*)&dataseq1[0], "N%02u FL%03d %05.2fm", num_neighbors, framelength, range_result);
 					}
 				}
@@ -542,13 +542,13 @@ int dw_main(void)
 				{
 					if(inst->addrByteSize == 8)
 					{
-						sprintf((char*)&dataseq[0], "%llX", addr);
+						sprintf((char*)&dataseq[0], "%016llX", addr);
 						sprintf((char*)&dataseq1[0], "H%02u FL%03u %05.2fm", num_neighbors, framelength, range_result);
 					}
 					else
 					{
 
-						sprintf((char*)&dataseq[0], "%llX %s", addr, status);
+						sprintf((char*)&dataseq[0], "%04llX %s", addr, status);
 						sprintf((char*)&dataseq1[0], "H%02u FL%03d %05.2fm", num_hidden, framelength, range_result);
 					}
 

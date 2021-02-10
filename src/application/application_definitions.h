@@ -9,26 +9,63 @@
 ********************* Definitions expected to be modified by end-user *********************************************
 *******************************************************************************************************************/
 
+//TODO put a compiled copy of this firmware in the root directory with SET_TXRX_DELAY 0
 
-#define UWB_LIST_SIZE		    127			//the maximum size of the UWB network
+#define UWB_LIST_SIZE		    10			//the maximum size of the UWB network
 											//do not use a number larger than 80 if USING_64BIT_ADDR==1
 											//do not use a number larger than 80 if USING_64BIT_ADDR==0
 											//these are the largest UWB network sizes that the firmware will support.
 											//USING_64BIT_ADDR==1: Limiting factor is the max length of the INF messages
 											//USING_64BIT_ADDR==0: Limiting factor is the memory required to store TDMAInfo objects for each UWB
 
+//TODO set all below to zero as default values
 #define SET_TXRX_DELAY 			1           //when set to 1 - the DW1000 RX and TX delays are set to the TX_DELAY and RX_DELAY defines
-#define TX_ANT_DELAY            16477
-#define RX_ANT_DELAY            16477			//TODO put reasonable initial value? add explanation
+#define TX_ANT_DELAY            16455
+#define RX_ANT_DELAY            16455			//TODO put reasonable initial value? add explanation
+//TODO have antenna delay per S1 channel config!
+//I still need to make it apply the settings below based on the S1 settings
+//S1 5-6-7 OFF-OFF-OFF
+#define TX_ANT_DELAY_000            0
+#define RX_ANT_DELAY_000            0
+//S1 5-6-7 OFF-OFF-ON
+#define TX_ANT_DELAY_001            0
+#define RX_ANT_DELAY_001            0
+//S1 5-6-7 OFF-ON-OFF
+#define TX_ANT_DELAY_010            0
+#define RX_ANT_DELAY_010            0
+//S1 5-6-7 OFF-ON-ON
+#define TX_ANT_DELAY_011            0
+#define RX_ANT_DELAY_011            0
+//S1 5-6-7 ON-OFF-OFF
+#define TX_ANT_DELAY_100            0
+#define RX_ANT_DELAY_100            0
+//S1 5-6-7 ON-OFF-ON
+#define TX_ANT_DELAY_101            0
+#define RX_ANT_DELAY_101            0
+//S1 5-6-7 ON-ON-OFF
+#define TX_ANT_DELAY_110            0
+#define RX_ANT_DELAY_110            0
+//S1 5-6-7 ON-ON-ON
+#define TX_ANT_DELAY_111            0
+#define RX_ANT_DELAY_111            0
+
 
 #define USING_64BIT_ADDR 		0	 		//when set to 0 - the DecaRanging application will use 16-bit addresses
 
-#define SPEED_OF_LIGHT      	299704644.539f //(299702547.0)     //  (299,792.458 km/s in vacuum) / (1.000293)  in m/s in air //TODO add explanation!
 
+
+
+//TODO remove
+
+
+
+#define PRE_TX_DELAY_MS			0
 
 /******************************************************************************************************************
 *******************************************************************************************************************
 *******************************************************************************************************************/
+
+#define SPEED_OF_LIGHT      	299702547.0 //299704644.539f //(299702547.0)     //  (299,792.458 km/s in vacuum) / (1.000293)  in m/s in air //TODO clean up
 
 #define CORRECT_RANGE_BIAS  (1)     // Compensate for small bias due to uneven accumulator growth at close up high power
 
@@ -222,7 +259,7 @@ enum
 #define SLOT_BUFFER_EXP_TO_POLL_CMD_US		3*UWB_LIST_SIZE + 108 //found experimentally
 #define MEASURED_SLOT_DURATIONS_US			(float)(1.7814f*(float)(UWB_LIST_SIZE)*(float)(UWB_LIST_SIZE) + 29.39f*(float)(UWB_LIST_SIZE) + 1848.5f)	//found experimentally
 #define LCD_ENABLE_BUFFER_US				5000
-#define SLOT_END_BUFFER_US					0			          //increase if all messages do not fit into a slot
+#define SLOT_END_BUFFER_US					0		          //increase if all messages do not fit into a slot
 #define BLINK_RX_CB_TO_RESP_TX_CMD_DLY_US	1450				  //found experimentally
 
 
@@ -413,7 +450,6 @@ typedef struct
     uint8 nsSFD ;
     uint16 sfdTO;  //!< SFD timeout value (in symbols) e.g. preamble length (128) + SFD(8) - PAC + some margin ~ 135us... DWT_SFDTOC_DEF; //default value
 } instanceConfig_t ;
-
 
 /******************************************************************************************************************
 *******************************************************************************************************************

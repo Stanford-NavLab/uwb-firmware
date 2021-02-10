@@ -243,7 +243,8 @@ extern "C" {
 #define SYS_MASK_MAFFREJ        0x20000000UL    /* Mask Automatic Frame Filtering rejection event   */
 
 /* default SYS_MASK settings that will be used in the application */
-#define SYS_MASK_VAL        (DWT_INT_TFRS | DWT_INT_RFCG | DWT_INT_RXOVRR | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO)
+//#define SYS_MASK_VAL        (DWT_INT_TFRS | DWT_INT_RFCG | DWT_INT_RXOVRR | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO) //TODO remove
+#define SYS_MASK_VAL        (DWT_INT_TFRS | DWT_INT_RFCG | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO)
 
 
 /****************************************************************************//**

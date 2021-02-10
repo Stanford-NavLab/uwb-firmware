@@ -55,6 +55,12 @@ typedef struct
 	uint64 finalReplyDelay;
 	uint64 finalReplyDelay_us;
 
+	//TODO remove
+	//delay before turning receiver tack on
+	uint64 rxAfterPollDelay;
+	uint64 rxAfterRespDelay;
+	uint64 rxAfterFinalDelay;
+
 	//Receive Frame Wait Timeout Periods, units are 1.0256us (aus stands for near microsecond)
 	uint16 durationPollTimeout_nus;		//rx timeout duration after tx poll
 
@@ -81,19 +87,37 @@ typedef struct
     uint64 storedPreLen_us;		   //precomputed conversion of preamble and sfd in microseconds
 
 	//message structures used for transmitted messages
+//#if (USING_64BIT_ADDR == 1)
+//	srd_msg_dlsl rng_initmsg ;				// ranging init message (destination long, source long)
+//    srd_ext_msg_dlsl msg; 					// simple 802.15.4 frame structure (used for tx message) - using long addresses
+//	srd_ext_msg_dssl inf_msg;         	  	// extended inf message containing frame lengths and slot assignments
+//    srd_ext_msg_dssl report_msg;          	// extended report message containing the calculated range
+//    srd_ext_msg_dssl sync_msg;		      	// extended message indicating the need to resync TDMA frame
+//#else
+//	srd_msg_dlss rng_initmsg ;  			// ranging init message (destination long, source short)
+//    srd_ext_msg_dsss msg; 				  	// simple 802.15.4 frame structure (used for tx message) - using short addresses
+//    srd_ext_msg_dsss inf_msg;         	  	// extended inf message containing frame lengths and slot assignments
+//    srd_ext_msg_dsss report_msg;		  	// extended report message containing the calculated range
+//    srd_ext_msg_dsss sync_msg;		      	// extended message indicating the need to resync TDMA frame
+//#endif
+
+//TODO remove one (below or above)
 #if (USING_64BIT_ADDR == 1)
 	srd_msg_dlsl rng_initmsg ;				// ranging init message (destination long, source long)
-    srd_ext_msg_dlsl msg; 					// simple 802.15.4 frame structure (used for tx message) - using long addresses
-	srd_ext_msg_dssl inf_msg;         	  	// extended inf message containing frame lengths and slot assignments
-    srd_ext_msg_dssl report_msg;          	// extended report message containing the calculated range
-    srd_ext_msg_dssl sync_msg;		      	// extended message indicating the need to resync TDMA frame
+    srd_msg_dlsl msg; 					// simple 802.15.4 frame structure (used for tx message) - using long addresses
+	srd_msg_dssl inf_msg;         	  	// extended inf message containing frame lengths and slot assignments
+    srd_msg_dssl report_msg;          	// extended report message containing the calculated range
+    srd_msg_dssl sync_msg;		      	// extended message indicating the need to resync TDMA frame
 #else
 	srd_msg_dlss rng_initmsg ;  			// ranging init message (destination long, source short)
-    srd_ext_msg_dsss msg; 				  	// simple 802.15.4 frame structure (used for tx message) - using short addresses
-    srd_ext_msg_dsss inf_msg;         	  	// extended inf message containing frame lengths and slot assignments
-    srd_ext_msg_dsss report_msg;		  	// extended report message containing the calculated range
-    srd_ext_msg_dsss sync_msg;		      	// extended message indicating the need to resync TDMA frame
+    srd_msg_dsss msg; 				  	// simple 802.15.4 frame structure (used for tx message) - using short addresses
+    srd_msg_dsss inf_msg;         	  	// extended inf message containing frame lengths and slot assignments
+    srd_msg_dsss report_msg;		  	// extended report message containing the calculated range
+    srd_msg_dsss sync_msg;		      	// extended message indicating the need to resync TDMA frame
 #endif
+
+
+
 	iso_IEEE_EUI64_blink_msg blinkmsg ; // frame structure (used for tx blink message)
 
 	//Tag function address/message configuration
@@ -105,6 +129,23 @@ typedef struct
     uint8 addrByteSize;             // The bytelength used for addresses. 
 
     uint32 resp_dly_us[RESP_DLY_NB];
+
+    uint64 cmd_poll_micro;
+    uint64 cmd_final_micro;
+    uint64 cmd_resp_micro;
+	uint64 final_cb_micro;
+    uint64 dwt_final_cb;
+    uint64 dwt_cmd_poll; //TODO remove all debug variable in this block
+    uint64 dwt_cmd_resp;
+    uint64 dwt_cmd_final;
+    uint64 dwt_poll_tx;
+    uint64 dwt_resp_tx;
+    uint64 dwt_final_tx;
+    uint64 dwt_poll_rx;
+    uint64 dwt_resp_rx;
+    uint64 dwt_final_rx;
+    uint64 calc_final_tx;
+    uint64 pointless_counter;
 
 	//64 bit timestamps
 	uint64 anchorRespTxTime ;		// anchor's reponse tx timestamp
@@ -142,6 +183,7 @@ typedef struct
 
 	bool tx_poll;							//was the last tx message a POLL message?
 	bool tx_anch_resp;						//was the last tx message an ANCH_RESP message?
+	bool tx_final; //TODO
 
 	//event queue - used to store DW1000 events as they are processed by the dw_isr/callback functions
     event_data_t dwevent[MAX_EVENT_NUMBER]; //this holds any TX/RX events and associated message data
@@ -297,7 +339,7 @@ void send_statetousb(instance_data_t *inst, struct TDMAHandler *tdma_handle);
 void send_rxmsgtousb(char *data);
 void send_txmsgtousb(char *data);
 char* get_msg_fcode_string(int fcode);
-
+void dwt_dumpregisters(char *str, size_t strSize); //TODO remove!
 
 #ifdef __cplusplus
 }
