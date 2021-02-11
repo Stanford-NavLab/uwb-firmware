@@ -13,13 +13,13 @@
 
 ### Overview
 
-This software is a modification of the firmware supplied by Decawave for their EVK1000 evaluation board. The main enhancement provided by this software is network coordination which enables the UWBs to take turns ranging with each other. UWBs can be added and removed from the network in an ad-hoc manner and the network will reconfigure to optimize ranging cycle frequency. Additionally, ranging measurements are broadcast to the network so each UWB is aware of the ranging measurements between each UWB pair in its proximity, eliminating the need for a secondary communication channel. 
+This software is a modification of the firmware supplied by Decawave for their EVK1000 evaluation board. The main enhancement provided by this software is network coordination which enables the UWBs to take turns ranging with each other. UWBs can be added and removed from the network in an ad-hoc manner and the network will reconfigure to optimize ranging cycle frequency. Additionally, ranging measurements are broadcast to the network so each UWB is aware of the ranging measurements between each UWB pair in its proximity &mdash eliminating the need for a secondary communication channel. 
 <br/>
 <br/>
-Using the UWBs is simple. Once a UWB has been flashed with this firmware and the proper switch configurations have been set, simply apply power to two ore more UWBs and they will begin ranging with each other. The ranging data can then be accessed via USB. The `uwb_interface` ROS package to written to read the USB ranging data and publish it to a ROS node.
+Using the UWBs is simple. Once a UWB has been flashed with the firmware and the switches have been configured, simply apply power to two ore more UWBs and they will begin ranging with each other. The ranging data can then be accessed via USB. The `uwb_interface` ROS package to written to read the USB ranging data and publish it to a ROS node.
 <br/>
 <br/>
-As much of the original firmware functionality, as possible, has been preserved so a significant amount of the information provided in the EVK1000 User Manual still applies to this software. The software and documentation for the EVK1000 evaluation kit and DW1000 transceiver can be found at the links below. It can also be found in the [Decawave directory](Decawave).
+As much of the original firmware functionality, as possible, has been preserved so much of the information provided in the EVK1000 User Manual still applies to this software. The software and documentation for the EVK1000 evaluation kit and DW1000 transceiver can be found at the links below. It can also be found in the [Decawave directory](Decawave).
 <br/>
 <br/>
 [EVK1000 Product Page](https://www.decawave.com/product/evk1000-evaluation-kit/) <br/>
@@ -28,18 +28,18 @@ As much of the original firmware functionality, as possible, has been preserved 
 
 ### UWB Configuration
 
-The EVB1000 allows for a numer of operational configurations via the S1 microswitches. To ensure proper operattions, each UWB in a network must be configured identically. The table below summarizes the configurable and required S1 switch positions. The EVB1000 also has the S2 and S3 microswitches as well as 5 jumpers. The required configuration for these itmes are in the images below. 
+The EVB1000 allows for a numer of operational configurations via the S1 microswitches. To ensure proper operattions, each UWB in a network must be configured identically. The table below summarizes the configurable and required S1 switch positions. The EVB1000 also has the S2 and S3 microswitches as well as 5 jumpers. The required configuration for these items are in the images below. 
 
-Switch | Function           | OFF            | ON             | Notes
------- | ------------------ | -------------- | -------------- | --------
-S1-1   |                    |                | Required       |
-S1-2   |                    | Required       |                |
-S1-3   |                    |                | Required       | 
-S1-4   | Onboard LCD        | OFF            | ON             | Consumes more power and reduces ranging cycle frequency when ON
-S1-5   | Data Rate/Preamble | 110 kbps/1024  | 6.8 Mbps/128   | OFF increases max range but reduces ranging cycle frequency
-S1-6   | PRF                | 16             | 64             | 
-S1-7   | Channel            | 2 (3993.6 MHz) | 5 (6489.6 MHz) | OFF increases range and signal penetration but ON may have less interference  
-S1-8   |                    | Required       |                | 
+Switch | Function             | OFF              | ON               | Notes
+------ | ------------------   | --------------   | --------------   | --------
+S1-1   |                      |                  | Required         |
+S1-2   |                      | Required         |                  |
+S1-3   |                      |                  | Required         | 
+S1-4   | Onboard LCD          | OFF              | ON               | Consumes more power and reduces ranging cycle frequency when ON
+S1-5   | Data Rate / Preamble | 110 kbps / 1024  | 6.8 Mbps / 128   | OFF increases max range but reduces ranging cycle frequency
+S1-6   | PRF                  | 16               | 64               | 
+S1-7   | Channel              | 2 (3993.6 MHz)   | 5 (6489.6 MHz)   | OFF increases range and signal penetration but ON may have less interference      
+S1-8   |                      | Required         |                  | 
 
 <img src="img/EVK1000 config front.PNG" width="480">
 
@@ -67,7 +67,7 @@ SLOT DURATION
 XXXXX us
 ```
 
-Network coordination is acheived by assigning timeslots to UWBs. The slot duration value is the duration of a single timeslot. The network will acheive no more than one ranging measurement per slot. This value is a function of the maximum network size and the settings configured by microswitches S1-4 through S1-7. 
+Network coordination is acheived by assigning timeslots to UWBs. The slot duration value is the length in time of a single timeslot. The network will acheive no more than one ranging measurement per slot. This value is a function of the maximum network size and the settings configured by microswitches S1-4 through S1-7. 
 
 ```
 TX DELAY: XXXXX
@@ -164,7 +164,7 @@ The firmware definitions that control which values are loaded into the DW1000 ar
 
 ```
 
-For the calibration definitions to be applied, the `SET_TXRX_DELAY` must be set to `1`. If set to `0`, the firmware will provide a reasonable guess of what the calibration values might be. For previously calibrated UWBs, the [calibration](calibration) directory contains text files with the calibration values which can be copied and pasted into the firmware prior to building. 
+For the calibration definitions to be applied, `SET_TXRX_DELAY` must be set to `1`. If set to `0`, the firmware will provide a reasonable guess of what the calibration values might be. For previously calibrated UWBs, the [calibration](calibration) directory contains text files with the calibration values which can be copied and pasted into the firmware prior to building. 
 
 The files in the calibration directory are listed by UWB address. Each UWB's address can be found by turning the LCD on and powering the UWB after the firmware has been loaded. After several seconds, either the long address (16 characters) or the short address (last 4 characters of the long address) will be displayed on the top row of the LCD.      
 
@@ -173,8 +173,8 @@ When building and flashing the firmware be sure to copy/paste all of the calibra
 
 ### Firmware Definitions
 
-Near the top of the [src/applicaiton/application_definitions.h](src/applicaiton/application_definitions.h) file is a section mared as *Definitions expected to be modified by end-user*. Most of them are detailed in the [Calibration](#calibration) section. The rest are described here.
+Near the top of the [src/applicaiton/application_definitions.h](src/applicaiton/application_definitions.h) file is a section marked *Definitions expected to be modified by end-user*. Most of them are detailed in the [Calibration](#calibration) section. The rest are described here.
 
-`UWB_LIST_SIZE` is used to specify the maximum network size. Setting this number to a larger value will increase the allowable network size but will decrease the ranging cycle frequency, regardless of how many UWBs are actually connected. To maximise ranging cycle frequency, set this value no larger than the expected network size. The default value is 10. Due to hardware and firmware limitations, It should not be set greater than 80. 
+`UWB_LIST_SIZE` is used to specify the maximum network size. Setting this number to a larger value will increase the allowable network size but will decrease the ranging cycle frequency, regardless of how many UWBs are actually connected. To maximise ranging cycle frequency, set this value no larger than the expected network size. The default value is 10. Due to hardware and firmware limitations, it should not be set greater than 80. 
 
-`USING_64BIT_ADDR` is used to specify whether to use 64-bit (long) or 16-bit (short) addresses. In general, 16-bit address should be used. It requires less data to be transmitted, increasing ranging cycle frequency, and decreasing power consumption. The only case where 64-bit addresses must be used is when two or more UWBs share the same short address.
+`USING_64BIT_ADDR` is used to specify whether to use 64-bit (long) or 16-bit (short) addresses. In general, 16-bit addresses should be used. It requires less data to be transmitted, increasing ranging cycle frequency, and decreasing power consumption. The only case where 64-bit addresses must be used is when two or more UWBs share the same short address.
