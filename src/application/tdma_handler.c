@@ -125,7 +125,7 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 	uint64 infCmdToTsDelay_us = TX_CMD_TO_TX_CB_DLY_US + inst->storedPreLen_us;
 
 	//tx antenna delay
-	uint64 tx_antenna_delay = (uint64)inst->txAntennaDelay; //TODO use a default value here because it is different for each UWB...
+	uint64 tx_antenna_delay = (uint64)inst->defaultAntennaDelay;
 
 	//time to propagate
 	//NOTE: assuming zero since difference for speed of light travel time over 10cm and 100m is negligible for frame sync purposes
@@ -265,12 +265,10 @@ static bool tx_sync_msg(struct TDMAHandler *this)
 	memcpy(&inst->sync_msg.messageData[SYNC_TSFS], &myTimeSinceFrameStart_us, 6);
 	inst->sync_msg.seqNum = inst->frameSN++;
 
-	dwt_setrxaftertxdelay(0);	//units are 1.0256us
-	dwt_setrxtimeout(0);		//units are 1.0256us
 	inst->wait4ack = 0;
 
 	dwt_writetxdata(psduLength, (uint8 *)&inst->sync_msg, 0) ; // write the frame data
-	if(instancesendpacket(psduLength, DWT_START_RX_IMMEDIATE, 0))
+	if(instancesendpacket(psduLength, DWT_START_RX_IMMEDIATE | inst->wait4ack, 0))
 	{
 		inst->previousState = TA_INIT;
 		inst->nextState = TA_INIT;

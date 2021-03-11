@@ -2234,16 +2234,11 @@ void dwt_isr(void)
 {
     uint32 status = dw1000local.cbData.status = dwt_read32bitreg(SYS_STATUS_ID); // Read status register low 32bits
 
-    uint8 callback_triggered = 0;
-
     // Handle RX good frame event
     if(status & SYS_STATUS_RXFCG)
     {
         uint16 finfo16;
         uint16 len;
-
-        callback_triggered = 1;
-
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_GOOD); // Clear all receive status bits
 
         dw1000local.cbData.rx_flags = 0;
@@ -2295,8 +2290,6 @@ void dwt_isr(void)
     // Handle TX confirmation event
     if(status & SYS_STATUS_TXFRS)
     {
-    	callback_triggered = 1;
-
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_TX); // Clear TX event bits
 
         // In the case where this TXFRS interrupt is due to the automatic transmission of an ACK solicited by a response (with ACK request bit set)
@@ -2306,6 +2299,7 @@ void dwt_isr(void)
         // See section "Transmit and automatically wait for response" in DW1000 User Manual
         if((status & SYS_STATUS_AAT) && dw1000local.wait4resp)
         {
+        	//DW1000 forum users reported soft reset after TX helped with timestamp accuracy.
             dwt_forcetrxoff(); // Turn the RX off
             dwt_rxreset(); // Reset in case we were late and a frame was already being received
         }
@@ -2320,8 +2314,6 @@ void dwt_isr(void)
     // Handle frame reception/preamble detect timeout events
     if(status & SYS_STATUS_ALL_RX_TO)
     {
-    	callback_triggered = 1;
-
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXRFTO); // Clear RX timeout event bits
 
         dw1000local.wait4resp = 0;
@@ -2342,8 +2334,6 @@ void dwt_isr(void)
     // Handle RX errors events
     if(status & SYS_STATUS_ALL_RX_ERR)
     {
-    	callback_triggered = 1;
-
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR); // Clear RX error event bits
 
         dw1000local.wait4resp = 0;
@@ -2360,18 +2350,6 @@ void dwt_isr(void)
             dw1000local.cbRxErr(&dw1000local.cbData);
         }
     }
-
-    //IRQ line high but no callbacks triggered.
-    if(callback_triggered == 0)
-    {
-    	//clear and reset SYS_MASK register
-    	dwt_setinterrupt(SYS_MASK_MASK_32, 0); //disable all
-    	dwt_setinterrupt(SYS_MASK_VAL, 1);
-
-    	//clear SYS_STATUS register
-    	dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_MASK_32);
-    }
-
 }
 
 /*! ------------------------------------------------------------------------------------------------------------------
@@ -2691,26 +2669,6 @@ int dwt_starttx(uint8 mode)
  *
  * no return value
  */
-//void dwt_forcetrxoff(void) //TODO, this is different! see below:
-//{
-//    decaIrqStatus_t stat ;
-//
-//    dwt_setinterrupt(SYS_MASK_MASK_32, 0); // Clear interrupt mask - so we don't get any unwanted events
-//
-//    // Need to beware of interrupts occurring in the middle of following read modify write cycle
-//    // We can disable the radio, but before the status is cleared an interrupt can be set (e.g. the
-//    // event has just happened before the radio was disabled)
-//    // thus we need to disable interrupt during this operation
-//    stat = decamutexon() ;
-//    dwt_write8bitoffsetreg(SYS_CTRL_ID, SYS_CTRL_OFFSET, (uint8)SYS_CTRL_TRXOFF) ; // Disable the radio
-//	decamutexoff(stat) ;
-//
-//	// Enable/restore interrupts again...
-//	dwt_setinterrupt(SYS_MASK_VAL, 1);
-//	dw1000local.wait4resp = 0;
-//
-//} // end deviceforcetrxoff()
-
 void dwt_forcetrxoff(void)
 {
     decaIrqStatus_t stat ;
@@ -3115,17 +3073,11 @@ void dwt_readeventcounters(dwt_deviceentcnts_t *counters)
  */
 void dwt_rxreset(void)
 {
-//	//TODO - checking soft reset!
-//	_dwt_enableclocks(FORCE_SYS_XTI); // NOTE: Set system clock to XTAL
-	
     // Set RX reset
     dwt_write8bitoffsetreg(PMSC_ID, PMSC_CTRL0_SOFTRESET_OFFSET, PMSC_CTRL0_RESET_RX);
 
     // Clear RX reset
     dwt_write8bitoffsetreg(PMSC_ID, PMSC_CTRL0_SOFTRESET_OFFSET, PMSC_CTRL0_RESET_CLEAR);
-
-//	//TODO
-//	_dwt_enableclocks(ENABLE_ALL_SEQ); // Restore system clock
 }
 
 /*! ------------------------------------------------------------------------------------------------------------------
@@ -3161,9 +3113,6 @@ void dwt_softreset(void)
     dwt_write8bitoffsetreg(PMSC_ID, PMSC_CTRL0_SOFTRESET_OFFSET, PMSC_CTRL0_RESET_CLEAR);
 
     dw1000local.wait4resp = 0;
-	
-//	//TODO
-//	_dwt_enableclocks(ENABLE_ALL_SEQ); // Restore system clock
 }
 
 /*! ------------------------------------------------------------------------------------------------------------------

@@ -82,11 +82,6 @@ unsigned long long portGetTickCntMicro(void)
 	return microsec;
 }
 
-uint16_t portGetTIM3()
-{
-	return TIM_GetCounter(TIM3);
-}
-
 
  /* @fn    SysTick_Configuration
   * @brief SysTickTimer is configured to be clocked from HCLK (72MHz)

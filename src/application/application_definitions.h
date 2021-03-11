@@ -20,8 +20,8 @@
 
 //TODO set all below to zero as default values
 #define SET_TXRX_DELAY 			1           //when set to 1 - the DW1000 RX and TX delays are set to the TX_DELAY and RX_DELAY defines
-#define TX_ANT_DELAY            16455
-#define RX_ANT_DELAY            16455			//TODO put reasonable initial value? add explanation
+#define TX_ANT_DELAY            16466
+#define RX_ANT_DELAY            16466			//TODO put reasonable initial value? add explanation
 //TODO have antenna delay per S1 channel config!
 //I still need to make it apply the settings below based on the S1 settings
 //S1 5-6-7 OFF-OFF-OFF
@@ -52,15 +52,6 @@
 
 #define USING_64BIT_ADDR 		0	 		//when set to 0 - the DecaRanging application will use 16-bit addresses
 
-
-
-
-//TODO remove
-
-
-
-#define PRE_TX_DELAY_MS			0
-
 /******************************************************************************************************************
 *******************************************************************************************************************
 *******************************************************************************************************************/
@@ -70,9 +61,9 @@
 #define CORRECT_RANGE_BIAS  (1)     // Compensate for small bias due to uneven accumulator growth at close up high power
 
 #define NUM_INST            1
-#define MASK_40BIT			(0x00FFFFFFFFFF)  // DW1000 counter is 40 bits
+#define MASK_40BIT			(0x00FFFFFFFFFF)     // DW1000 counter is 40 bits
 #define MASK_42BIT          (0x000003FFFFFFFFFF) //stm32 microsecond timestamps are 42 bits
-#define MASK_TXDTS			(0x00FFFFFFFE00)  //The TX timestamp will snap to 8 ns resolution - mask lower 9 bits.
+#define MASK_TXDTS			(0x00FFFFFFFE00)     //The TX timestamp will snap to 8 ns resolution - mask lower 9 bits.
 
 //! callback events
 #define DWT_SIG_RX_NOERR            0
@@ -249,9 +240,11 @@ enum
 #define US_TO_SY_INT(x) (((x) * 10000) / 10256)
 
 
-#define RX_TO_CB_DLY_US 			50
+#define RX_TO_CB_DLY_US 			50	//TODO is this right? should this be dependent on data???
 #define RX_CB_TO_TX_CMD_DLY_US		220
 #define TX_CMD_TO_TX_CB_DLY_US		90	//doesn't include preamble, sfd, phr, and data. saw 81 to 87
+
+//TODO seems to not be long enough, failing on delayed TX... (could this value be dependant on UWB settings??? or does the note below accoutn for it. should I be including the preamble and sfd?)
 #define MIN_DELAYED_TX_DLY_US   	90	//doesn't include preamble and sfd. //80 is the minimum delay for delayed tx. anything shorter will cause failure
 
 
@@ -326,7 +319,6 @@ typedef enum inst_states
     TA_TX_WAIT_CONF,
     TA_RXE_WAIT,
     TA_RX_WAIT_DATA,
-    TA_SLEEP_DONE,
     TA_TXBLINK_WAIT_SEND,
     TA_TXRANGINGINIT_WAIT_SEND,
     TA_TX_SELECT,

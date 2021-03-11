@@ -171,14 +171,14 @@ int dw_main(void)
     //LCD variables
     bool enableLCD = FALSE;
 	int toggle = 0;
-	int toggle_counter = 0;
-	int toggle_step = 5;
 	uint8 command = 0x0;
+	uint32 toggle_period = 2000;
+	uint32 last_toggle = 0;
 
 	instance_data_t* inst = instance_get_local_structure_ptr(0);
 
 	//Configuration for DecaRanging Modes (8 default use cases selectable by the switch S1 on EVK)
-	instanceConfig_t cfg1 = { //TODO would I need to configure extended length here??
+	instanceConfig_t cfg1 = {
             2,              // channel
 			3,              // preambleCode
             DWT_PRF_16M,    // prf
@@ -427,11 +427,12 @@ int dw_main(void)
 
     port_EnableEXT_IRQ();
 
+    last_toggle = portGetTickCnt();
+
     // main loop
     while(1)
     {
     	bool updateLCD = FALSE;
-    	//TODO reenable optimization in the compiler settings!!!
 		instance_run(); //run the state machine!!!
 		instance_mode = inst->mode;
 
@@ -458,14 +459,15 @@ int dw_main(void)
 					}
 				}
 
-				//self address, ranging anchor address, ranging tag address, range TODO
-				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X", saddr, aaddr, taddr, rng); //TODO make this 04 or something! (and update the interface nodes as well...)
-//				n = sprintf((char*)&dataseq[0], "%016llX,%016llX,%016llX,%08i,%08i", saddr, aaddr, taddr, rng, rng_raw);
-//				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X", saddr, aaddr, taddr, rng);
+//				//self address, ranging anchor address, ranging tag address, range TODO
+//				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X", saddr, aaddr, taddr, rng); //TODO make this 04 or something! (and update the interface nodes as well...)
+				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X", saddr, aaddr, taddr, rng);//TODO keep only this nominal one!
+//				n = sprintf((char*)&dataseq[0], "%08i", rng);
 //				n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
-//				n = sprintf((char*)&dataseq[0], "%08d,xxxx,xxxx", rng);
-
-
+//
+//
+//
+//
 				send_usbmessage(&dataseq[0], n);
 				usb_run(); //TODO
 			}
@@ -473,53 +475,44 @@ int dw_main(void)
 
         //only write to LCD if we aren't in the middle of  ranging messages
         //the sleep messages embedded in the LCD calls mess up the timing otherwise
-		if(enableLCD == TRUE && inst->canPrintLCD == TRUE) //TODO it is switchign every time, fix me!
+		if(enableLCD == TRUE && inst->canPrintLCD == TRUE)
 		{
-
-        	toggle_step = 750;
-        	memset(dataseq, ' ', LCD_BUFF_LEN);
-			memset(dataseq1, ' ', LCD_BUFF_LEN);
-			uint64 addr = instance_get_addr();
-
-			uint8 num_neighbors = instfindnumneighbors(inst);
-			uint8 num_hidden = instfindnumhidden(inst);
-			char status[10];
-
-			if(instance_mode == DISCOVERY)
-			{
-				strcpy(status, "SEARCHING");
-				range_result = 0;
-			}
-			else
-			{
-				strcpy(status, "CONNECTED");
-			}
-
-			if(toggle_counter <= toggle_step)
+			if(get_dt32(last_toggle, portGetTickCnt()) >= toggle_period)
 			{
 				if(toggle == 2)
 				{
-					updateLCD = TRUE;
+					toggle = 1;
 				}
-				toggle = 1;
-			}
-			else if(toggle_counter <= toggle_step*2)
-			{
-				if(toggle == 1)
+				else
 				{
-					updateLCD = TRUE;
+					toggle = 2;
 				}
-				toggle = 2;
-			}
 
-			toggle_counter++;
-			if(toggle_counter > toggle_step*2)
-			{
-				toggle_counter = 0;
+				last_toggle = portGetTickCnt();
+				updateLCD = TRUE;
 			}
 
 			if(updateLCD == TRUE)
 			{
+				memset(dataseq, ' ', LCD_BUFF_LEN);
+				memset(dataseq1, ' ', LCD_BUFF_LEN);
+				uint64 addr = instance_get_addr();
+
+				uint8 num_neighbors = instfindnumneighbors(inst);
+				uint8 num_hidden = instfindnumhidden(inst);
+				char status[10];
+
+				if(instance_mode == DISCOVERY)
+				{
+					strcpy(status, "SEARCHING");
+					range_result = 0;
+				}
+				else
+				{
+					strcpy(status, "CONNECTED");
+				}
+
+
 				dataseq[0] = 0x2 ;  //return cursor home
 				writetoLCD( 1, 0,  dataseq);
 

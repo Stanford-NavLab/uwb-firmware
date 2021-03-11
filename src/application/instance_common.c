@@ -178,7 +178,7 @@ int reportTOF(instance_data_t *inst, uint8 uwb_index)
 	}
 
 	// convert to seconds (as floating point)
-	tof = convertdevicetimetosec(tofi);          //this is divided by 4 to get single time of flight
+	tof = convertdevicetimetosec(tofi);
 	inst->idistanceraw[uwb_index] = distance = tof * SPEED_OF_LIGHT;
 
 #if (CORRECT_RANGE_BIAS == 1)
@@ -432,114 +432,6 @@ uint32 instancereaddeviceid(void)
     return dwt_readdevid() ;
 }
 
-//#if (REG_DUMP == 1) TODO
-void dwt_dumpregisters(char *str, size_t strSize)
-{
-    uint32 reg = 0;
-    uint8 buff[5];
-    int i;
-    int cnt ;
-
-#if (0)
-    //first print all single registers
-    for(i=0; i<0x3F; i++)
-    {
-        dwt_readfromdevice(i, 0, 5, buff) ;
-        str += cnt = sprintf(str,"reg[%02X]=%02X%02X%02X%02X%02X",i,buff[4], buff[3], buff[2], buff[1], buff[0] ) ;
-        str += cnt = sprintf(str,"\n") ;
-    }
-
-    //reg 0x20
-    for(i=0; i<=32; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x20,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x20,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
-    }
-
-    //reg 0x21
-    for(i=0; i<=44; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x21,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x21,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
-    }
-
-    //reg 0x23
-    for(i=0; i<=0x20; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x23,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x23,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
-    }
-#else
-    //reg 0x24
-    for(i=0; i<=12; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x24,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x24,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
-    }
-
-    //reg 0x27
-    for(i=0; i<=44; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x27,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x27,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
-    }
-
-    //reg 0x28
-    for(i=0; i<=64; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x28,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x28,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
-    }
-
-    //reg 0x2A
-    for(i=0; i<20; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x2A,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x2A,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
-    }
-
-    //reg 0x2B
-    for(i=0; i<24; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x2B,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x2B,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
-    }
-
-    //reg 0x2f
-    for(i=0; i<40; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x2f,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x2f,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
-    }
-
-    //reg 0x31
-    for(i=0; i<84; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x31,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x31,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
-    }
-
-    //reg 0x36 = PMSC_ID
-    for(i=0; i<=48; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x36,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x36,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
-    }
-#endif
-}
-//#endif
-
 #define TXCFG_ADDRESS  (0x10) // OTP address at which the TX power calibration value is stored
 							  // The TX power configuration read from OTP (6 channels consecutively with PRF16 then 64, e.g. Ch 1 PRF 16 is index 0 and PRF 64 index 1)
 #define ANTDLY_ADDRESS (0x1C) // OTP address at which the antenna delay calibration value is stored
@@ -565,18 +457,11 @@ void instance_config(instanceConfig_t *config)
     instance_data[instance].configData.txPreambLength = config->preambleLen ;
     instance_data[instance].configData.rxPAC = config->pacSize ;
     instance_data[instance].configData.nsSFD = config->nsSFD ;
-    instance_data[instance].configData.phrMode = DWT_PHRMODE_EXT ; //TODO would i need to account for this somewhere??? (in the init timings function?)
-//    instance_data[instance].configData.phrMode = DWT_PHRMODE_STD ;
+    instance_data[instance].configData.phrMode = DWT_PHRMODE_EXT ;
 	instance_data[instance].configData.sfdTO = config->sfdTO;
 
     //configure the channel parameters
     dwt_configure(&instance_data[instance].configData) ;
-
-    //TODO found this note inside dwt_configure
-    // The SFD transmit pattern is initialised by the DW1000 upon a user TX request, but (due to an IC issue) it is not done for an auto-ACK TX. The
-	// SYS_CTRL write below works around this issue, by simultaneously initiating and aborting a transmission, which correctly initialises the SFD
-	// after its configuration or reconfiguration.
-	// This issue is not documented at the time of writing this code. It should be in next release of DW1000 User Manual (v2.09, from July 2016).
 
     //check if to use the antenna delay calibration values as read from the OTP
     if(dwt_otprevision() <= 1) //in revision 0, 1 of EVB1000/EVK1000
@@ -600,20 +485,20 @@ void instance_config(instanceConfig_t *config)
         power = otpPower[(config->pulseRepFreq - DWT_PRF_16M) + (chan_idx[instance_data[instance].configData.chan] * 2)];
     }
 
+    instance_data[instance].defaultAntennaDelay = rfDelays[config->pulseRepFreq - DWT_PRF_16M];
+
 #if (SET_TXRX_DELAY == 0)
     // if nothing was actually programmed then set a reasonable value anyway
     if(instance_data[instance].txAntennaDelay == 0)//otherwise a default values should be used
     {
-    	instance_data[instance].rxAntennaDelay = instance_data[instance].txAntennaDelay = rfDelays[config->pulseRepFreq - DWT_PRF_16M];
+    	instance_data[instance].rxAntennaDelay = instance_data[instance].txAntennaDelay = instance_data[instance].defaultAntennaDelay;
     }
 #else
-    instance_data[instance].txAntennaDelay = (uint16)TX_ANT_DELAY;
+    instance_data[instance].txAntennaDelay = (uint16)TX_ANT_DELAY; //TODO channel selectable
 	instance_data[instance].rxAntennaDelay = (uint16)RX_ANT_DELAY;
 #endif
 
 
-//	instance_data[instance].txAntennaDelay = 0;//16436; //TODO
-//	instance_data[instance].rxAntennaDelay = 0;//16436;
 
     // -------------------------------------------------------------------------------------------------------------------
     // set the antenna delay, we assume that the RX is the same as TX.
@@ -641,22 +526,6 @@ void instance_config(instanceConfig_t *config)
 
 		port_set_dw1000_slowrate(); //increase SPI to max
     }
-
-
-//#if (REG_DUMP == 1) TODO
-//#define REG_BUF_SIZE    (100*30)
-//{
-//	char regDumpBuffer[REG_BUF_SIZE] ;
-//	dwt_dumpregisters(regDumpBuffer, REG_BUF_SIZE);
-//
-//	{
-//		char* buff[REG_BUF_SIZE+10];
-//		int n = sprintf((char*)&buff[0], "%s", regDumpBuffer);
-//		send_usbmessage(&regDumpBuffer[0], n);
-//		usb_run();
-//	}
-//}
-//#endif
 }
 
 
@@ -746,12 +615,6 @@ void inst_processtxrxtimeout(instance_data_t *inst)
 void instance_irqstuckcallback()
 {
 
-//	uint8 debug_msg[100]; //TODO test this when networks meet!
-//	int n = sprintf((char*)&debug_msg[0], "irq stuck callback");
-//	send_usbmessage(&debug_msg[0], n);
-//	usb_run();
-
-
 	uint8 s1switch = port_is_boot1_on(0) << 1
 				| port_is_switch_on(TA_SW1_3) << 2
 				| port_is_switch_on(TA_SW1_4) << 3
@@ -759,12 +622,6 @@ void instance_irqstuckcallback()
 				| port_is_switch_on(TA_SW1_6) << 5
 				| port_is_switch_on(TA_SW1_7) << 6
 				| port_is_switch_on(TA_SW1_8) << 7;
-
-//	port_DisableEXT_IRQ(); //disable IRQ until we configure the device
-//	inittestapplication(s1switch);
-//	port_EnableEXT_IRQ(); //enable IRQ before starting
-
-
 
 
 	instance_data_t* inst = instance_get_local_structure_ptr(0);
@@ -795,9 +652,6 @@ void instance_irqstuckcallback()
 	port_EnableEXT_IRQ(); //enable IRQ before starting
 
 	inst_processtxrxtimeout(inst);
-//	inst->uwbToRangeWith = 255;
-//	inst->mode = ANCHOR;    			TODO
-//	inst->testAppState = TA_RXE_WAIT;
 }
 
 
@@ -818,19 +672,19 @@ void instance_txcallback(const dwt_cb_data_t *txd)
 	dw_event.rxLength = 0;
 	dw_event.typeSave = dw_event.type = DWT_SIG_TX_DONE ;
 
+
+	//NOTE: to avoid timestamping issues in the forums, we aren't using the DW1000 RX auto re-enable function.
+	//Rather, we turn it back on here after every TX. However, logic in TA_RXE_WAIT needs wait4ack to be set
+	//to function correctly. We don't want it to try to start RX during reception.
+	dwt_forcetrxoff();
+	dwt_rxreset();
+	instance_data[0].wait4ack = DWT_RESPONSE_EXPECTED;
+	instancerxon(&instance_data[0], 0, 0) ; // turn RX on, without delay
+
+
 	if(instance_data[0].tx_poll == TRUE)
 	{
 		instance_data[0].tx_poll = FALSE;
-
-//		uint64 cmd_poll = instance_data[0].dwt_cmd_poll; //TODO
-
-		instance_data[0].dwt_poll_tx = dw_event.timeStamp; //TODO
-
-//		uint8 debug_msg[100]; //TODO remove
-//		int n = sprintf((char *)&debug_msg, "%lld,%lld,%lld", instance_data[0].dwt_cmd_poll, instance_data[0].dwt_poll_tx, instance_data[0].dwt_poll_tx - instance_data[0].dwt_cmd_poll);
-//		send_usbmessage(&debug_msg[0], n);
-//		usb_run();
-
 
 		// Embed into Final message: 40-bit pollTXTime,  40-bit respRxTime,  40-bit finalTxTime
 		uint64 tagCalculatedFinalTxTime; // time we should send the response
@@ -848,28 +702,18 @@ void instance_txcallback(const dwt_cb_data_t *txd)
 		memcpy(&(instance_data[0].msg.messageData[FTXT]), (uint8 *)&tagCalculatedFinalTxTime, 5);
 		// Write Poll TX time field of Final message
 		memcpy(&(instance_data[0].msg.messageData[PTXT]), (uint8 *)&dw_event.timeStamp, 5);
-
-		instance_data[0].calc_final_tx = tagCalculatedFinalTxTime;
 	}
 	else if(instance_data[0].tx_anch_resp == TRUE)
 	{
-//		uint64 cmd_resp = instance_data[0].dwt_cmd_resp; //TODO
-
-		instance_data[0].dwt_resp_tx = dw_event.timeStamp; //TODO
-
 		instance_data[0].tx_anch_resp = FALSE;
-
 		instance_data[0].anchorRespTxTime = dw_event.timeStamp;
 	}
-	else if(instance_data[0].tx_final == TRUE){
-
+	else if(instance_data[0].tx_final == TRUE)
+	{
 		instance_data[0].tx_final = FALSE;
-		instance_data[0].dwt_final_tx = dw_event.timeStamp;
-
 	}
 
 	instance_putevent(dw_event);
-
 }
 
 void instance_rxtimeoutcallback(const dwt_cb_data_t *rxd)
@@ -890,7 +734,8 @@ void instance_rxerrorcallback(const dwt_cb_data_t *rxd)
 	int instance = 0;
 
 	//error caused by automatic frame filtering, ignore it and immediately turn rx back on
-	if(rxd->status & SYS_STATUS_AFFREJ){
+	if(rxd->status & SYS_STATUS_AFFREJ)
+	{
 		instancerxon(&instance_data[instance], 0, 0);
 		return;
 	}
@@ -932,7 +777,7 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 	uint8 fcode_index  = 0;
 	event_data_t dw_event;
 
-	uint32 time_now = portGetTickCnt(); //TODO does this need to be here?
+	uint32 time_now = portGetTickCnt();
 
 	//if we got a frame with a good CRC - RX OK
 	rxd_event = DWT_SIG_RX_OKAY;
@@ -1160,39 +1005,7 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 	{
 		if(rxd_event == DWT_SIG_RX_OKAY)
 		{
-			//process RTLS_DEMO_MSG_TAG_POLL immediately.
-//			if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL)//TODO this is the original below fit into the stock
-//			{
-//				int psduLength = RESP_FRAME_LEN_BYTES;
-//
-//				instance_data[instance].tagPollRxTime = dw_event.timeStamp ; //Poll's Rx time
-//				instance_data[instance].msg.messageData[FCODE] = RTLS_DEMO_MSG_ANCH_RESP; //message function code (specifies if message is a poll, response or other...)
-//				memcpy(&instance_data[instance].msg.destAddr[0], &dw_event.msgu.frame[srcAddr_index], instance_data[instance].addrByteSize); //remember who to send the reply to (set destination address)
-//				instance_data[instance].msg.seqNum = instance_data[instance].frameSN++;
-//
-//				//set the delayed rx on time (the final message will be sent after this delay)
-//				dwt_setrxaftertxdelay((uint32)instance_data[instance].rxAfterRespDelay);  //units are 1.0256us - wait for wait4respTIM before RX on (delay RX)
-//
-//				//response is expected
-//				instance_data[instance].wait4ack = DWT_RESPONSE_EXPECTED;
-//
-//				dwt_writetxfctrl(psduLength, 0, 1);
-//				dwt_writetxdata(psduLength, (uint8 *)  &instance_data[instance].msg, 0) ;	// write the frame data
-//
-//				dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
-//
-//				dw_event.typePend = DWT_SIG_TX_PENDING ; // exit this interrupt and notify the application/instance that TX is in progress.
-//
-//
-//				instance_data[0].tx_anch_resp = TRUE;
-//				instance_data[instance].timeofTx = time_now;
-//
-//				instance_data[instance].txDoneTimeoutDuration = instance_data[instance].durationRespTxDoneTimeout_ms;
-//				instance_data[instance].canPrintUSB = FALSE;
-//				instance_data[instance].canPrintLCD = FALSE;
-//
-//			}
-			if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL) //TODO this is my original code
+			if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_POLL)
 			{
 				int psduLength = RESP_FRAME_LEN_BYTES;
 
@@ -1201,34 +1014,14 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				memcpy(&instance_data[instance].msg.destAddr[0], &dw_event.msgu.frame[srcAddr_index], instance_data[instance].addrByteSize); //remember who to send the reply to (set destination address)
 				instance_data[instance].msg.seqNum = instance_data[instance].frameSN++;
 
-//				for(int i = 0; i < 279; i++){ TODO
-//					instance_data[instance].pointless_counter += 2;
-//					instance_data[instance].pointless_counter /= 2;
-//					instance_data[instance].pointless_counter--;
-//				}
-
-				dwt_setrxaftertxdelay(instance_data[instance].rxAfterRespDelay);  										    //units are 1.0256us
-				dwt_setrxtimeout(0);												//units are 1.0256us
-				instance_data[instance].wait4ack = DWT_RESPONSE_EXPECTED;
-
-//				Sleep(PRE_TX_DELAY_MS);//TODO remove
-
+				instance_data[0].wait4ack = 0;
 				dwt_writetxdata(psduLength, (uint8 *)  &instance_data[instance].msg, 0) ;	// write the frame data
 
+				uint32 reply_time = ((dw_event.timeStamp + instance_data[instance].respReplyDelay) & MASK_TXDTS) >> 8;
 
-//				uint8 sys_time_arr[5] = {0, 0, 0, 0, 0}; //TODO
-//				dwt_readsystime(sys_time_arr);
-//				uint64 dwt_time_now = 0;
-//				dwt_time_now = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
-//
-//				instance_data[instance].dwt_cmd_resp = dwt_time_now;
-////				instance_data[instance].dwt_poll_rx = dw_event.timeStamp;
-////
-////				instance_data[instance].cmd_resp_micro = portGetTickCntMicro();
-
-
-
-				if(instancesendpacket(psduLength, DWT_START_TX_IMMEDIATE | instance_data[instance].wait4ack, 0))
+				//TODO put start_immediate definition back in (here)
+//				if(instancesendpacket(psduLength, DWT_START_TX_IMMEDIATE | instance_data[instance].wait4ack, 0))
+				if(instancesendpacket(psduLength, DWT_START_TX_DELAYED | instance_data[instance].wait4ack, reply_time))
 				{
 					instance_data[0].tx_anch_resp = FALSE;
 					instance_data[instance].previousState = TA_INIT;
@@ -1247,6 +1040,8 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 					instance_data[instance].canPrintLCD = FALSE;
 				}
 
+
+
 			}
 			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_ANCH_RESP)
 			{
@@ -1259,47 +1054,9 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 				memcpy(&(instance_data[instance].msg.messageData[RRXT]), (uint8 *)&instance_data[instance].anchorRespRxTime, 5);
 				instance_data[instance].msg.messageData[FCODE] = RTLS_DEMO_MSG_TAG_FINAL; //message function code (specifies if message is a poll, response or other...)
 
-				dwt_setrxaftertxdelay(instance_data[instance].rxAfterFinalDelay);										//units are 1.0256us
-				dwt_setrxtimeout(0);											//units are 1.0256us
-				instance_data[instance].wait4ack = DWT_RESPONSE_EXPECTED;//0;//DWT_RESPONSE_EXPECTED; TODO
-
-//				Sleep(PRE_TX_DELAY_MS);//TODO remove
+				instance_data[0].wait4ack = 0;
 
 				dwt_writetxdata(psduLength, (uint8 *)&instance_data[instance].msg, 0) ; // write the frame data
-
-
-//				uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
-//				dwt_readsystime(sys_time_arr);
-//				uint64 dwt_time_now = 0;
-//				dwt_time_now = (uint64)sys_time_arr[0] +  	((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
-//
-//				instance_data[instance].dwt_cmd_final = dwt_time_now;
-//				instance_data[instance].dwt_resp_rx = dw_event.timeStamp;
-
-
-				//		uint8 debug_msg[100]; //TODO remove
-				//		int n = sprintf((char *)&debug_msg, "%lld,%lld,%lld", instance_data[0].dwt_cmd_poll, instance_data[0].dwt_poll_tx, instance_data[0].dwt_poll_tx - instance_data[0].dwt_cmd_poll);
-				//		send_usbmessage(&debug_msg[0], n);
-				//		usb_run();
-
-//				uint8 debug_msg[100]; //TODO remove
-//				int n = sprintf((char *)&debug_msg, "%lld,%lld,%lld", dw_event.timeStamp, dwt_time_now, dwt_time_now - dw_event.timeStamp);
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-
-//				uint8 debug_msg[100]; //TODO remove
-//				int n = sprintf((char *)&debug_msg, "%lld,%lld,%lld,%lld", instance_data[0].dwt_cmd_poll, instance_data[0].dwt_poll_tx, dw_event.timeStamp, dwt_time_now );
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-
-
-//				instance_data[instance].cmd_final_micro = portGetTickCntMicro();
-
-
-//				uint8 debug_msg[100];//TODO remove
-//				int n = sprintf((char *)&debug_msg, "%lld,%lld,%lld,%lld", instance_data[instance].dwt_cmd_poll, instance_data[instance].dwt_cmd_final, instance_data[instance].cmd_poll_micro, instance_data[instance].cmd_final_micro);
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
 
 				if(instancesendpacket(psduLength, DWT_START_TX_DELAYED | instance_data[instance].wait4ack, instance_data[instance].delayedReplyTime))
 				{
@@ -1322,26 +1079,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_FINAL)
 			{
 				instance_data[instance].dwt_final_rx = dw_event.timeStamp;
-
-//				uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
-//				dwt_readsystime(sys_time_arr);
-//				uint64 dwt_time_now = 0;
-//				dwt_time_now = (uint64)sys_time_arr[0] +  	((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
-//
-//				instance_data[instance].dwt_final_cb = dwt_time_now;
-//				instance_data[instance].final_cb_micro = portGetTickCntMicro();
-
-
-//				uint8 debug_msg[100];//TODO remove
-//				int n = sprintf((char *)&debug_msg, "%lld,%lld,%lld,%lld", instance_data[instance].dwt_cmd_resp, instance_data[instance].dwt_final_cb, instance_data[instance].cmd_resp_micro, instance_data[instance].final_cb_micro);
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-
-//				uint8 debug_msg[100]; //TODO remove
-//				int n = sprintf((char *)&debug_msg, "%lld,%lld,%lld,%lld", instance_data[0].dwt_cmd_resp, instance_data[0].dwt_resp_tx, dw_event.timeStamp, dwt_time_now );
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run();
-
 			}
 
 			//we received response to our POLL, select oldest range UWB next poll
