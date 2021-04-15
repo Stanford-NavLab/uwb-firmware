@@ -596,6 +596,8 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 			// Write calculated TOF into response message
 			memcpy(&inst->report_msg.messageData[REPORT_TOF], &inst->tof[inst->uwbToRangeWith], 6);
+//			memcpy(&inst->report_msg.messageData[REPORT_RSL], &inst->iRSL[inst->uwbToRangeWith], sizeof(double));
+			memcpy(&inst->report_msg.messageData[REPORT_RSL], &inst->rxPWR, sizeof(double));
 			memcpy(&inst->report_msg.messageData[REPORT_ADDR], &inst->uwbList[inst->uwbToRangeWith], inst->addrByteSize);
 			inst->report_msg.seqNum = inst->frameSN++;
 
@@ -1004,22 +1006,10 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                             inst->tof[inst->uwbToRangeWith] = (int64) ( RaRbxDaDb/(RbyDb + RayDa) );
                             inst->newRangeUWBIndex = inst->uwbToRangeWith;
 
-							if(reportTOF(inst, inst->newRangeUWBIndex)==0)
+							if(reportTOF(inst, inst->newRangeUWBIndex, inst->rxPWR)==0)
 							{
 								inst->newRange = 1;
 							}
-
-
-
-//							double idist = instance_get_idist(inst->newRangeUWBIndex);
-//							int rng = (int)(idist*1000);
-//							int rng_raw = (int)(instance_get_idistraw(inst->newRangeUWBIndex)*1000);
-//
-//							uint8 debug_msg[100];//TODO remove
-//							int n = sprintf((char *)&debug_msg, "%lld,%lld,%lld,%lld,%lld,%lld,%08i,%08i", Ra, Db, Rb, Da, Ra-Db, Rb-Da, rng, rng_raw);
-//							send_usbmessage(&debug_msg[0], n);
-//							usb_run();
-
 
                             tdma_handler->uwbListTDMAInfo[inst->uwbToRangeWith].lastRange = portGetTickCnt();
 
@@ -1041,6 +1031,8 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 							//copy previously calculated ToF
 							memcpy(&inst->tof[anchor_index], &messageData[REPORT_TOF], 6);
+							memcpy(&inst->rxPWR, &messageData[REPORT_RSL], sizeof(double));
+
 
 							inst->newRangeAncAddress = instance_get_uwbaddr(anchor_index);
 							inst->newRangeTagAddress = instance_get_uwbaddr(tag_index);
@@ -1048,7 +1040,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 							inst->newRangeUWBIndex = anchor_index;
 							if(inst->tof[inst->newRangeUWBIndex] > 0) //if ToF == 0 - then no new range to report TODO is this true?
 							{
-								if(reportTOF(inst, inst->newRangeUWBIndex)==0)
+								if(reportTOF(inst, inst->newRangeUWBIndex, inst->rxPWR)==0)
 								{
 									inst->newRange = 1;
 								}
@@ -1217,7 +1209,7 @@ void instance_init_timings(void)
 
     // Compute frame lengths.
     // First step is preamble plus SFD length.
-    sfd_len = dwnsSFDlen[inst->configData.dataRate];
+    sfd_len = dwnsSFDlen[inst->configData.dataRate]; //TODO what if we are using standard SFD???
     switch (inst->configData.txPreambLength)
     {
     case DWT_PLEN_4096:
@@ -1281,10 +1273,21 @@ void instance_init_timings(void)
 	inst->finalReplyDelay = convertmicrosectodevicetimeu(duration);
     // Delay between blink reception and ranging init message transmission.
 	inst->rnginitReplyDelay = convertmicrosectodevicetimeu(MIN_DELAYED_TX_DLY_US + inst->storedPreLen_us); //rng_init tx cmd to rng_init tx ts
+
+	uint8 reply_margin_us = 25;
+	duration = 0;
+	duration += inst->frameLengths_us[POLL] - inst->storedPreLen_us + RX_TO_CB_DLY_US;		//resp rx timestamp to resp rx cb
+	duration += RX_CB_TO_TX_CMD_DLY_US + MIN_DELAYED_TX_DLY_US + inst->storedPreLen_us;		//resp rx cb to final tx timestamp
+	uint64 respDelay = convertmicrosectodevicetimeu(duration + reply_margin_us);
+
 	duration = 0;
 	duration += inst->frameLengths_us[RESP] - inst->storedPreLen_us + RX_TO_CB_DLY_US;		//resp rx timestamp to resp rx cb
 	duration += RX_CB_TO_TX_CMD_DLY_US + MIN_DELAYED_TX_DLY_US + inst->storedPreLen_us;		//resp rx cb to final tx timestamp
-	inst->respReplyDelay = convertmicrosectodevicetimeu(duration);
+	uint64 finalDelay = convertmicrosectodevicetimeu(duration + reply_margin_us);
+
+	//make reply times the same to minimize clock drift error. See Application Note APS011 for more information
+	inst->respReplyDelay = inst->finalReplyDelay = MAX(respDelay, finalDelay);
+
 
 	margin_us = 1000;
     //tx conf timeout durations
@@ -1369,6 +1372,8 @@ void instance_init_timings(void)
 	{
 		inst->smartPowerEn = 0;
 	}
+//    dwt_setsmarttxpower(0);//TODO
+//    inst->smartPowerEn = 0;
 }
 
 uint32 instance_getmessageduration_us(int data_length_bytes)

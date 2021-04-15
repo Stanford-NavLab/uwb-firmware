@@ -155,8 +155,262 @@ double convertdevicetimetosec8(uint8* dt)
     return f ;
 }
 
+double getrangebias_rng(uint8 channel, uint8 prf, double distance)
+{
+	float bias = 0;
+	distance *= 1000.0; //convert to mm
 
-int reportTOF(instance_data_t *inst, uint8 uwb_index)
+	if(channel == 2)
+	{
+		if(prf == DWT_PRF_16M) //00
+		{
+			if(distance < 40800.0)
+			{
+				double a1 = -0.536346023;
+				double b1 = -0.0000935073535;
+				double c1 = 6.47523309;
+				double d1 = -85.2803987;
+
+				bias = a1*exp(b1*distance + c1) + d1;
+			}
+			else if(distance < 91000.0)
+			{
+				double a2 = -0.279365897;
+				double b2 = -0.0000136494099;
+				double c2 = 7.21745083;
+				double d2 = 171.189077;
+
+				bias = a2*exp(b2*distance + c2) + d2;
+			}
+			else
+			{
+				double a2 = -0.279365897;
+				double b2 = -0.0000136494099;
+				double c2 = 7.21745083;
+				double d2 = 171.189077;
+
+				bias = a2*exp(b2*91000.0 + c2) + d2;
+			}
+		}
+		else if(prf == DWT_PRF_64M) //10
+		{
+			double a = -0.746580470;
+			double b = -0.000100581928;
+			double c = 5.66511916;
+			double d = -16.8215660;
+			double e = 6.85427230;
+
+			if(distance < 67000)
+			{
+				bias = a * exp(b*distance+c) + d;
+			}
+			else
+			{
+				bias = e;
+			}
+		}
+	}
+	else if(channel == 5)
+	{
+		if(prf == DWT_PRF_16M) //01
+		{
+			double m = -0.0127206623;
+			double bx = 589.971543;
+			double by = -365.378639;
+			double cx = 12543.2809;
+			double cy = -163.200647;
+			double a1 = -0.970942265;
+			double b1 = -0.0000284505196;
+			double c1 = 6.40529252;
+			double d1 = 112.149301;
+
+			double x40k = 40000.0;
+			double x91k = 91000.0;
+
+
+			if(distance < bx)
+			{
+				bias = (bx - distance)*m+by;
+			}
+			else if(distance < cx)
+			{
+				bias = (distance-bx)/(cx-bx)*(cy-by)+by;
+			}
+			else if(distance < x40k)
+			{
+				double y40k = a1*exp(b1*x40k+c1) + d1;
+				bias = (distance-cx)/(x40k-cx)*(y40k-cy)+cy;
+			}
+			else if(distance < x91k)
+			{
+				bias = a1*exp(b1*distance+c1) + d1;
+			}
+			else
+			{
+				bias = a1*exp(b1*x91k+c1) + d1;
+			}
+		}
+		else if(prf == DWT_PRF_64M) //11
+		{
+			double a = -0.922756193;
+			double b = -0.0000694702324;
+			double c = 5.57166578;
+			double d = 10.5099467;
+
+			bias = a*exp(b*distance+c) + d;
+		}
+	}
+
+	return bias/1000.0; //convert to meters
+}
+
+double getrangebias_rsl(uint8 channel, uint8 prf, double rsl)
+{
+	float bias = 0;
+
+	if(channel == 2)
+	{
+		if(prf == DWT_PRF_16M) //00
+		{
+			float m = -62.04;
+			float bx = -82.83;
+			float by = -129.82;
+			float cx = -90.05;
+			float cy = 28.16;
+			float dx = -92.40;
+			float dy = 49.44;
+
+			if(rsl > bx) //region 1
+			{
+				bias = (rsl-bx)*m+by;
+			}
+			else if(rsl > cx) //region 2
+			{
+				bias = (rsl-cx)/(bx-cx)*(by-cy)+cy;
+			}
+			else if(rsl > dx) //region 3
+			{
+				bias = (rsl-dx)/(cx-dx)*(cy-dy)+dy;
+			}
+			else //region 4
+			{
+				bias = dy;
+			}
+		}
+		else if(prf == DWT_PRF_64M) //10
+		{
+			double m = -45.48484848;
+			double bx = -80.62270464;
+			double by = -92.36287762;
+			double cx = -82.03729358;
+			double cy = -109.84714946;
+			double dx = -82.83220438;
+			double dy = -50.94116132;
+			double ex = -85.42920938;
+			double ey = -22.6320239;
+			double fx = -89.88519826;
+			double fy = -38.18332969;
+			double gx = -91.7826361;
+			double gy = 7.25759428;
+
+			if(rsl > bx) //region 1
+			{
+				bias = (rsl-bx)*m+by;
+			}
+			else if(rsl > cx) //region 2
+			{
+				bias = (rsl-cx)/(bx-cx)*(by-cy)+cy;
+			}
+			else if(rsl > dx) //region 3
+			{
+				bias = (rsl-dx)/(cx-dx)*(cy-dy)+dy;
+			}
+			else if(rsl > ex) //region 4
+			{
+				bias = (rsl-ex)/(dx-ex)*(dy-ey)+ey;
+			}
+			else if(rsl > fx) //region 5
+			{
+				bias = (rsl-fx)/(ex-fx)*(ey-fy)+fy;
+			}
+			else if(rsl > gx) //region 6
+			{
+				bias = (rsl-gx)/(fx-gx)*(fy-gy)+gy;
+			}
+			else //region 7
+			{
+				bias = gy;
+			}
+		}
+	}
+	else if(channel == 5)
+	{
+		if(prf == DWT_PRF_16M) //01
+		{
+			float m = -60.771777;
+			float bx = -84.68474012;
+			float by = -61.42658856;
+			float cx = -88.40823804;
+			float cy =  55.46391624;
+			float dx = -90.59395975;
+			float dy = 1.48597902;
+			float ex = -95.42385593;
+			float ey = -52.4786514;
+
+			if(rsl > bx) //region 1
+			{
+				bias = (rsl-bx)*m+by;
+			}
+			else if(rsl > cx) //region 2
+			{
+				bias = (rsl-cx)/(bx-cx)*(by-cy)+cy;
+			}
+			else if( rsl > dx) //region 3
+			{
+				bias = (rsl-dx)/(cx-dx)*(cy-dy)+dy;
+			}
+			else if(rsl > ex) //region 4
+			{
+				bias = (rsl-ex)/(dx-ex)*(dy-ey)+ey;
+			}
+			else //region 5
+			{
+				bias = ey;
+			}
+		}
+		else if(prf == DWT_PRF_64M) //11
+		{
+			double m = -54.53010908;
+			double bx = -81.65862959;
+			double by = -4.6428097;
+			double cx = -85.18994963;
+			double cy = 12.25860862;
+			double dx = -88.01254788;
+			double dy = -27.64410538;
+
+			if(rsl > bx) //region 1
+			{
+				bias = (rsl-bx)*m+by;
+			}
+			else if(rsl > cx) //region 2
+			{
+				bias = (rsl-bx)/(cx-bx)*(cy-by)+by;
+			}
+			else if(rsl > dx) //region 3
+			{
+				bias = (rsl-cx)/(dx-cx)*(dy-cy)+cy;
+			}
+			else //region 4
+			{
+				bias = dy;
+			}
+		}
+	}
+
+	return bias/1000.0; //convert to meters
+}
+
+int reportTOF(instance_data_t *inst, uint8 uwb_index, double rsl)
 {
 	//no TOF to report if not from a uwb that we are tracking
 	if(uwb_index > UWB_LIST_SIZE)
@@ -164,8 +418,9 @@ int reportTOF(instance_data_t *inst, uint8 uwb_index)
 		return -1;
 	}
 
-	double distance ;
-	double distance_to_correct ;
+	double distance_raw = 0;
+	double distance_rsl = 0;
+	double distance_rng = 0;
 	double tof ;
 	int64 tofi ;
 
@@ -179,44 +434,43 @@ int reportTOF(instance_data_t *inst, uint8 uwb_index)
 
 	// convert to seconds (as floating point)
 	tof = convertdevicetimetosec(tofi);
-	inst->idistanceraw[uwb_index] = distance = tof * SPEED_OF_LIGHT;
+	inst->idistanceraw[uwb_index] = distance_raw = tof * SPEED_OF_LIGHT;
 
 #if (CORRECT_RANGE_BIAS == 1)
-	//for the 6.81Mb data rate we assume gating gain of 6dB is used,
-	//thus a different range bias needs to be applied
-	//if(inst->configData.dataRate == DWT_BR_6M8)
-	if(inst->smartPowerEn)
-	{
-		//1.31 for channel 2 and 1.51 for channel 5
-		if(inst->configData.chan == 5)
-		{
-			distance_to_correct = distance/1.51;
-		}
-		else //channel 2
-		{
-			distance_to_correct = distance/1.31;
-		}
-	}
-	else
-	{
-		distance_to_correct = distance;
-	}
-	distance = distance - dwt_getrangebias(inst->configData.chan, (float) distance_to_correct, inst->configData.prf);
+
+	distance_rng = distance_raw - getrangebias_rng(inst->configData.chan, inst->configData.prf, distance_raw);
+	distance_rsl = distance_raw - getrangebias_rsl(inst->configData.chan, inst->configData.prf, rsl);
+
 #endif
 
-	if (distance > 20000.000)    // discount any items with error
+	int retval = 0;
+
+	if (distance_rng > 20000.000)    // discount any items with error
 	{
-		inst->idistance[uwb_index] = 0;
-		return -1;
+		distance_rng = 0;
+		retval = -1;
 	}
 
-	if(distance < 0){
-		distance = 0;
+	if (distance_rsl > 20000.000)    // discount any items with error
+	{
+		distance_rsl = 0;
+		retval = -1;
 	}
 
-	inst->idistance[uwb_index] = distance;
 
-    return 0;
+	if(distance_rng < 0){
+		distance_rng = 0;
+	}
+
+	if(distance_rsl < 0){
+		distance_rsl = 0;
+	}
+
+	inst->idistance[uwb_index] = distance_rng;
+	inst->idistancersl[uwb_index] = distance_rsl;
+	inst->iRSL[uwb_index] = rsl;
+
+    return retval;
 }// end of reportTOF
 
 
@@ -384,6 +638,13 @@ int instance_init(void)
 	}
 	instance_data[instance].newRangeUWBIndex = 0;
 
+	instance_data[instance].rslCnt = 0;
+	instance_data[instance].idxRSL = 0;
+	instance_data[instance].avgRSL = 0;
+	for(uint8 i=0; i<NUM_RSL_AVG; i++)
+	{
+		instance_data[instance].RSL[i] = 0;
+	}
 
 
     // Reset the IC (might be needed if not getting here from POWER ON)
@@ -494,15 +755,44 @@ void instance_config(instanceConfig_t *config)
     	instance_data[instance].rxAntennaDelay = instance_data[instance].txAntennaDelay = instance_data[instance].defaultAntennaDelay;
     }
 #else
-    instance_data[instance].txAntennaDelay = (uint16)TX_ANT_DELAY; //TODO channel selectable
-	instance_data[instance].rxAntennaDelay = (uint16)RX_ANT_DELAY;
+
+	if(instance_data[instance].configData.chan == 2)
+	{
+		if(instance_data[instance].configData.prf == DWT_PRF_16M) //00
+		{
+			instance_data[instance].txAntennaDelay = (uint16)TX_ANT_DELAY_00;
+			instance_data[instance].rxAntennaDelay = (uint16)RX_ANT_DELAY_00;
+		}
+		else if(instance_data[instance].configData.prf == DWT_PRF_64M) //10
+		{
+			instance_data[instance].txAntennaDelay = (uint16)TX_ANT_DELAY_10;
+			instance_data[instance].rxAntennaDelay = (uint16)RX_ANT_DELAY_10;
+		}
+	}
+	else if(instance_data[instance].configData.chan == 5)
+	{
+		if(instance_data[instance].configData.prf == DWT_PRF_16M) //01
+		{
+			instance_data[instance].txAntennaDelay = (uint16)TX_ANT_DELAY_01;
+			instance_data[instance].rxAntennaDelay = (uint16)RX_ANT_DELAY_01;
+		}
+		else if(instance_data[instance].configData.prf == DWT_PRF_64M) //11
+		{
+			instance_data[instance].txAntennaDelay = (uint16)TX_ANT_DELAY_11;
+			instance_data[instance].rxAntennaDelay = (uint16)RX_ANT_DELAY_11;
+		}
+	}
+
+
+//  instance_data[instance].txAntennaDelay = (uint16)TX_ANT_DELAY; //TODO channel selectable
+//	instance_data[instance].rxAntennaDelay = (uint16)RX_ANT_DELAY;
 #endif
 
 
 
     // -------------------------------------------------------------------------------------------------------------------
     // set the antenna delay, we assume that the RX is the same as TX.
-    dwt_setrxantennadelay(instance_data[instance].txAntennaDelay);
+    dwt_setrxantennadelay(instance_data[instance].rxAntennaDelay);
     dwt_settxantennadelay(instance_data[instance].txAntennaDelay);
 
     if((power == 0x0) || (power == 0xFFFFFFFF)) //if there are no calibrated values... need to use defaults
@@ -515,6 +805,54 @@ void instance_config(instanceConfig_t *config)
 
     //configure the tx spectrum parameters (power and PG delay)
     dwt_configuretxrf(&instance_data[instance].configTX);
+
+    //TODO remove!
+//    instance_data[instance].configTX.power = 0xE0E0E0E0; //OFF -89.7
+//    instance_data[instance].configTX.power = 0xE1E1E1E1; //0.5 -89.1
+//    instance_data[instance].configTX.power = 0xE3E3E3E3; //1.5 -
+//    instance_data[instance].configTX.power = 0xE5E5E5E5; //2.5 -
+//    instance_data[instance].configTX.power = 0xE7E7E7E7; //3.5 -
+//    instance_data[instance].configTX.power = 0xE9E9E9E9; //4.5 -
+//    instance_data[instance].configTX.power = 0xEBEBEBEB; //5.5 -
+//    instance_data[instance].configTX.power = 0xEDEDEDED; //6.5 - (cut out here at 5 meters)
+//    instance_data[instance].configTX.power = 0xEFEFEFEF; //7.5? -82.5
+//    instance_data[instance].configTX.power = 0xF1F1F1F1; //8.5 -
+//    instance_data[instance].configTX.power = 0xF3F3F3F3; //9.5 -
+//    instance_data[instance].configTX.power = 0xF5F5F5F5; //10.5 -
+//    instance_data[instance].configTX.power = 0xF7F7F7F7; //11.5 -
+//    instance_data[instance].configTX.power = 0xF9F9F9F9; //12.5 -
+//    instance_data[instance].configTX.power = 0xFBFBFBFB; //13.5 -
+//    instance_data[instance].configTX.power = 0xFDFDFDFD; //14.5 -
+//    instance_data[instance].configTX.power = 0xC1C1C1C1; //0.5 -78.7
+//    instance_data[instance].configTX.power = 0xFFFFFFFF; //15? -79.5
+//    instance_data[instance].configTX.power = 0xDFDFDFDF; //15? -78.3
+//    instance_data[instance].configTX.power = 0x01010101; //15.5 -78.5
+//    instance_data[instance].configTX.power = 0x03030303; //16.5 -
+//    instance_data[instance].configTX.power = 0x05050505; //17.5 -
+//    instance_data[instance].configTX.power = 0x07070707; //18.5 -
+//    instance_data[instance].configTX.power = 0x09090909; //19.5 -
+//    instance_data[instance].configTX.power = 0x0B0B0B0B; //20.5 -
+//    instance_data[instance].configTX.power = 0x0D0D0D0D; //21.5 -78.8
+//    instance_data[instance].configTX.power = 0x0F0F0F0F; //22.5 -
+//    instance_data[instance].configTX.power = 0x11111111; //23.5 -
+//    instance_data[instance].configTX.power = 0x13131313; //24.5 -
+//    instance_data[instance].configTX.power = 0x15151515; //25.5 -
+//    instance_data[instance].configTX.power = 0x17171717; //26.5 -
+//    instance_data[instance].configTX.power = 0x19191919; //27.5 -
+//    instance_data[instance].configTX.power = 0x1B1B1B1B; //28.5 -
+//    instance_data[instance].configTX.power = 0x1D1D1D1D; //29.5 -
+//    instance_data[instance].configTX.power = 0x1F1F1F1F; //30.5 -76.87
+
+    //everything with coarse gain 000 seems too high...
+//    instance_data[instance].configTX.power = 0xC0C0C0C0;   //0
+//    instance_data[instance].configTX.power = 0x00000000;   //15
+//    instance_data[instance].configTX.power = 0xA0A0A0A0; //2.5
+//    instance_data[instance].configTX.power = 0x80808080; //5.0
+
+
+
+//    dwt_configuretxrf(&instance_data[instance].configTX);
+
 
     instance_data[instance].antennaDelayChanged = 0;
 
@@ -529,9 +867,16 @@ void instance_config(instanceConfig_t *config)
 }
 
 
-double instance_get_idist(uint8 uwb_index) //get instantaneous range
+double instance_get_idist(uint8 uwb_index) //get instantaneous range corrected by distance
 {
     double x = instance_data[0].idistance[uwb_index];
+
+    return (x);
+}
+
+double instance_get_idistrsl(uint8 uwb_index) //get instantaneous range corrected by rsl
+{
+    double x = instance_data[0].idistancersl[uwb_index];
 
     return (x);
 }
@@ -539,6 +884,13 @@ double instance_get_idist(uint8 uwb_index) //get instantaneous range
 double instance_get_idistraw(uint8 uwb_index) //get instantaneous range
 {
     double x = instance_data[0].idistanceraw[uwb_index];
+
+    return (x);
+}
+
+double instance_get_irsl(uint8 uwb_index) //get instantaneous rsl
+{
+    double x = instance_data[0].iRSL[uwb_index];
 
     return (x);
 }
@@ -673,7 +1025,7 @@ void instance_txcallback(const dwt_cb_data_t *txd)
 	dw_event.typeSave = dw_event.type = DWT_SIG_TX_DONE ;
 
 
-	//NOTE: to avoid timestamping issues in the forums, we aren't using the DW1000 RX auto re-enable function.
+	//NOTE: to avoid timestamping issues reported in the forums, we aren't using the DW1000 RX auto re-enable function.
 	//Rather, we turn it back on here after every TX. However, logic in TA_RXE_WAIT needs wait4ack to be set
 	//to function correctly. We don't want it to try to start RX during reception.
 	dwt_forcetrxoff();
@@ -1019,8 +1371,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 
 				uint32 reply_time = ((dw_event.timeStamp + instance_data[instance].respReplyDelay) & MASK_TXDTS) >> 8;
 
-				//TODO put start_immediate definition back in (here)
-//				if(instancesendpacket(psduLength, DWT_START_TX_IMMEDIATE | instance_data[instance].wait4ack, 0))
 				if(instancesendpacket(psduLength, DWT_START_TX_DELAYED | instance_data[instance].wait4ack, reply_time))
 				{
 					instance_data[0].tx_anch_resp = FALSE;
@@ -1045,6 +1395,26 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 			}
 			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_ANCH_RESP)
 			{
+				// Embed into Final message: 40-bit pollTXTime,  40-bit respRxTime,  40-bit finalTxTime
+				uint64 tagCalculatedFinalTxTime; // time we should send the response
+				uint64 finalReplyDelay = instance_data[0].respReplyDelay;
+				tagCalculatedFinalTxTime = (dw_event.timeStamp + finalReplyDelay) & MASK_TXDTS;
+				instance_data[0].delayedReplyTime = tagCalculatedFinalTxTime >> 8;
+
+				// Calculate Time Final message will be sent and write this field of Final message
+				// Sending time will be delayedReplyTime, snapped to ~125MHz or ~250MHz boundary by
+				// zeroing its low 9 bits, and then having the TX antenna delay added
+				// getting antenna delay from the device and add it to the Calculated TX Time
+				tagCalculatedFinalTxTime = tagCalculatedFinalTxTime + instance_data[0].txAntennaDelay;
+				tagCalculatedFinalTxTime &= MASK_40BIT;
+
+				// Write Calculated TX time field of Final message
+				memcpy(&(instance_data[0].msg.messageData[FTXT]), (uint8 *)&tagCalculatedFinalTxTime, 5);
+				// Write Poll TX time field of Final message
+//				memcpy(&(instance_data[0].msg.messageData[PTXT]), (uint8 *)&dw_event.timeStamp, 5); TODO
+
+
+
 				//process RTLS_DEMO_MSG_ANCH_RESP immediately.
 				int psduLength = FINAL_FRAME_LEN_BYTES;
 
@@ -1078,7 +1448,83 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 			}
 			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_TAG_FINAL)
 			{
-				instance_data[instance].dwt_final_rx = dw_event.timeStamp;
+				dwt_rxdiag_t dwt_diag;
+				dwt_readdiagnostics(&dwt_diag);
+
+				uint8 RXPACC_NOSAT_OFFSET = 0x2C;
+				uint16 RXPACC_NOSAT = dwt_read16bitoffsetreg(DRX_CONF_ID, RXPACC_NOSAT_OFFSET);
+
+				//following adjustment from function Adjust_RXPACC in following link
+				//https://github.com/damaki/DW1000/blob/00da81fce9c11c2632c5776add0629971b1d5ba6/src/dw1000-reception_quality.adb
+				if(RXPACC_NOSAT == dwt_diag.rxPreamCount)
+				{
+					uint8 rxpacc_adj = 0;
+					instance_data[instance].acc_adj = 1;
+
+					if(instance_data[instance].configData.nsSFD == TRUE)
+					{
+						if(instance_data[instance].configData.dataRate == DWT_BR_110K)
+						{
+							rxpacc_adj = 82;
+						}
+						if(instance_data[instance].configData.dataRate == DWT_BR_850K)
+						{
+							rxpacc_adj = 18;
+						}
+						else //DWT_BR_6M8
+						{
+							rxpacc_adj = 10;
+						}
+					}
+					else
+					{
+						if(instance_data[instance].configData.dataRate == DWT_BR_110K){
+							rxpacc_adj = 64;
+						}
+						else //DWT_BR_850K or DWT_BR_6M8
+						{
+							rxpacc_adj = 5;
+						}
+					}
+
+					if (rxpacc_adj <= dwt_diag.rxPreamCount)
+					{
+						dwt_diag.rxPreamCount -= rxpacc_adj;
+					}
+
+				}
+				else
+				{
+					instance_data[instance].acc_adj = 0;
+				}
+
+
+				//10 log (C * 2^17 / N^2) - A
+				double C =(double)dwt_diag.maxGrowthCIR;
+				if (C <= 0.0)
+				{
+					C = 1;
+				}
+
+				double Nsquared = pow(dwt_diag.rxPreamCount,2);
+				if (Nsquared <= 0.0)
+				{
+					Nsquared = 1;
+				}
+
+				double A = 0;
+				if (instance_data[instance].configData.prf == DWT_PRF_16M)
+				{
+					A = 113.77;
+				}
+				else //DWT_PRF_64M
+				{
+					A = 121.74;
+				}
+
+				instance_data[instance].rxPWR = (double)(10.0*log10(C*pow(2,17)/Nsquared)) - A;
+
+				instance_data[instance].dwt_final_rx = dw_event.timeStamp; //TODO needed?
 			}
 
 			//we received response to our POLL, select oldest range UWB next poll

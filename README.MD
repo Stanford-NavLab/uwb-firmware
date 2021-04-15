@@ -77,10 +77,16 @@ The TX and RX delay values displayed are the calibration values set for the curr
 
 ```
 ADDR STATUS
-NXX FLXXX XX.XXm
+NXX HXX XX.XXm
 ```
 
-This is the final screen that will be displayed by the UWB. The address (ADDR) and status will be displayed on the top line. Status will be either SEARCHING or CONNECTED to show network connection status. The second line will display the most recent range measurement in meters along with some information related to network coordination. NXX is the number of neighboring UWBs (within communication distance of the UWB). NXX with alternate with HXX which is the number of hidden UWBs (not within communication distance of the UWB, but within communication distance of a neighboring UWB). FLXXX is the TDMA framelength.
+```
+ADDR STATUS
+XX.XXdB XX.XXm
+```
+
+These are final UWB screens and they displayed in an alternatin pattern. The address (ADDR) and status will be displayed on the top line. The status will be either SEARCHING or CONNECTED to show network connection status. The second line will display the most recent range measurement in meters along with some information related to network coordination. NXX is the number of neighboring UWBs (within communication distance of the UWB) and HXX is the number of hidden UWBs (not within communication distance of the UWB, but within communication distance of a neighboring UWB). XX.XXdB represents the extimated received signal level (RSL). The RSL displayed is the average of the last 50 estimations its primary use is in determining calibration distances.  
+
 
 ### Flashing the Binary
 

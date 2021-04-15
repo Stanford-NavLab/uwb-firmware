@@ -28,6 +28,8 @@ extern int usb_init(void);
 extern void usb_printconfig(int, uint8*, int);
 extern void send_usbmessage(uint8*, int);
 
+extern double dwt_getrangebias(uint8 chan, float range, uint8 prf);
+
 #define SOFTWARE_VER_STRING    "TDMA Version 1.0" //
 
 int instance_mode = DISCOVERY;
@@ -443,9 +445,12 @@ int dw_main(void)
 				int n;
 				updateLCD = TRUE;
 				//send the new range information to LCD and/or USB
-				double idist = instance_get_idist(inst->newRangeUWBIndex);
-				int rng = (int)(idist*1000);
+//				double idist_rng = instance_get_idist(inst->newRangeUWBIndex);
+//				double idist_rsl = instance_get_idistrsl(inst->newRangeUWBIndex);
+				int rng_rng = (int)(instance_get_idist(inst->newRangeUWBIndex)*1000);
+				int rng_rsl = (int)(instance_get_idistrsl(inst->newRangeUWBIndex)*1000);
 				int rng_raw = (int)(instance_get_idistraw(inst->newRangeUWBIndex)*1000);
+				int rsl = (int)(instance_get_irsl(inst->newRangeUWBIndex)*1000);
 
 				uint64 saddr = instance_get_addr();
 				uint64 aaddr = instancenewrangeancadd();
@@ -455,21 +460,74 @@ int dw_main(void)
 				{
 					//only update range on display if this UWB is one of the UWBs involved in the range measurement
 					if(memcmp(&saddr, &aaddr, sizeof(uint64)) == 0 || memcmp(&saddr, &taddr, sizeof(uint64)) == 0){
-						range_result = idist;
+//						range_result = instance_get_idist(inst->newRangeUWBIndex);
+						range_result = instance_get_idistrsl(inst->newRangeUWBIndex);
+//						range_result = rng_raw; TODO
 					}
+
+					inst->RSL[inst->idxRSL] = instance_get_irsl(inst->newRangeUWBIndex);
+					inst->idxRSL = (inst->idxRSL + 1)%NUM_RSL_AVG;
+
+
+					if(inst->rslCnt >= NUM_RSL_AVG)
+					{
+						inst->avgRSL = 0;
+						for(int j = 0; j < NUM_RSL_AVG; j++)
+						{
+							inst->avgRSL += inst->RSL[j];
+						}
+						inst->avgRSL /= NUM_RSL_AVG;
+					}
+					else
+					{
+						inst->avgRSL = 0;
+						inst->rslCnt++;
+					}
+
 				}
+
 
 //				//self address, ranging anchor address, ranging tag address, range TODO
 //				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X", saddr, aaddr, taddr, rng); //TODO make this 04 or something! (and update the interface nodes as well...)
-				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X", saddr, aaddr, taddr, rng);//TODO keep only this nominal one!
-//				n = sprintf((char*)&dataseq[0], "%08i", rng);
+//				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X", saddr, aaddr, taddr, rng);//TODO keep only this nominal one!
+//				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X", saddr, aaddr, taddr, rng_raw);
+//				n = sprintf((char*)&dataseq[0], "%08i, %08i, %08i", rng, rng_raw, rng-rng_raw);
+//				n = sprintf((char*)&dataseq[0], "%08i", rng_raw);
+//				n = sprintf((char*)&dataseq[0], "%08i, %08i, %08f", rng, rng_raw, inst->rxPWR);
+//				n = sprintf((char*)&dataseq[0], "%08i, %08f", rng_raw, inst->rxPWR);
 //				n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
-//
-//
+
+//				saddr, aaddr, taddr, rng_rsl, rng_rng, rng_raw, rsl //TODO
+				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X %08X %08X", saddr, aaddr, taddr, rng_rng, rng_rsl, rng_raw, rsl);//TODO keep only this nominal one!
 //
 //
 				send_usbmessage(&dataseq[0], n);
 				usb_run(); //TODO
+
+
+
+//				uint8 debug_msg[100];
+//				n = sprintf((char*)&debug_msg[0], "START");
+//				send_usbmessage(&debug_msg[0], n);
+//				usb_run(); //TODO
+//
+//				float distance = -0.50; //(-.5m to 300m)
+//				while(distance < 300.0){
+////					float distance_to_correct = distance/1.51;
+//					float distance_to_correct = distance;
+//					double bias = dwt_getrangebias(inst->configData.chan, distance_to_correct, inst->configData.prf);
+//
+//					//TODO set compiler options to optimize
+//					n = sprintf((char*)&debug_msg[0], "%f, %lf", distance, bias);
+//					send_usbmessage(&debug_msg[0], n);
+//					usb_run(); //TODO
+//					distance += 0.25;
+//				}
+//
+//				n = sprintf((char*)&debug_msg[0], "STOP");
+//				send_usbmessage(&debug_msg[0], n);
+//				usb_run(); //TODO
+
 			}
         }
 
@@ -506,6 +564,12 @@ int dw_main(void)
 				{
 					strcpy(status, "SEARCHING");
 					range_result = 0;
+					inst->avgRSL = 0;
+					for(int j = 0; j < NUM_RSL_AVG; j++)
+					{
+						inst->RSL[j] = 0;
+					}
+
 				}
 				else
 				{
@@ -523,12 +587,16 @@ int dw_main(void)
 					if(inst->addrByteSize == 8)
 					{
 						sprintf((char*)&dataseq[0], "%s       ", status);
-						sprintf((char*)&dataseq1[0], "N%02u FL%03u %05.2fm", num_neighbors, framelength, range_result);
+//						sprintf((char*)&dataseq1[0], "N%02u FL%03u %05.2fm", num_neighbors, framelength, range_result);
+						sprintf((char*)&dataseq1[0], "% 05.1fdB % 05.2fm", inst->avgRSL, range_result);
 					}
 					else
 					{
 						sprintf((char*)&dataseq[0], "%04llX %s", addr, status);
-						sprintf((char*)&dataseq1[0], "N%02u FL%03d %05.2fm", num_neighbors, framelength, range_result);
+//						sprintf((char*)&dataseq1[0], "N%02u FL%03d %05.2fm", num_neighbors, framelength, range_result); //TODO
+						sprintf((char*)&dataseq1[0], "% 05.1fdB % 05.2fm", inst->avgRSL, range_result);
+						//NXX FLXXX 00.00m //TODO
+						//RSL 00.00 00.00m
 					}
 				}
 				else //if(toggle == 2)
@@ -536,13 +604,16 @@ int dw_main(void)
 					if(inst->addrByteSize == 8)
 					{
 						sprintf((char*)&dataseq[0], "%016llX", addr);
-						sprintf((char*)&dataseq1[0], "H%02u FL%03u %05.2fm", num_neighbors, framelength, range_result);
+//						sprintf((char*)&dataseq1[0], "H%02u FL%03u %05.2fm", num_neighbors, framelength, range_result);
+						sprintf((char*)&dataseq1[0], "N%02u H%02u % 05.2fm", num_neighbors, num_hidden, range_result);
 					}
 					else
 					{
 
 						sprintf((char*)&dataseq[0], "%04llX %s", addr, status);
-						sprintf((char*)&dataseq1[0], "H%02u FL%03d %05.2fm", num_hidden, framelength, range_result);
+						sprintf((char*)&dataseq1[0], "N%02u H%02u % 05.2fm", num_neighbors, num_hidden, range_result);
+//						sprintf((char*)&dataseq1[0], "H%02u FL%03d %05.2fm", num_hidden, framelength, range_result);
+//						sprintf((char*)&dataseq1[0], "RSL%05.2f %05.2fm", inst->avgRSL, range_result);//TODO
 					}
 
 				}

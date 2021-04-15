@@ -123,6 +123,12 @@ typedef struct
     int64 tof[UWB_LIST_SIZE] ;
     double clockOffset ;
 
+    //RSL reporting
+    uint8 rslCnt;
+    uint8 idxRSL;
+    double RSL[NUM_RSL_AVG];
+    double avgRSL;
+
     //counts for debug
 	int txmsgcount;
 	int	rxmsgcount;
@@ -135,7 +141,9 @@ typedef struct
     uint64 newRangeTagAddress; //tag address for most recent ranging exchange
 
     double idistance[UWB_LIST_SIZE];
-    double idistanceraw[UWB_LIST_SIZE];
+    double idistancersl[UWB_LIST_SIZE];
+	double idistanceraw[UWB_LIST_SIZE];
+	double iRSL[UWB_LIST_SIZE];
 
 	uint8 uwbToRangeWith;	//it is the index of the uwbList array which contains the address of the UWB we are ranging with
     uint8 uwbListLen ;
@@ -158,6 +166,9 @@ typedef struct
 
 	uint32 rxCheckOnTime;
 
+	double rxPWR;
+	uint8 acc_adj;
+
 	instanceConfig_t chConfig[8];
 
 } instance_data_t ;
@@ -171,7 +182,9 @@ typedef struct
 //-------------------------------------------------------------------------------------------------------------
 
 // function to calculate and report the Time of Flight to the GUI/display
-int reportTOF(instance_data_t *inst, uint8 uwb_index);
+double getrangebias_rng(uint8 channel, uint8 prf, double distance);
+double getrangebias_rsl(uint8 channel, uint8 prf, double rsl);
+int reportTOF(instance_data_t *inst, uint8 uwb_index, double rsl);
 // clear the status/ranging data 
 void instanceclearcounts(void) ;
 void instclearuwblist(void);
@@ -234,14 +247,13 @@ int instancegetrole(void) ;
 uint32 instancereaddeviceid(void) ;                                 // Return Device ID reg, enables validation of physical device presence
 
 void instancerxon(instance_data_t *inst, int delayed, uint64 delayedReceiveTime);
-// double instance_get_adist(void);
 double instance_get_idist(uint8 uwb_index);
+double instance_get_idistrsl(uint8 uwb_index);
 double instance_get_idistraw(uint8 uwb_index);
-// int instance_get_lcount(void);
+double instance_get_irsl(uint8 uwb_index);
 
 uint64 instance_get_addr(void); //get own address (8 bytes)
 uint64 instance_get_uwbaddr(uint8 uwb_index); //get uwb address (8 bytes)
-// uint64 instance_get_anchaddr(void); //get anchor address (that sent the ToF)
 
 uint64 instancenewrangeancadd(void);
 uint64 instancenewrangetagadd(void);

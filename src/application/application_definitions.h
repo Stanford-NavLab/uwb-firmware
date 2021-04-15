@@ -15,40 +15,25 @@
 											//do not use a number larger than 80 if USING_64BIT_ADDR==1
 											//do not use a number larger than 80 if USING_64BIT_ADDR==0
 											//these are the largest UWB network sizes that the firmware will support.
-											//USING_64BIT_ADDR==1: Limiting factor is the max length of the INF messages
-											//USING_64BIT_ADDR==0: Limiting factor is the memory required to store TDMAInfo objects for each UWB
+											//when USING_64BIT_ADDR==1, limiting factor is the max length of the INF messages
+											//when USING_64BIT_ADDR==0, limiting factor is the memory required to store TDMAInfo objects for each UWB
 
 //TODO set all below to zero as default values
-#define SET_TXRX_DELAY 			1           //when set to 1 - the DW1000 RX and TX delays are set to the TX_DELAY and RX_DELAY defines
-#define TX_ANT_DELAY            16466
-#define RX_ANT_DELAY            16466			//TODO put reasonable initial value? add explanation
-//TODO have antenna delay per S1 channel config!
-//I still need to make it apply the settings below based on the S1 settings
-//S1 5-6-7 OFF-OFF-OFF
-#define TX_ANT_DELAY_000            0
-#define RX_ANT_DELAY_000            0
-//S1 5-6-7 OFF-OFF-ON
-#define TX_ANT_DELAY_001            0
-#define RX_ANT_DELAY_001            0
-//S1 5-6-7 OFF-ON-OFF
-#define TX_ANT_DELAY_010            0
-#define RX_ANT_DELAY_010            0
-//S1 5-6-7 OFF-ON-ON
-#define TX_ANT_DELAY_011            0
-#define RX_ANT_DELAY_011            0
-//S1 5-6-7 ON-OFF-OFF
-#define TX_ANT_DELAY_100            0
-#define RX_ANT_DELAY_100            0
-//S1 5-6-7 ON-OFF-ON
-#define TX_ANT_DELAY_101            0
-#define RX_ANT_DELAY_101            0
-//S1 5-6-7 ON-ON-OFF
-#define TX_ANT_DELAY_110            0
-#define RX_ANT_DELAY_110            0
-//S1 5-6-7 ON-ON-ON
-#define TX_ANT_DELAY_111            0
-#define RX_ANT_DELAY_111            0
+#define SET_TXRX_DELAY 			1           //when set to 1 - the DW1000 RX and TX delays are set to the TX_ANT_DELAY and RX_ANT_DELAY defines
 
+//Antenna delay per S1 channel config
+//S1 6-7 : OFF-OFF
+#define TX_ANT_DELAY_00            16454
+#define RX_ANT_DELAY_00            16454
+//S1 6-7 : OFF-ON
+#define TX_ANT_DELAY_01            16457
+#define RX_ANT_DELAY_01            16457
+//S1 6-7 : ON-OFF
+#define TX_ANT_DELAY_10            16462
+#define RX_ANT_DELAY_10            16462
+//S1 6-7 : ON-ON
+#define TX_ANT_DELAY_11            16456
+#define RX_ANT_DELAY_11            16456
 
 #define USING_64BIT_ADDR 		0	 		//when set to 0 - the DecaRanging application will use 16-bit addresses
 
@@ -56,9 +41,11 @@
 *******************************************************************************************************************
 *******************************************************************************************************************/
 
-#define SPEED_OF_LIGHT      	299702547.0 //299704644.539f //(299702547.0)     //  (299,792.458 km/s in vacuum) / (1.000293)  in m/s in air //TODO clean up
+#define SPEED_OF_LIGHT      	299702547.0  //in m/s in air
 
 #define CORRECT_RANGE_BIAS  (1)     // Compensate for small bias due to uneven accumulator growth at close up high power
+
+#define NUM_RSL_AVG         50      // Number of Received Signal Level values to average for front LCD display
 
 #define NUM_INST            1
 #define MASK_40BIT			(0x00FFFFFFFFFF)     // DW1000 counter is 40 bits
@@ -116,8 +103,8 @@ enum
 #define ANCH_RESPONSE_MSG_LEN               1		 		// FunctionCode(1)
 #define TAG_FINAL_MSG_LEN                   16              // FunctionCode(1), Poll_TxTime(5), Resp_RxTime(5), Final_TxTime(5)
 #define RNG_INIT_MSG_LEN					1				// FunctionCode(1)
-#define RNG_REPORT_MSG_LEN_SHORT		    9				// FunctionCode(1), time of flight (6), short address (2)
-#define RNG_REPORT_MSG_LEN_LONG		    	15				// FunctionCode(1), time of flight (6), long address (8)
+#define RNG_REPORT_MSG_LEN_SHORT		    17				// FunctionCode(1), time of flight (6), received signal level (8), short address (2)
+#define RNG_REPORT_MSG_LEN_LONG		    	23				// FunctionCode(1), time of flight (6), received signal level (8), long address (8)
 #define SYNC_MSG_LEN						8				// FunctionCode(1), framelength (1), time since frame start (6)
 
 #define MAX_MAC_MSG_DATA_LEN                (TAG_FINAL_MSG_LEN) //max message len of the above
@@ -212,7 +199,9 @@ enum
 
 // Range report byte offsets.
 #define REPORT_TOF                          1               // Offset to put ToF values in the report message.			  (6 bytes)
-#define REPORT_ADDR							7				// Offset to put address of other UWB involved in the range report (2 [short address] or 8 [long address] bytes)
+#define REPORT_RSL							7				// Offset to put RSL values in the report message
+#define REPORT_ADDR							15				// Offset to put address of other UWB involved in the range report (2 [short address] or 8 [long address] bytes)
+
 
 //Sync
 #define SYNC_FRAMELENGTH					1				// offset to put the framelength in the sync message
@@ -240,11 +229,10 @@ enum
 #define US_TO_SY_INT(x) (((x) * 10000) / 10256)
 
 
-#define RX_TO_CB_DLY_US 			50	//TODO is this right? should this be dependent on data???
+#define RX_TO_CB_DLY_US 			50
 #define RX_CB_TO_TX_CMD_DLY_US		220
 #define TX_CMD_TO_TX_CB_DLY_US		90	//doesn't include preamble, sfd, phr, and data. saw 81 to 87
 
-//TODO seems to not be long enough, failing on delayed TX... (could this value be dependant on UWB settings??? or does the note below accoutn for it. should I be including the preamble and sfd?)
 #define MIN_DELAYED_TX_DLY_US   	90	//doesn't include preamble and sfd. //80 is the minimum delay for delayed tx. anything shorter will cause failure
 
 
