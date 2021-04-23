@@ -143,38 +143,26 @@ The firmware definitions that control which values are loaded into the DW1000 ar
 ```
 #define SET_TXRX_DELAY              0
 
-//S1 5-6-7 OFF-OFF-OFF
-#define TX_ANT_DELAY_000            0
-#define RX_ANT_DELAY_000            0
-//S1 5-6-7 OFF-OFF-ON
-#define TX_ANT_DELAY_001            0
-#define RX_ANT_DELAY_001            0
-//S1 5-6-7 OFF-ON-OFF
-#define TX_ANT_DELAY_010            0
-#define RX_ANT_DELAY_010            0
-//S1 5-6-7 OFF-ON-ON
-#define TX_ANT_DELAY_011            0
-#define RX_ANT_DELAY_011            0
-//S1 5-6-7 ON-OFF-OFF
-#define TX_ANT_DELAY_100            0
-#define RX_ANT_DELAY_100            0
-//S1 5-6-7 ON-OFF-ON
-#define TX_ANT_DELAY_101            0
-#define RX_ANT_DELAY_101            0
-//S1 5-6-7 ON-ON-OFF
-#define TX_ANT_DELAY_110            0
-#define RX_ANT_DELAY_110            0
-//S1 5-6-7 ON-ON-ON
-#define TX_ANT_DELAY_111            0
-#define RX_ANT_DELAY_111            0
-
+//Antenna delay per S1 channel config
+//S1 6-7 : OFF-OFF
+#define TX_ANT_DELAY_00            0
+#define RX_ANT_DELAY_00            0
+//S1 6-7 : OFF-ON
+#define TX_ANT_DELAY_01            0
+#define RX_ANT_DELAY_01            0
+//S1 6-7 : ON-OFF
+#define TX_ANT_DELAY_10            0
+#define RX_ANT_DELAY_10            0
+//S1 6-7 : ON-ON
+#define TX_ANT_DELAY_11            0
+#define RX_ANT_DELAY_11            0
 ```
 
 For the calibration definitions to be applied, `SET_TXRX_DELAY` must be set to `1`. If set to `0`, the firmware will provide a reasonable guess of what the calibration values might be. For previously calibrated UWBs, the [calibration](calibration) directory contains text files with the calibration values which can be copied and pasted into the firmware prior to building. 
 
 The files in the calibration directory are listed by UWB address. Each UWB's address can be found by turning the LCD on and powering the UWB after the firmware has been loaded. After several seconds, either the long address (16 characters) or the short address (last 4 characters of the long address) will be displayed on the top row of the LCD.      
 
-**_NOTE:_** The calibration values differ for each combintaion of switch settings, S1-5, S1-6, and S1-7. 
+**_NOTE:_** The calibration values differ for each combintaion of switch settings S1-6 and S1-7. 
 When building and flashing the firmware be sure to copy/paste all of the calibration settings from the calibration file. After final calibration, make sure any changes are saved to the calibration files and uploaded to the repository.
 
 ### Firmware Definitions

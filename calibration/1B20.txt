@@ -1,24 +1,13 @@
-//S1 5-6-7 OFF-OFF-OFF
-#define TX_ANT_DELAY_000            0
-#define RX_ANT_DELAY_000            0
-//S1 5-6-7 OFF-OFF-ON
-#define TX_ANT_DELAY_001            0
-#define RX_ANT_DELAY_001            0
-//S1 5-6-7 OFF-ON-OFF
-#define TX_ANT_DELAY_010            0
-#define RX_ANT_DELAY_010            0
-//S1 5-6-7 OFF-ON-ON
-#define TX_ANT_DELAY_011            0
-#define RX_ANT_DELAY_011            0
-//S1 5-6-7 ON-OFF-OFF
-#define TX_ANT_DELAY_100            0
-#define RX_ANT_DELAY_100            0
-//S1 5-6-7 ON-OFF-ON
-#define TX_ANT_DELAY_101            0
-#define RX_ANT_DELAY_101            0
-//S1 5-6-7 ON-ON-OFF
-#define TX_ANT_DELAY_110            0
-#define RX_ANT_DELAY_110            0
-//S1 5-6-7 ON-ON-ON
-#define TX_ANT_DELAY_111            16456
-#define RX_ANT_DELAY_111            16456
+//Antenna delay per S1 channel config
+//S1 6-7 : OFF-OFF
+#define TX_ANT_DELAY_00            16466
+#define RX_ANT_DELAY_00            16466
+//S1 6-7 : OFF-ON
+#define TX_ANT_DELAY_01            16460
+#define RX_ANT_DELAY_01            16460
+//S1 6-7 : ON-OFF
+#define TX_ANT_DELAY_10            16469
+#define RX_ANT_DELAY_10            16469
+//S1 6-7 : ON-ON
+#define TX_ANT_DELAY_11            16464
+#define RX_ANT_DELAY_11            16464

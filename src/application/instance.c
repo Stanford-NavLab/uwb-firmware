@@ -20,10 +20,6 @@
 #include "lib.h"
 #include "instance.h"
 
-//#include "llist.h"
-
-
-
 extern void usb_run(void);
 extern int usb_init(void);
 extern void usb_printconfig(int, uint8*, int);
@@ -435,13 +431,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
             //blink frames with IEEE EUI-64 tag ID
 			inst->blinkmsg.seqNum = inst->frameSN++;
-
-//			dwt_setrxtimeout(0);                                    //units are 1.0256us TODO
-//		    dwt_setrxaftertxdelay(0);                               //units are 1.0256us
-//		    inst->wait4ack = DWT_RESPONSE_EXPECTED;
 			inst->wait4ack = 0;
-
-
 
         	dwt_writetxdata(psduLength, (uint8 *)  (&inst->blinkmsg), 0) ; // write the frame data
 			if(instancesendpacket(psduLength, DWT_START_TX_IMMEDIATE | inst->wait4ack, 0))
@@ -596,7 +586,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 			// Write calculated TOF into response message
 			memcpy(&inst->report_msg.messageData[REPORT_TOF], &inst->tof[inst->uwbToRangeWith], 6);
-//			memcpy(&inst->report_msg.messageData[REPORT_RSL], &inst->iRSL[inst->uwbToRangeWith], sizeof(double));
 			memcpy(&inst->report_msg.messageData[REPORT_RSL], &inst->rxPWR, sizeof(double));
 			memcpy(&inst->report_msg.messageData[REPORT_ADDR], &inst->uwbList[inst->uwbToRangeWith], inst->addrByteSize);
 			inst->report_msg.seqNum = inst->frameSN++;
@@ -620,7 +609,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 				inst->timeofTx = portGetTickCnt();
 
 				inst->txDoneTimeoutDuration = inst->durationReportTxDoneTimeout_ms;
-//				inst->canPrintUSB = TRUE; TODO
 				inst->canPrintLCD = FALSE;
 			}
 
@@ -1038,7 +1026,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 							inst->newRangeTagAddress = instance_get_uwbaddr(tag_index);
 
 							inst->newRangeUWBIndex = anchor_index;
-							if(inst->tof[inst->newRangeUWBIndex] > 0) //if ToF == 0 - then no new range to report TODO is this true?
+							if(inst->tof[inst->newRangeUWBIndex] > 0) //if ToF == 0 - then no new range to report
 							{
 								if(reportTOF(inst, inst->newRangeUWBIndex, inst->rxPWR)==0)
 								{
@@ -1209,7 +1197,7 @@ void instance_init_timings(void)
 
     // Compute frame lengths.
     // First step is preamble plus SFD length.
-    sfd_len = dwnsSFDlen[inst->configData.dataRate]; //TODO what if we are using standard SFD???
+    sfd_len = dwnsSFDlen[inst->configData.dataRate];
     switch (inst->configData.txPreambLength)
     {
     case DWT_PLEN_4096:
@@ -1372,8 +1360,6 @@ void instance_init_timings(void)
 	{
 		inst->smartPowerEn = 0;
 	}
-//    dwt_setsmarttxpower(0);//TODO
-//    inst->smartPowerEn = 0;
 }
 
 uint32 instance_getmessageduration_us(int data_length_bytes)

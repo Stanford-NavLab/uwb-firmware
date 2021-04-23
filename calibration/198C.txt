@@ -1,0 +1,13 @@
+//Antenna delay per S1 channel config
+//S1 6-7 : OFF-OFF
+#define TX_ANT_DELAY_00            16449
+#define RX_ANT_DELAY_00            16449
+//S1 6-7 : OFF-ON
+#define TX_ANT_DELAY_01            16446
+#define RX_ANT_DELAY_01            16446
+//S1 6-7 : ON-OFF
+#define TX_ANT_DELAY_10            16452
+#define RX_ANT_DELAY_10            16452
+//S1 6-7 : ON-ON
+#define TX_ANT_DELAY_11            16449
+#define RX_ANT_DELAY_11            16449

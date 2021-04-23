@@ -816,9 +816,7 @@ __INLINE void process_deca_irq(void)
     	dwt_isr();
 
     	count++;
-    	if(count > 10000){ //IRQ line stuck high, take remedial action. //TODO use a define
-//    		dwt_softreset();
-//    		reset_DW1000();
+    	if(count > 10000){ //IRQ line stuck high, take remedial action.
     		irq_stuck_callback();
     	}
 

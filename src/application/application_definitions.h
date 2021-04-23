@@ -9,8 +9,6 @@
 ********************* Definitions expected to be modified by end-user *********************************************
 *******************************************************************************************************************/
 
-//TODO put a compiled copy of this firmware in the root directory with SET_TXRX_DELAY 0
-
 #define UWB_LIST_SIZE		    10			//the maximum size of the UWB network
 											//do not use a number larger than 80 if USING_64BIT_ADDR==1
 											//do not use a number larger than 80 if USING_64BIT_ADDR==0
@@ -18,22 +16,21 @@
 											//when USING_64BIT_ADDR==1, limiting factor is the max length of the INF messages
 											//when USING_64BIT_ADDR==0, limiting factor is the memory required to store TDMAInfo objects for each UWB
 
-//TODO set all below to zero as default values
-#define SET_TXRX_DELAY 			1           //when set to 1 - the DW1000 RX and TX delays are set to the TX_ANT_DELAY and RX_ANT_DELAY defines
+#define SET_TXRX_DELAY 			0           //when set to 1 - the DW1000 RX and TX delays are set to the TX_ANT_DELAY and RX_ANT_DELAY defines
 
 //Antenna delay per S1 channel config
 //S1 6-7 : OFF-OFF
-#define TX_ANT_DELAY_00            16454
-#define RX_ANT_DELAY_00            16454
+#define TX_ANT_DELAY_00            0
+#define RX_ANT_DELAY_00            0
 //S1 6-7 : OFF-ON
-#define TX_ANT_DELAY_01            16457
-#define RX_ANT_DELAY_01            16457
+#define TX_ANT_DELAY_01            0
+#define RX_ANT_DELAY_01            0
 //S1 6-7 : ON-OFF
-#define TX_ANT_DELAY_10            16462
-#define RX_ANT_DELAY_10            16462
+#define TX_ANT_DELAY_10            0
+#define RX_ANT_DELAY_10            0
 //S1 6-7 : ON-ON
-#define TX_ANT_DELAY_11            16456
-#define RX_ANT_DELAY_11            16456
+#define TX_ANT_DELAY_11            0
+#define RX_ANT_DELAY_11            0
 
 #define USING_64BIT_ADDR 		0	 		//when set to 0 - the DecaRanging application will use 16-bit addresses
 

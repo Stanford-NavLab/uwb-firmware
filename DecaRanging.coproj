@@ -136,9 +136,9 @@
     <File name="Libraries/STM32F10x_StdPeriph_Driver/inc/stm32f10x_wwdg.h" path="Libraries/STM32F10x_StdPeriph_Driver/inc/stm32f10x_wwdg.h" type="1"/>
     <File name="src/decadriver/deca_device.c" path="src/decadriver/deca_device.c" type="1"/>
     <File name="Libraries/STM32F10x_StdPeriph_Driver/src/stm32f10x_exti.c" path="Libraries/STM32F10x_StdPeriph_Driver/src/stm32f10x_exti.c" type="1"/>
+    <File name="Libraries/STM32_USB_Device_Library/Core/inc/usbd_req.h" path="Libraries/STM32_USB_Device_Library/Core/inc/usbd_req.h" type="1"/>
     <File name="Libraries/STM32F10x_StdPeriph_Driver/inc/stm32f10x_adc.h" path="Libraries/STM32F10x_StdPeriph_Driver/inc/stm32f10x_adc.h" type="1"/>
     <File name="Libraries/STM32F10x_StdPeriph_Driver/src/stm32f10x_rtc.c" path="Libraries/STM32F10x_StdPeriph_Driver/src/stm32f10x_rtc.c" type="1"/>
-    <File name="Libraries/STM32_USB_Device_Library/Core/inc/usbd_req.h" path="Libraries/STM32_USB_Device_Library/Core/inc/usbd_req.h" type="1"/>
     <File name="Libraries/STM32F10x_StdPeriph_Driver/src/stm32f10x_fsmc.c" path="Libraries/STM32F10x_StdPeriph_Driver/src/stm32f10x_fsmc.c" type="1"/>
     <File name="src/usb/usb_conf.h" path="src/usb/usb_conf.h" type="1"/>
     <File name="Libraries/STM32_USB_OTG_Driver/inc/usb_otg.h" path="Libraries/STM32_USB_OTG_Driver/inc/usb_otg.h" type="1"/>

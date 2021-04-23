@@ -445,8 +445,6 @@ int dw_main(void)
 				int n;
 				updateLCD = TRUE;
 				//send the new range information to LCD and/or USB
-//				double idist_rng = instance_get_idist(inst->newRangeUWBIndex);
-//				double idist_rsl = instance_get_idistrsl(inst->newRangeUWBIndex);
 				int rng_rng = (int)(instance_get_idist(inst->newRangeUWBIndex)*1000);
 				int rng_rsl = (int)(instance_get_idistrsl(inst->newRangeUWBIndex)*1000);
 				int rng_raw = (int)(instance_get_idistraw(inst->newRangeUWBIndex)*1000);
@@ -460,9 +458,7 @@ int dw_main(void)
 				{
 					//only update range on display if this UWB is one of the UWBs involved in the range measurement
 					if(memcmp(&saddr, &aaddr, sizeof(uint64)) == 0 || memcmp(&saddr, &taddr, sizeof(uint64)) == 0){
-//						range_result = instance_get_idist(inst->newRangeUWBIndex);
 						range_result = instance_get_idistrsl(inst->newRangeUWBIndex);
-//						range_result = rng_raw; TODO
 					}
 
 					inst->RSL[inst->idxRSL] = instance_get_irsl(inst->newRangeUWBIndex);
@@ -486,48 +482,11 @@ int dw_main(void)
 
 				}
 
+//				n = sprintf((char*)&dataseq[0], "%08i, %08i, %08i, %08f", rng_rng, rng_rsl, rng_raw, rsl/1000.0);
+				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X %08X %08X", saddr, aaddr, taddr, rng_rng, rng_rsl, rng_raw, rsl);
 
-//				//self address, ranging anchor address, ranging tag address, range TODO
-//				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X", saddr, aaddr, taddr, rng); //TODO make this 04 or something! (and update the interface nodes as well...)
-//				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X", saddr, aaddr, taddr, rng);//TODO keep only this nominal one!
-//				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X", saddr, aaddr, taddr, rng_raw);
-//				n = sprintf((char*)&dataseq[0], "%08i, %08i, %08i", rng, rng_raw, rng-rng_raw);
-//				n = sprintf((char*)&dataseq[0], "%08i", rng_raw);
-//				n = sprintf((char*)&dataseq[0], "%08i, %08i, %08f", rng, rng_raw, inst->rxPWR);
-//				n = sprintf((char*)&dataseq[0], "%08i, %08f", rng_raw, inst->rxPWR);
-//				n = sprintf((char*)&dataseq[0], "RANGE_COMPLETE,%04llX,%04llX", taddr, aaddr);
-
-//				saddr, aaddr, taddr, rng_rsl, rng_rng, rng_raw, rsl //TODO
-				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X %08X %08X", saddr, aaddr, taddr, rng_rng, rng_rsl, rng_raw, rsl);//TODO keep only this nominal one!
-//
-//
 				send_usbmessage(&dataseq[0], n);
-				usb_run(); //TODO
-
-
-
-//				uint8 debug_msg[100];
-//				n = sprintf((char*)&debug_msg[0], "START");
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run(); //TODO
-//
-//				float distance = -0.50; //(-.5m to 300m)
-//				while(distance < 300.0){
-////					float distance_to_correct = distance/1.51;
-//					float distance_to_correct = distance;
-//					double bias = dwt_getrangebias(inst->configData.chan, distance_to_correct, inst->configData.prf);
-//
-//					//TODO set compiler options to optimize
-//					n = sprintf((char*)&debug_msg[0], "%f, %lf", distance, bias);
-//					send_usbmessage(&debug_msg[0], n);
-//					usb_run(); //TODO
-//					distance += 0.25;
-//				}
-//
-//				n = sprintf((char*)&debug_msg[0], "STOP");
-//				send_usbmessage(&debug_msg[0], n);
-//				usb_run(); //TODO
-
+				usb_run();
 			}
         }
 
@@ -580,23 +539,17 @@ int dw_main(void)
 				dataseq[0] = 0x2 ;  //return cursor home
 				writetoLCD( 1, 0,  dataseq);
 
-				struct TDMAHandler *tdma_handler = tdma_get_local_structure_ptr();
-				uint8 framelength = tdma_handler->uwbListTDMAInfo[0].framelength;
 				if(toggle == 1)
 				{
 					if(inst->addrByteSize == 8)
 					{
 						sprintf((char*)&dataseq[0], "%s       ", status);
-//						sprintf((char*)&dataseq1[0], "N%02u FL%03u %05.2fm", num_neighbors, framelength, range_result);
 						sprintf((char*)&dataseq1[0], "% 05.1fdB % 05.2fm", inst->avgRSL, range_result);
 					}
 					else
 					{
 						sprintf((char*)&dataseq[0], "%04llX %s", addr, status);
-//						sprintf((char*)&dataseq1[0], "N%02u FL%03d %05.2fm", num_neighbors, framelength, range_result); //TODO
 						sprintf((char*)&dataseq1[0], "% 05.1fdB % 05.2fm", inst->avgRSL, range_result);
-						//NXX FLXXX 00.00m //TODO
-						//RSL 00.00 00.00m
 					}
 				}
 				else //if(toggle == 2)
@@ -604,7 +557,6 @@ int dw_main(void)
 					if(inst->addrByteSize == 8)
 					{
 						sprintf((char*)&dataseq[0], "%016llX", addr);
-//						sprintf((char*)&dataseq1[0], "H%02u FL%03u %05.2fm", num_neighbors, framelength, range_result);
 						sprintf((char*)&dataseq1[0], "N%02u H%02u % 05.2fm", num_neighbors, num_hidden, range_result);
 					}
 					else
@@ -612,8 +564,6 @@ int dw_main(void)
 
 						sprintf((char*)&dataseq[0], "%04llX %s", addr, status);
 						sprintf((char*)&dataseq1[0], "N%02u H%02u % 05.2fm", num_neighbors, num_hidden, range_result);
-//						sprintf((char*)&dataseq1[0], "H%02u FL%03d %05.2fm", num_hidden, framelength, range_result);
-//						sprintf((char*)&dataseq1[0], "RSL%05.2f %05.2fm", inst->avgRSL, range_result);//TODO
 					}
 
 				}

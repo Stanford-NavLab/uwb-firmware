@@ -782,10 +782,6 @@ void instance_config(instanceConfig_t *config)
 			instance_data[instance].rxAntennaDelay = (uint16)RX_ANT_DELAY_11;
 		}
 	}
-
-
-//  instance_data[instance].txAntennaDelay = (uint16)TX_ANT_DELAY; //TODO channel selectable
-//	instance_data[instance].rxAntennaDelay = (uint16)RX_ANT_DELAY;
 #endif
 
 
@@ -805,54 +801,6 @@ void instance_config(instanceConfig_t *config)
 
     //configure the tx spectrum parameters (power and PG delay)
     dwt_configuretxrf(&instance_data[instance].configTX);
-
-    //TODO remove!
-//    instance_data[instance].configTX.power = 0xE0E0E0E0; //OFF -89.7
-//    instance_data[instance].configTX.power = 0xE1E1E1E1; //0.5 -89.1
-//    instance_data[instance].configTX.power = 0xE3E3E3E3; //1.5 -
-//    instance_data[instance].configTX.power = 0xE5E5E5E5; //2.5 -
-//    instance_data[instance].configTX.power = 0xE7E7E7E7; //3.5 -
-//    instance_data[instance].configTX.power = 0xE9E9E9E9; //4.5 -
-//    instance_data[instance].configTX.power = 0xEBEBEBEB; //5.5 -
-//    instance_data[instance].configTX.power = 0xEDEDEDED; //6.5 - (cut out here at 5 meters)
-//    instance_data[instance].configTX.power = 0xEFEFEFEF; //7.5? -82.5
-//    instance_data[instance].configTX.power = 0xF1F1F1F1; //8.5 -
-//    instance_data[instance].configTX.power = 0xF3F3F3F3; //9.5 -
-//    instance_data[instance].configTX.power = 0xF5F5F5F5; //10.5 -
-//    instance_data[instance].configTX.power = 0xF7F7F7F7; //11.5 -
-//    instance_data[instance].configTX.power = 0xF9F9F9F9; //12.5 -
-//    instance_data[instance].configTX.power = 0xFBFBFBFB; //13.5 -
-//    instance_data[instance].configTX.power = 0xFDFDFDFD; //14.5 -
-//    instance_data[instance].configTX.power = 0xC1C1C1C1; //0.5 -78.7
-//    instance_data[instance].configTX.power = 0xFFFFFFFF; //15? -79.5
-//    instance_data[instance].configTX.power = 0xDFDFDFDF; //15? -78.3
-//    instance_data[instance].configTX.power = 0x01010101; //15.5 -78.5
-//    instance_data[instance].configTX.power = 0x03030303; //16.5 -
-//    instance_data[instance].configTX.power = 0x05050505; //17.5 -
-//    instance_data[instance].configTX.power = 0x07070707; //18.5 -
-//    instance_data[instance].configTX.power = 0x09090909; //19.5 -
-//    instance_data[instance].configTX.power = 0x0B0B0B0B; //20.5 -
-//    instance_data[instance].configTX.power = 0x0D0D0D0D; //21.5 -78.8
-//    instance_data[instance].configTX.power = 0x0F0F0F0F; //22.5 -
-//    instance_data[instance].configTX.power = 0x11111111; //23.5 -
-//    instance_data[instance].configTX.power = 0x13131313; //24.5 -
-//    instance_data[instance].configTX.power = 0x15151515; //25.5 -
-//    instance_data[instance].configTX.power = 0x17171717; //26.5 -
-//    instance_data[instance].configTX.power = 0x19191919; //27.5 -
-//    instance_data[instance].configTX.power = 0x1B1B1B1B; //28.5 -
-//    instance_data[instance].configTX.power = 0x1D1D1D1D; //29.5 -
-//    instance_data[instance].configTX.power = 0x1F1F1F1F; //30.5 -76.87
-
-    //everything with coarse gain 000 seems too high...
-//    instance_data[instance].configTX.power = 0xC0C0C0C0;   //0
-//    instance_data[instance].configTX.power = 0x00000000;   //15
-//    instance_data[instance].configTX.power = 0xA0A0A0A0; //2.5
-//    instance_data[instance].configTX.power = 0x80808080; //5.0
-
-
-
-//    dwt_configuretxrf(&instance_data[instance].configTX);
-
 
     instance_data[instance].antennaDelayChanged = 0;
 
@@ -1038,20 +986,6 @@ void instance_txcallback(const dwt_cb_data_t *txd)
 	{
 		instance_data[0].tx_poll = FALSE;
 
-		// Embed into Final message: 40-bit pollTXTime,  40-bit respRxTime,  40-bit finalTxTime
-		uint64 tagCalculatedFinalTxTime; // time we should send the response
-		tagCalculatedFinalTxTime = (dw_event.timeStamp + instance_data[0].finalReplyDelay) & MASK_TXDTS;
-		instance_data[0].delayedReplyTime = tagCalculatedFinalTxTime >> 8;
-
-		// Calculate Time Final message will be sent and write this field of Final message
-		// Sending time will be delayedReplyTime, snapped to ~125MHz or ~250MHz boundary by
-		// zeroing its low 9 bits, and then having the TX antenna delay added
-		// getting antenna delay from the device and add it to the Calculated TX Time
-		tagCalculatedFinalTxTime = tagCalculatedFinalTxTime + instance_data[0].txAntennaDelay;
-		tagCalculatedFinalTxTime &= MASK_40BIT;
-
-		// Write Calculated TX time field of Final message
-		memcpy(&(instance_data[0].msg.messageData[FTXT]), (uint8 *)&tagCalculatedFinalTxTime, 5);
 		// Write Poll TX time field of Final message
 		memcpy(&(instance_data[0].msg.messageData[PTXT]), (uint8 *)&dw_event.timeStamp, 5);
 	}
@@ -1410,9 +1344,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 
 				// Write Calculated TX time field of Final message
 				memcpy(&(instance_data[0].msg.messageData[FTXT]), (uint8 *)&tagCalculatedFinalTxTime, 5);
-				// Write Poll TX time field of Final message
-//				memcpy(&(instance_data[0].msg.messageData[PTXT]), (uint8 *)&dw_event.timeStamp, 5); TODO
-
 
 
 				//process RTLS_DEMO_MSG_ANCH_RESP immediately.
@@ -1524,7 +1455,7 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 
 				instance_data[instance].rxPWR = (double)(10.0*log10(C*pow(2,17)/Nsquared)) - A;
 
-				instance_data[instance].dwt_final_rx = dw_event.timeStamp; //TODO needed?
+				instance_data[instance].dwt_final_rx = dw_event.timeStamp;
 			}
 
 			//we received response to our POLL, select oldest range UWB next poll
