@@ -13,7 +13,7 @@
 
 ### Overview
 
-This software is a modification of the firmware supplied by Decawave for their EVK1000 evaluation board. The main enhancement provided by this software is network coordination which enables the UWBs to take turns ranging with each other. UWBs can be added and removed from the network in an ad-hoc manner and the network will reconfigure to optimize ranging cycle frequency. Additionally, ranging measurements are broadcast to the network so each UWB is aware of the ranging measurements between each UWB pair in its proximity &mdash eliminating the need for a secondary communication channel. 
+This software is a modification of the firmware supplied by Decawave for their EVK1000 evaluation board. The main enhancement provided by this software is network coordination which enables the UWBs to take turns ranging with each other. UWBs can be added and removed from the network in an ad-hoc manner and the network will reconfigure to optimize the rate of ranging between each UWB pair. Additionally, ranging measurements are broadcast to the network so each UWB is aware of the ranging measurements between each UWB pair in its proximity &mdash eliminating the need for a secondary communication channel. 
 <br/>
 <br/>
 Using the UWBs is simple. Once a UWB has been flashed with the firmware and the switches have been configured, simply apply power to two ore more UWBs and they will begin ranging with each other. The ranging data can then be accessed via USB. The `uwb_interface` ROS package to written to read the USB ranging data and publish it to a ROS node.
@@ -35,8 +35,8 @@ Switch | Function             | OFF              | ON               | Notes
 S1-1   |                      |                  | Required         |
 S1-2   |                      | Required         |                  |
 S1-3   |                      |                  | Required         | 
-S1-4   | Onboard LCD          | OFF              | ON               | Consumes more power and reduces ranging cycle frequency when ON
-S1-5   | Data Rate / Preamble | 110 kbps / 1024  | 6.8 Mbps / 128   | OFF increases max range but reduces ranging cycle frequency
+S1-4   | Onboard LCD          | OFF              | ON               | Consumes more power and reduces rate when ON
+S1-5   | Data Rate / Preamble | 110 kbps / 1024  | 6.8 Mbps / 128   | OFF increases max range but reduces ranging rate
 S1-6   | PRF                  | 16               | 64               | 
 S1-7   | Channel              | 2 (3993.6 MHz)   | 5 (6489.6 MHz)   | OFF increases range and signal penetration but ON may have less interference      
 S1-8   |                      | Required         |                  | 
@@ -47,11 +47,11 @@ S1-8   |                      | Required         |                  |
 
 ### LCD
 
-The onboard LCD is toggled via the S1-4 microswitch. The LCD is expected to be off during nominal operations since it increases power consumption and decreases ranging cycle frequency. If enabled, the LCD will display a series of screens on boot. 
+The onboard LCD is toggled via the S1-4 microswitch. The LCD is expected to be off during nominal operations since it increases power consumption and decreases ranging rate. If enabled, the LCD will display a series of screens on boot. 
 
 ```
 GGRG UWB RANGING
-TDMA Version 1.0
+TDMA Version 1.1
 ```
 This screen displays the firmware version number.
 
@@ -85,7 +85,7 @@ ADDR STATUS
 XX.XXdB XX.XXm
 ```
 
-These are final UWB screens and they displayed in an alternatin pattern. The address (ADDR) and status will be displayed on the top line. The status will be either SEARCHING or CONNECTED to show network connection status. The second line will display the most recent range measurement in meters along with some information related to network coordination. NXX is the number of neighboring UWBs (within communication distance of the UWB) and HXX is the number of hidden UWBs (not within communication distance of the UWB, but within communication distance of a neighboring UWB). XX.XXdB represents the extimated received signal level (RSL). The RSL displayed is the average of the last 50 estimations its primary use is in determining calibration distances.  
+These are final UWB screens and they displayed in an alternating pattern. The address (ADDR) and status will be displayed on the top line. The status will be either SEARCHING or CONNECTED to show network connection status. The second line will display the most recent range measurement in meters along with some information related to network coordination. NXX is the number of neighboring UWBs (within communication distance of the UWB) and HXX is the number of hidden UWBs (not within communication distance of the UWB, but within communication distance of a neighboring UWB). XX.XXdB represents the extimated received signal level (RSL). The RSL displayed is the average of the last 50 estimations its primary use is in determining calibration distances.  
 
 
 ### Flashing the Binary
@@ -123,20 +123,20 @@ Then simply click the *Build* button and the EVK1000/Debug/bin/ directory will b
 
 ### Interfacing with Linux
 
-The UWB ranging data is accessable via USB. The `uwb_interface` ROS package for interfacing with UWB can be found in the `tx2-ros-examples` repository. It is run using the following:
+The UWB ranging data is accessable via USB. The `uwb_interface` ROS package for interfacing with UWB can be found in the `[uwb-ros](https://github.com/Stanford-NavLab/uwb-ros) repository. It is run using the following:
 
 ```
 rosrun uwb_interface uwb_interface_node -p /dev/ttyAMC0
 ```
 
 **_NOTE:_** Roscore must be running first. <br/>
-**_NOTE:_** The argument after `-p` is the path to the USB port connection and may not be the same as listed above. See the `tx2-ros-examples` repository for more information.
+**_NOTE:_** The argument after `-p` is the path to the USB port connection and may not be the same as listed above. See the [uwb-ros](https://github.com/Stanford-NavLab/uwb-ros) repository for more information.
 
 ### Calibration
 
 The ranging algorithm depends on RX and TX timestamps to accurately determine the time-of-flight (from which distance is derived) of the communications signals. For the distance calculations to be accurate, the signal propogation time from the antenna to the DW1000 transceiver (RX delay) and from the DW1000 to the antenna (TX delay) must be accounted for. The UWB firmware is responsible for loading the calibration values into the DW1000 transceiver at boot, so the proper settings should be set when building the firmware.
 
-**_NOTE:_** Step-by-step instructions for performing the RX and TX delay calibration can be found in the `uwb_delay_calibration` package of the `tx2-ros-examples` repository
+**_NOTE:_** Step-by-step instructions for performing the RX and TX delay calibration can be found in the `uwb_delay_calibration` package of the [uwb-ros](https://github.com/Stanford-NavLab/uwb-ros) repository
 
 The firmware definitions that control which values are loaded into the DW1000 are found near the top of [src/applicaiton/application_definitions.h](src/applicaiton/application_definitions.h). The default (uncalibrated) values are shown below
 
@@ -169,6 +169,6 @@ When building and flashing the firmware be sure to copy/paste all of the calibra
 
 Near the top of the [src/applicaiton/application_definitions.h](src/applicaiton/application_definitions.h) file is a section marked *Definitions expected to be modified by end-user*. Most of them are detailed in the [Calibration](#calibration) section. The rest are described here.
 
-`UWB_LIST_SIZE` is used to specify the maximum network size. Setting this number to a larger value will increase the allowable network size but will decrease the ranging cycle frequency, regardless of how many UWBs are actually connected. To maximise ranging cycle frequency, set this value no larger than the expected network size. The default value is 10. Due to hardware and firmware limitations, it should not be set greater than 80. 
+`UWB_LIST_SIZE` is used to specify the maximum network size. Setting this number to a larger value will increase the allowable network size but will decrease the rate of ranging between UWB pairs, regardless of how many UWBs are actually connected. To maximise ranging rate, set this value no larger than the expected network size. The default value is 10. Due to hardware and firmware limitations, it should not be set greater than 80. 
 
-`USING_64BIT_ADDR` is used to specify whether to use 64-bit (long) or 16-bit (short) addresses. In general, 16-bit addresses should be used. It requires less data to be transmitted, increasing ranging cycle frequency, and decreasing power consumption. The only case where 64-bit addresses must be used is when two or more UWBs share the same short address.
+`USING_64BIT_ADDR` is used to specify whether to use 64-bit (long) or 16-bit (short) addresses. In general, 16-bit addresses should be used. It requires less data to be transmitted, increasing ranging rate, and decreases power consumption. The only case where 64-bit addresses must be used is when two or more UWBs share the same short address.

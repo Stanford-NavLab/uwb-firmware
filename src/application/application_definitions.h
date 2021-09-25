@@ -237,7 +237,7 @@ enum
 #define SLOT_BUFFER_EXP_TO_POLL_CMD_US		3*UWB_LIST_SIZE + 108 //found experimentally
 #define MEASURED_SLOT_DURATIONS_US			(float)(1.7814f*(float)(UWB_LIST_SIZE)*(float)(UWB_LIST_SIZE) + 29.39f*(float)(UWB_LIST_SIZE) + 1848.5f)	//found experimentally
 #define LCD_ENABLE_BUFFER_US				5000
-#define SLOT_END_BUFFER_US					0		          //increase if all messages do not fit into a slot
+#define SLOT_END_BUFFER_US					0 					  //increase if all messages do not fit into a slot //TODO set back to zero!
 #define BLINK_RX_CB_TO_RESP_TX_CMD_DLY_US	1450				  //found experimentally
 
 

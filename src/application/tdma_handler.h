@@ -48,6 +48,7 @@ struct TDMAHandler
 	uint32 slotDuration_us;
 	bool infSentThisSlot;
 	bool firstPollSentThisSlot;
+	bool firstPollResponse;
 	bool firstPollComplete;
 	bool secondPollSentThisSlot;
 	uint8 nthOldest;

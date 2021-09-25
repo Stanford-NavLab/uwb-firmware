@@ -1,7 +1,7 @@
 #include "tdma_handler.h"
 #include "port.h"
 #include "instance.h"
-//#include "lib.h"
+#include "lib.h"
 
 
 extern void usb_run(void);
@@ -24,6 +24,7 @@ static bool slot_transition(struct TDMAHandler *this)
 		{
 			transition = TRUE;
 			this->firstPollSentThisSlot = FALSE;
+			this->firstPollResponse = FALSE;
 			this->firstPollComplete = FALSE;
 			this->secondPollSentThisSlot = FALSE;
 			this->infSentThisSlot = FALSE;
@@ -70,6 +71,7 @@ static bool slot_transition(struct TDMAHandler *this)
 	{
 		this->infSentThisSlot = FALSE;
 		this->firstPollSentThisSlot = FALSE;
+		this->firstPollResponse = FALSE;
 		this->firstPollComplete = FALSE;
 		this->secondPollSentThisSlot = FALSE;
 	}
@@ -431,7 +433,7 @@ static bool tx_select(struct TDMAHandler *this)
 			this->firstPollSentThisSlot = TRUE;
 			inst->testAppState = TA_TXPOLL_WAIT_SEND;
 		}
-		else if(this->secondPollSentThisSlot == FALSE && this->firstPollComplete == FALSE)
+		else if(this->secondPollSentThisSlot == FALSE && this->firstPollComplete == FALSE && this->firstPollResponse == FALSE)
 		{
 			this->secondPollSentThisSlot = TRUE;
 			inst->testAppState = TA_TXPOLL_WAIT_SEND;
@@ -596,19 +598,15 @@ static void update_inf_tsfs(struct TDMAHandler *this)
 
 
 //General procedure for processing INF SUG, INF REG, and INF UPDATE (NOTE: slightly different for each INF_PROCESS_MODE)
-//1. Check for differences with locally stored TDMA assignment information
+//1. Check for differences with stored assignments
 //		(a) exit if none exist
-//2. Drop all slot assignments for self, neighbor, hidden, and twice hidden nodes that appear
+//2. Drop stored assignments for self, neighbor, hidden, and twice hidden nodes that appear
 //	 in the INF message
 //3. Copy all assignments for self, neighbors, hidden, and twice hidden nodes that appear
 //	 in the INF message
-//4. Check for conflicts with slot assignments for nodes not contained in the INF message.
-//		(a) if conflicts exist and self node is one of the conflicts, release all slot assignments
-//			from self and follow the procedure for a new node (Section 1.1), skipping the
-//			collect INF REG step.
-//		(b) if conflicts exist and node is not one of the conflicts, deconflict according to 1.2
-//5. Send INF UPDATE message at beginning of allocated slot (handled elsewhere)
-//process types... 1.) clear all and copy 2.) clear mentioned, copy 3.) copy
+//4. Check for conflicts between nodes in the INF message and nodes not in the INF message (excluding self) and deconflict using PDS
+//5. Release self slot assignments and follow PSA
+//6. Send INF message at beginning of allocated slot (handled elsewhere)
 //returns TRUE if a change was made to the TDMA assingments, FALSE if invalid message FCODE or process mode or if no TDMA changes made
 static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 srcIndex, INF_PROCESS_MODE mode)
 {
@@ -884,16 +882,14 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 			}
 		}
 
-		//check if self has any conflicts
-		if(this->self_conflict(this))
+		if(tdma_modified == TRUE)
 		{
+
 			//if so, release all assignments from self
 			this->free_slots(&this->uwbListTDMAInfo[0]);
 
 			//find self a new slot assignment
 			this->find_assign_slot(this);
-
-			tdma_modified = TRUE;
 		}
 	}
 
@@ -985,10 +981,6 @@ static bool assign_slot(struct TDMAInfo *info, uint8 slot, bool safeAssign)
 //4.) Double the Frame (DF)
 //		applicable if 2.) and 3.) not applicable
 //		double own framelength and go back to 2.)
-
-//procedure above doesn't seem to alwasy work, even for 3 UWBs... each assigned a slot out of four
-//1,2,3 find no slots to assign and 4 wont change that... will just double the frame forever...
-//actually it should work, because when we have double the framelength, the other uwbs virtually have two slots...
 static void find_assign_slot(struct TDMAHandler *this)
 {
 
@@ -1743,6 +1735,7 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 			this->discovery_mode_duration = (uint32)(get_dt64(time_now_us, latest_tnext)/1000);
 			this->discovery_mode_expires = TRUE;
 
+			this->free_slots(&this->uwbListTDMAInfo[0]);
 			this->deconflict_slot_assignments(this);
 			//assign self slot
 			this->find_assign_slot(this);
@@ -1828,37 +1821,42 @@ static bool check_timeouts(struct TDMAHandler *this)
 	bool updateINF = FALSE;
 	bool noNeighbors = FALSE;
 
+	uint8 max_framelength = 4;
+	for(int i=0; i < inst->uwbListLen; i++)
+	{
+		struct TDMAInfo *info = &this->uwbListTDMAInfo[i];
+		if (info->connectionType != UWB_LIST_SELF && info->connectionType != UWB_LIST_INACTIVE)
+		{
+			if(info->framelength > max_framelength)
+			{
+				max_framelength = info->framelength;
+			}
+		}
+	}
+	inst->durationUwbCommTimeout_ms = 2*max_framelength*CEIL_DIV(inst->durationSlotMax_us,1000);
 
 
 	for(int i=1; i < inst->uwbListLen; i++)//0 reserved for self, timeout not applicable
 	{
 		struct TDMAInfo *info = &this->uwbListTDMAInfo[i];
+		if(info->connectionType == UWB_LIST_INACTIVE)
+		{
+			continue;
+		}
 
 		switch (info->connectionType)
 		{
 			case UWB_LIST_NEIGHBOR:
 			{
+
+
+
 				delta_t = get_dt32(info->lastCommNeighbor, portGetTickCnt()); //get time now here in case rx interrupt occurs before get_dt call
 
 				if(delta_t > inst->durationUwbCommTimeout_ms)
 				{
-					if(info->lastCommHidden != 0)
-					{
-						info->connectionType = UWB_LIST_HIDDEN;
-						updateINF = TRUE;
-					}
-					else if(info->lastCommTwiceHidden != 0)
-					{
-						info->connectionType = UWB_LIST_TWICE_HIDDEN;
-						updateINF = TRUE;
-					}
-					else
-					{
-						info->connectionType = UWB_LIST_INACTIVE;
-						updateINF = TRUE;
-						setInactive = TRUE;
-						this->free_slots(info);
-					}
+					info->connectionType = UWB_LIST_HIDDEN;
+					updateINF = TRUE;
 
 					if(instfindnumneighbors(inst) <= 0)
 					{
@@ -1879,18 +1877,8 @@ static bool check_timeouts(struct TDMAHandler *this)
 
 				if(delta_t > inst->durationUwbCommTimeout_ms)
 				{
-					if(info->lastCommTwiceHidden != 0)
-					{
-						info->connectionType = UWB_LIST_TWICE_HIDDEN;
-						updateINF = TRUE;
-					}
-					else
-					{
-						info->connectionType = UWB_LIST_INACTIVE;
-						this->free_slots(info);
-						setInactive = TRUE;
-						updateINF = TRUE;
-					}
+					info->connectionType = UWB_LIST_TWICE_HIDDEN;
+					updateINF = TRUE;
 				}
 
 				break;
@@ -1905,6 +1893,9 @@ static bool check_timeouts(struct TDMAHandler *this)
 					this->free_slots(info);
 					setInactive = TRUE;
 					updateINF = TRUE;
+					info->lastCommNeighbor = 0;
+					info->lastCommHidden = 0;
+					info->lastCommTwiceHidden = 0;
 				}
 
 				break;
@@ -1934,7 +1925,6 @@ static bool check_timeouts(struct TDMAHandler *this)
 	{
 		this->populate_inf_msg(this, RTLS_DEMO_MSG_INF_UPDATE);
 	}
-
 
 	if(rangingUWBTimeout == TRUE)
 	{
@@ -2017,6 +2007,7 @@ static struct TDMAHandler new(uint64 slot_duration){
     ret.lastSlotStartTime64 = time_now_us;
     ret.infSentThisSlot = FALSE;
     ret.firstPollSentThisSlot = FALSE;
+    ret.firstPollResponse = FALSE;
     ret.firstPollComplete = FALSE;
     ret.secondPollSentThisSlot = FALSE;
     ret.nthOldest = 1;
@@ -2026,7 +2017,7 @@ static struct TDMAHandler new(uint64 slot_duration){
     ret.infMessageLength = 0;
 
     ret.enter_discovery_mode(&ret);
-    ret.collectInfDuration = ret.maxFramelength*ret.slotDuration_ms*2;
+    ret.collectInfDuration = ret.maxFramelength*ret.slotDuration_ms;
 	ret.waitInfDuration = ret.collectInfDuration;
 	ret.blinkPeriodRand = (uint32)rand()%BLINK_PERIOD_RAND_MS;
 

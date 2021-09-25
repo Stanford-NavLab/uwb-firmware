@@ -1329,6 +1329,11 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 			}
 			else if(dw_event.msgu.frame[fcode_index] == RTLS_DEMO_MSG_ANCH_RESP)
 			{
+				//if we have received a response, it's too late in the slot to try and poll with someone else in case we dont finish the exchange
+				//however, if the full exchange doesn't complete, we still want to broadcast an INF message
+				//set a flag here to indicate that we are past the point of no return
+				tdma_handler.firstPollResponse = TRUE;
+
 				// Embed into Final message: 40-bit pollTXTime,  40-bit respRxTime,  40-bit finalTxTime
 				uint64 tagCalculatedFinalTxTime; // time we should send the response
 				uint64 finalReplyDelay = instance_data[0].respReplyDelay;
@@ -1374,6 +1379,7 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 					instance_data[0].tx_final = TRUE;
 					dw_event.typePend = DWT_SIG_TX_PENDING ; // exit this interrupt and notify the application/instance that TX is in progress.
 					instance_data[instance].timeofTx = time_now;
+					instance_data[instance].timeofTxFinal = portGetTickCnt();
 					instance_data[instance].txDoneTimeoutDuration = instance_data[instance].durationFinalTxDoneTimeout_ms;
 				}
 			}
@@ -1457,9 +1463,6 @@ void instance_rxgoodcallback(const dwt_cb_data_t *rxd)
 
 				instance_data[instance].dwt_final_rx = dw_event.timeStamp;
 			}
-
-			//we received response to our POLL, select oldest range UWB next poll
-			tdma_handler.nthOldest = 1;
 
 			place_event = 1;
 		}

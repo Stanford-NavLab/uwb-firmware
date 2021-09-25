@@ -57,8 +57,10 @@ typedef struct
 	uint64 finalReplyDelay_us;
 	uint64 respReplyDelay;
 
-	//Receive Frame Wait Timeout Periods, units are 1.0256us (aus stands for near microsecond)
+	//Receive Frame Wait Timeout Periods, units are 1.0256us (nus stands for near microsecond)
 	uint16 durationPollTimeout_nus;		//rx timeout duration after tx poll
+	uint16 durationPollTimeout_ms;		//rx timeout duration after tx poll
+	uint16 durationFinalTimeout_ms;     //rx timeout duration after tx final
 
 	uint32 durationBlinkTxDoneTimeout_ms;   	//tx done timeout after tx blink
 	uint32 durationRngInitTxDoneTimeout_ms;   	//tx done timeout after tx rng_init
@@ -150,6 +152,8 @@ typedef struct
 	uint8 uwbList[UWB_LIST_SIZE][8];		//index 0 reserved for self, rest for other tracked uwbs
 
 	uint32 timeofTx;						//used to calculate tx done callback timeouts
+	uint32 timeofTxPoll;                    //used to calculate rx timeout after poll
+	uint32 timeofTxFinal;                   //used to calculate rx timeout after final
 	uint32 txDoneTimeoutDuration;			//duration used for tx done callback timeouts. (set differently for each tx message)
 
 	bool tx_poll;							//was the last tx message a POLL message?

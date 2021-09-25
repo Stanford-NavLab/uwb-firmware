@@ -30,7 +30,7 @@ extern void send_usbmessage(uint8*, int);
 
 extern double dwt_getrangebias(uint8 chan, float range, uint8 prf);
 
-#define SOFTWARE_VER_STRING    "TDMA Version 1.0" //
+#define SOFTWARE_VER_STRING    "TDMA Version 1.1" //
 
 int instance_mode = DISCOVERY;
 
@@ -85,6 +85,7 @@ uint32 inittestapplication(uint8 mode_switch)
     instance_init_s();
 	int dr_mode = decarangingmode(mode_switch);
 	instance_data_t* inst = instance_get_local_structure_ptr(0);
+	
 
     chan = inst->chConfig[dr_mode].channelNumber ;
     prf = (inst->chConfig[dr_mode].pulseRepFreq == DWT_PRF_16M)? 16 : 64 ;
@@ -139,7 +140,7 @@ void configure_continuous_txspectrum_mode(uint8 mode_switch)
 		writetoLCD(1, 0,  &command);
 		sprintf((char*)&dataseq[0], "Conti TX %s:%d:%d ", (mode_switch & SWS1_SHF_MODE) ? "S" : "L", chan, prf);
 		writetoLCD(LCD_BUFF_LEN, 1, dataseq); //send some data
-		memcpy(dataseq, (const uint8 *) "Spectrum Test   ", LCD_BUFF_LEN);
+		memcpy(dataseq, (const uint8 *) "Spectrum Test   ", 17);
 		writetoLCD(LCD_BUFF_LEN, 1, dataseq); //send some data
 	}
 
@@ -308,9 +309,9 @@ int dw_main(void)
 
 		memset(dataseq, 0x0, sizeof(dataseq));
 		writetoLCD(1, 0, dataseq);
-		memcpy(dataseq, (const uint8 *) "GGRG UWB RANGING", LCD_BUFF_LEN);
+		memcpy(dataseq, (const uint8 *) "GGRG UWB RANGING", 17);
 		writetoLCD(40, 1, dataseq); //send some data
-		memcpy(dataseq, (const uint8 *) SOFTWARE_VER_STRING, LCD_BUFF_LEN);
+		memcpy(dataseq, (const uint8 *) SOFTWARE_VER_STRING, 17);
 		writetoLCD(16, 1, dataseq); //send some data
 	}
 
@@ -343,9 +344,9 @@ int dw_main(void)
 			dataseq[0] = 0x2 ;  //return cursor home
 			writetoLCD(1, 0,  &dataseq[0]);
 			memset(dataseq, ' ', LCD_BUFF_LEN);
-			memcpy(dataseq, (const uint8 *) "ERROR           ", LCD_BUFF_LEN);
+			memcpy(dataseq, (const uint8 *) "ERROR           ", 17);
 			writetoLCD( 40, 1, dataseq); //send some data
-			memcpy(dataseq, (const uint8 *) "INIT FAIL       ", LCD_BUFF_LEN);
+			memcpy(dataseq, (const uint8 *) "INIT FAIL       ", 17);
 			writetoLCD( 16, 1, dataseq); //send some data
 		}
 		return 0; //error
@@ -358,7 +359,7 @@ int dw_main(void)
 		dataseq[0] = 0x2 ;  //return cursor home
 		writetoLCD( 1, 0,  dataseq);
 		memset(dataseq, ' ', LCD_BUFF_LEN);
-		memcpy(dataseq, (const uint8 *) "MAX NETWORK SIZE", LCD_BUFF_LEN);
+		memcpy(dataseq, (const uint8 *) "MAX NETWORK SIZE", 17);
 		writetoLCD(40, 1, dataseq); //send some data
 		memset(dataseq, ' ', LCD_BUFF_LEN);
 		sprintf((char*)&dataseq[0], "%d", UWB_LIST_SIZE);
@@ -369,7 +370,7 @@ int dw_main(void)
 		dataseq[0] = 0x2 ;  //return cursor home
 		writetoLCD( 1, 0,  dataseq);
 		memset(dataseq, ' ', LCD_BUFF_LEN);
-		memcpy(dataseq, (const uint8 *) "SLOT DURATION   ", LCD_BUFF_LEN);
+		memcpy(dataseq, (const uint8 *) "SLOT DURATION   ", 17);
 		writetoLCD(40, 1, dataseq); //send some data
 		memset(dataseq, ' ', LCD_BUFF_LEN);
 		sprintf((char*)&dataseq[0], "%llu us", inst->durationSlotMax_us);
@@ -431,6 +432,8 @@ int dw_main(void)
 
     last_toggle = portGetTickCnt();
 
+	//TODO remove? struct TDMAHandler* tdma_handler =  tdma_get_local_structure_ptr();
+
     // main loop
     while(1)
     {
@@ -481,6 +484,9 @@ int dw_main(void)
 					}
 
 				}
+
+
+
 
 //				n = sprintf((char*)&dataseq[0], "%08i, %08i, %08i, %08f", rng_rng, rng_rsl, rng_raw, rsl/1000.0);
 				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X %08X %08X", saddr, aaddr, taddr, rng_rng, rng_rsl, rng_raw, rsl);

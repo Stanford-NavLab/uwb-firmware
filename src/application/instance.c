@@ -534,6 +534,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 				uint64 margin_us = 1000;
 				uint64 framelength_us = instance_getmessageduration_us(psduLength);
 				inst->txDoneTimeoutDuration = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + framelength_us + margin_us, 1000);			//tx cmd to tx cb
+
 			}
 
 			break;
@@ -575,6 +576,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 				inst->canPrintLCD = FALSE;
 
 				inst->timeofTx = portGetTickCnt();
+				inst->timeofTxPoll = portGetTickCnt();
 				inst->txDoneTimeoutDuration = inst->durationPollTxDoneTimeout_ms;
 			}
 
@@ -1036,6 +1038,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 							if(tag_index == 0)
 							{
+								tdma_handler->nthOldest = 1;
 								tdma_handler->uwbListTDMAInfo[inst->uwbToRangeWith].lastRange = portGetTickCnt();
 								tdma_handler->firstPollComplete = TRUE;
 								inst->testAppState = TA_TX_SELECT;
@@ -1085,6 +1088,29 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                 case 0:
                 default:
                 {
+                	if(inst->mode == TAG){
+                		//get the message FCODE
+						uint8 fcode;
+						memcpy(&fcode, &inst->msg.messageData[FCODE], sizeof(uint8));
+
+						if(fcode == RTLS_DEMO_MSG_TAG_POLL)
+						{
+							uint32 dt = get_dt32(inst->timeofTxPoll, portGetTickCnt());
+							if(dt > inst->durationPollTimeout_ms)
+							{
+								inst_processtxrxtimeout(inst);
+							}
+						}
+						else if(fcode == RTLS_DEMO_MSG_TAG_FINAL)
+						{
+							uint32 dt = get_dt32(inst->timeofTxFinal, portGetTickCnt());
+							if(dt > inst->durationFinalTimeout_ms)
+							{
+								inst_processtxrxtimeout(inst);
+							}
+						}
+                	}
+
                 	//check if RX is on every so often. Turn it on if it isn't.
                 	uint32 time_now = portGetTickCnt();
 					uint32 timeSinceRxCheck = get_dt32(inst->rxCheckOnTime, time_now);
@@ -1243,57 +1269,79 @@ void instance_init_timings(void)
     	inst->frameLengths_us[i] = instance_getmessageduration_us(data_len_bytes[i]);
     }
 
-    //rx timeout durations (units are 1.0256us)
+    //delayed tx durations
+    uint8 reply_margin_us = 25;
     uint64 duration = 0;
-    duration += inst->frameLengths_us[POLL] - inst->storedPreLen_us; 					//poll tx ts to poll tx cb
-    duration += RX_TO_CB_DLY_US + RX_CB_TO_TX_CMD_DLY_US;			  					//poll tx cb to resp tx cmd
-    duration += TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[RESP] + RX_TO_CB_DLY_US; //resp tx cmd to resp rx cb
-    duration += margin_us;
-    inst->durationPollTimeout_nus = (uint16)(duration/1.0256) + 1;
-
-	//delayed tx durations
-	duration = 0;
-	duration += inst->frameLengths_us[POLL] - inst->storedPreLen_us;						//poll tx ts to poll tx cb
-	duration += RX_TO_CB_DLY_US + RX_CB_TO_TX_CMD_DLY_US; 									//poll tx cb to resp tx cmd
-	duration += TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[RESP] + RX_TO_CB_DLY_US;		//resp tx cmd to resp rx cb
-	duration += RX_CB_TO_TX_CMD_DLY_US + MIN_DELAYED_TX_DLY_US + inst->storedPreLen_us;		//resp rx cb to final tx timestamp
-	inst->finalReplyDelay_us = duration + margin_us;
-	inst->finalReplyDelay = convertmicrosectodevicetimeu(duration);
-    // Delay between blink reception and ranging init message transmission.
-	inst->rnginitReplyDelay = convertmicrosectodevicetimeu(MIN_DELAYED_TX_DLY_US + inst->storedPreLen_us); //rng_init tx cmd to rng_init tx ts
-
-	uint8 reply_margin_us = 25;
-	duration = 0;
-	duration += inst->frameLengths_us[POLL] - inst->storedPreLen_us + RX_TO_CB_DLY_US;		//resp rx timestamp to resp rx cb
-	duration += RX_CB_TO_TX_CMD_DLY_US + MIN_DELAYED_TX_DLY_US + inst->storedPreLen_us;		//resp rx cb to final tx timestamp
-	uint64 respDelay = convertmicrosectodevicetimeu(duration + reply_margin_us);
+	duration += inst->frameLengths_us[POLL] - inst->storedPreLen_us + RX_TO_CB_DLY_US;		//poll rx timestamp to poll rx cb
+	duration += RX_CB_TO_TX_CMD_DLY_US + MIN_DELAYED_TX_DLY_US + inst->storedPreLen_us;		//poll rx cb to resp tx timestamp
+	uint64 respDelay_us = duration + reply_margin_us;
+	uint64 respDelay = convertmicrosectodevicetimeu(respDelay_us);
 
 	duration = 0;
 	duration += inst->frameLengths_us[RESP] - inst->storedPreLen_us + RX_TO_CB_DLY_US;		//resp rx timestamp to resp rx cb
 	duration += RX_CB_TO_TX_CMD_DLY_US + MIN_DELAYED_TX_DLY_US + inst->storedPreLen_us;		//resp rx cb to final tx timestamp
-	uint64 finalDelay = convertmicrosectodevicetimeu(duration + reply_margin_us);
+	uint64 finalDelay_us = duration + reply_margin_us;
+	uint64 finalDelay = convertmicrosectodevicetimeu(finalDelay_us);
 
 	//make reply times the same to minimize clock drift error. See Application Note APS011 for more information
 	inst->respReplyDelay = inst->finalReplyDelay = MAX(respDelay, finalDelay);
+	uint64 replyDelay_us = MAX(respDelay_us, finalDelay_us);
 
+
+	//POLL TX TS TO FINAL TX TS
+	duration = 0;
+	duration += respDelay_us + finalDelay_us;												//poll tx ts to final tx ts
+	uint64 pollTxToFinalTx = duration;
+
+    // Delay between blink reception and ranging init message transmission.
+	inst->rnginitReplyDelay = convertmicrosectodevicetimeu(MIN_DELAYED_TX_DLY_US + inst->storedPreLen_us); //rng_init tx cmd to rng_init tx ts
+
+	margin_us = 1000;
+    //rx timeout durations (_nus units are 1.0256us)
+    duration = 0;
+    duration +=	TX_CMD_TO_TX_CB_DLY_US + replyDelay_us;						//poll tx cmd to resp tx ts
+    duration +=	inst->frameLengths_us[RESP] - inst->storedPreLen_us;		//resp tx ts to resp tx cb
+    duration += RX_TO_CB_DLY_US + RX_CB_TO_TX_CMD_DLY_US;					//resp tx cb to final tx cmd
+    duration += margin_us;
+    inst->durationPollTimeout_nus = (uint16)(duration/1.0256) + 1;
+	inst->durationPollTimeout_ms = (uint16)CEIL_DIV(duration, 1000);
+
+	duration = 0;
+	duration += TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[FINAL]; 	                                           //final tx cmd to final tx cb
+	duration += RX_TO_CB_DLY_US + RX_CB_TO_TX_CMD_DLY_US;			  	                                           //final tx cb to place final
+	duration += (uint64)MEASURED_SLOT_DURATIONS_US/2;                                   						   //place final to report tx cmd
+	duration += TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[REPORT] + RX_TO_CB_DLY_US + RX_CB_TO_TX_CMD_DLY_US; //report tx cmd to place report
+	duration += margin_us;
+	inst->durationFinalTimeout_ms = (uint16)CEIL_DIV(duration, 1000);
 
 	margin_us = 1000;
     //tx conf timeout durations
     inst->durationBlinkTxDoneTimeout_ms = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[BLINK] + margin_us, 1000);			//tx cmd to tx cb
     inst->durationRngInitTxDoneTimeout_ms = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[RNG_INIT] + margin_us, 1000);		//tx cmd to tx cb
     inst->durationPollTxDoneTimeout_ms = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[POLL] + margin_us, 1000);				//tx cmd to tx cb
-    inst->durationRespTxDoneTimeout_ms = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[RESP] + margin_us, 1000);				//tx cmd to tx cb
-    inst->durationFinalTxDoneTimeout_ms = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[FINAL] + margin_us, 1000);			//tx cmd to tx cb
     inst->durationReportTxDoneTimeout_ms = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[REPORT] + margin_us, 1000);			//tx cmd to tx cb
     inst->durationSyncTxDoneTimeout_ms = CEIL_DIV(TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[SYNC] + margin_us, 1000);				//tx cmd to tx cb
 
-
+    uint32 fl = 0;
+    if(inst->frameLengths_us[RESP] < inst->frameLengths_us[FINAL])
+    {
+    	fl = inst->frameLengths_us[RESP] - inst->storedPreLen_us;
+    }
+    else
+    {
+    	fl = inst->frameLengths_us[FINAL] - inst->storedPreLen_us;
+    }
+    duration = 0;
+    duration += replyDelay_us - fl;
+    duration -= RX_TO_CB_DLY_US + RX_CB_TO_TX_CMD_DLY_US;
+    inst->durationRespTxDoneTimeout_ms = CEIL_DIV(duration + inst->frameLengths_us[RESP] - inst->storedPreLen_us + margin_us, 1000);	//tx cmd to tx cb
+    inst->durationFinalTxDoneTimeout_ms = CEIL_DIV(duration + inst->frameLengths_us[FINAL] - inst->storedPreLen_us + margin_us, 1000);	//tx cmd to tx cb
 
     //figure maximum duration of a TDMA slot in microseconds
     duration = 0;
     duration += SLOT_START_BUFFER_US;	//frame start buffer
     duration += SLOT_BUFFER_EXP_TO_POLL_CMD_US; //buffer expiration to cmd poll
-    duration += TX_CMD_TO_TX_CB_DLY_US + inst->finalReplyDelay_us + inst->frameLengths_us[FINAL] + RX_TO_CB_DLY_US + RX_CB_TO_TX_CMD_DLY_US;//poll cmd to place final
+    duration += TX_CMD_TO_TX_CB_DLY_US + pollTxToFinalTx + inst->frameLengths_us[FINAL] + RX_TO_CB_DLY_US + RX_CB_TO_TX_CMD_DLY_US;//poll cmd to place final
     //duration += B //place final to cmd report
     duration += TX_CMD_TO_TX_CB_DLY_US + inst->frameLengths_us[REPORT] + RX_TO_CB_DLY_US + RX_CB_TO_TX_CMD_DLY_US; //cmd report to place report
     //duration += C //place report to cmd inf
@@ -1328,25 +1376,6 @@ void instance_init_timings(void)
     	duration += LCD_ENABLE_BUFFER_US*2;
     }
     inst->durationWaitRangeInit_ms = CEIL_DIV(duration, 1000);
-
-
-    duration = 0;
-    //get max FL
-    uint8 maxFramelength = (uint8)MIN_FRAMELENGTH;
-	while(maxFramelength < (int)UWB_LIST_SIZE + 1)
-	{
-		maxFramelength *= 2;
-	}
-
-	uint8 numExchanges = 0;
-	for(int i = 1; i < UWB_LIST_SIZE; i++)
-	{
-		numExchanges += i;
-	}
-
-	uint8 numZero = numExchanges/(maxFramelength-1);
-
-    inst->durationUwbCommTimeout_ms = (numExchanges + numZero + 1)*CEIL_DIV(inst->durationSlotMax_us,1000)*2;
 
 
     // Smart Power is automatically applied by DW chip for frame of which length
