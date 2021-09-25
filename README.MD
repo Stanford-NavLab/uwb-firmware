@@ -16,7 +16,7 @@
 This software is a modification of the firmware supplied by Decawave for their EVK1000 evaluation board. The main enhancement provided by this software is network coordination which enables the UWBs to take turns ranging with each other. UWBs can be added and removed from the network in an ad-hoc manner and the network will reconfigure to optimize the rate of ranging between each UWB pair. Additionally, ranging measurements are broadcast to the network so each UWB is aware of the ranging measurements between each UWB pair in its proximity &mdash eliminating the need for a secondary communication channel. 
 <br/>
 <br/>
-Using the UWBs is simple. Once a UWB has been flashed with the firmware and the switches have been configured, simply apply power to two ore more UWBs and they will begin ranging with each other. The ranging data can then be accessed via USB. The `uwb_interface` ROS package to written to read the USB ranging data and publish it to a ROS node.
+Using the UWBs is simple. Once a UWB has been flashed with the firmware and the switches have been configured, simply apply power to two ore more UWBs and they will begin ranging with each other. The ranging data can then be accessed via USB. The [uwb_interface](https://github.com/Stanford-NavLab/uwb-ros/blob/main/catkin_ws/src/uwb_interface/README.md) ROS package to written to read the USB ranging data and publish it to a ROS node.
 <br/>
 <br/>
 As much of the original firmware functionality, as possible, has been preserved so much of the information provided in the EVK1000 User Manual still applies to this software. The software and documentation for the EVK1000 evaluation kit and DW1000 transceiver can be found at the links below. It can also be found in the [Decawave directory](Decawave).
@@ -88,6 +88,8 @@ XX.XXdB XX.XXm
 These are final UWB screens and they displayed in an alternating pattern. The address (ADDR) and status will be displayed on the top line. The status will be either SEARCHING or CONNECTED to show network connection status. The second line will display the most recent range measurement in meters along with some information related to network coordination. NXX is the number of neighboring UWBs (within communication distance of the UWB) and HXX is the number of hidden UWBs (not within communication distance of the UWB, but within communication distance of a neighboring UWB). XX.XXdB represents the extimated received signal level (RSL). The RSL displayed is the average of the last 50 estimations its primary use is in determining calibration distances.  
 
 
+
+
 ### Flashing the Binary
 
 There are two ways to flash the binary, the ST-LINK Utility and CoIDE. The ST-LINK Utility can be used to flash an already compiled binary and CoIDE can both compile and flash the binary. A compiled copy of the firmware (EVK1000.bin) can be found in the root directory of this repository. Instructions for flashing with the ST-LINK Utility are in this section. Instructions for flashing with CoIDE are found in [Building from Source](#building-from-source)  
@@ -123,7 +125,7 @@ Then simply click the *Build* button and the EVK1000/Debug/bin/ directory will b
 
 ### Interfacing with Linux
 
-The UWB ranging data is accessable via USB. The `uwb_interface` ROS package for interfacing with UWB can be found in the `[uwb-ros](https://github.com/Stanford-NavLab/uwb-ros) repository. It is run using the following:
+The UWB ranging data is accessable via USB. The [uwb_interface](https://github.com/Stanford-NavLab/uwb-ros/blob/main/catkin_ws/src/uwb_interface/README.md) ROS package for interfacing with UWB can be found in the `[uwb-ros](https://github.com/Stanford-NavLab/uwb-ros) repository. It is run using the following:
 
 ```
 rosrun uwb_interface uwb_interface_node -p /dev/ttyAMC0
@@ -136,7 +138,7 @@ rosrun uwb_interface uwb_interface_node -p /dev/ttyAMC0
 
 The ranging algorithm depends on RX and TX timestamps to accurately determine the time-of-flight (from which distance is derived) of the communications signals. For the distance calculations to be accurate, the signal propogation time from the antenna to the DW1000 transceiver (RX delay) and from the DW1000 to the antenna (TX delay) must be accounted for. The UWB firmware is responsible for loading the calibration values into the DW1000 transceiver at boot, so the proper settings should be set when building the firmware.
 
-**_NOTE:_** Step-by-step instructions for performing the RX and TX delay calibration can be found in the `uwb_delay_calibration` package of the [uwb-ros](https://github.com/Stanford-NavLab/uwb-ros) repository
+**_NOTE:_** Step-by-step instructions for performing the RX and TX delay calibration can be found in the [uwb_delay_calibration](https://github.com/Stanford-NavLab/uwb-ros/blob/main/catkin_ws/src/uwb_delay_calibration/README.md) package of the [uwb-ros](https://github.com/Stanford-NavLab/uwb-ros) repository
 
 The firmware definitions that control which values are loaded into the DW1000 are found near the top of [src/applicaiton/application_definitions.h](src/applicaiton/application_definitions.h). The default (uncalibrated) values are shown below
 
