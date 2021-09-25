@@ -125,7 +125,7 @@ Then simply click the *Build* button and the EVK1000/Debug/bin/ directory will b
 
 ### Interfacing with Linux
 
-The UWB ranging data is accessable via USB. The [uwb_interface](https://github.com/Stanford-NavLab/uwb-ros/blob/main/catkin_ws/src/uwb_interface/README.md) ROS package for interfacing with UWB can be found in the `[uwb-ros](https://github.com/Stanford-NavLab/uwb-ros) repository. It is run using the following:
+The UWB ranging data is accessable via USB. The [uwb_interface](https://github.com/Stanford-NavLab/uwb-ros/blob/main/catkin_ws/src/uwb_interface/README.md) ROS package for interfacing with UWB can be found in the [uwb-ros](https://github.com/Stanford-NavLab/uwb-ros) repository. It is run using the following:
 
 ```
 rosrun uwb_interface uwb_interface_node -p /dev/ttyAMC0
