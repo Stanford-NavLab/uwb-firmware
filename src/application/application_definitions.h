@@ -9,7 +9,7 @@
 ********************* Definitions expected to be modified by end-user *********************************************
 *******************************************************************************************************************/
 
-#define UWB_LIST_SIZE		    10			//the maximum size of the UWB network
+#define UWB_LIST_SIZE		    14			//the maximum size of the UWB network
 											//do not use a number larger than 80 if USING_64BIT_ADDR==1
 											//do not use a number larger than 80 if USING_64BIT_ADDR==0
 											//these are the largest UWB network sizes that the firmware will support.

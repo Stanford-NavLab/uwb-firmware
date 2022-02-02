@@ -1082,6 +1082,11 @@ static void find_assign_slot(struct TDMAHandler *this)
 		uint8 max_uwb_index = 255;
 		for(uint8 u = 1; u < inst->uwbListLen; u++)//0 reserved for self
 		{
+			if(info->framelength < this->uwbListTDMAInfo[u].framelength)
+			{
+				continue;
+			}
+
 			uint8 slotsLength = this->uwbListTDMAInfo[u].slotsLength;
 			if(info->framelength > this->uwbListTDMAInfo[u].framelength && this->uwbListTDMAInfo[u].slotsLength != 0)
 			{
@@ -1099,9 +1104,7 @@ static void find_assign_slot(struct TDMAHandler *this)
 		{
 			uint8 slot;
 			memcpy(&slot, &this->uwbListTDMAInfo[max_uwb_index].slots[0], sizeof(uint8));
-			uint8 mod_slot = slot % info->framelength;
-
-			this->assign_slot(info, mod_slot, TRUE);
+			this->assign_slot(info, slot, TRUE);
 			this->deconflict_uwb_pair(this, info, &this->uwbListTDMAInfo[max_uwb_index]);
 			assignment_made = TRUE;
 		}
