@@ -323,7 +323,6 @@ char* get_msg_fcode_string(int fcode)
 //
 // the main instance state machine (all the instance modes Tag or Anchor use the same state machine)
 //
-// -------------------------------------------------------------------------------------------------------------------
 //
 int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int message)
 {
@@ -796,17 +795,17 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                         case RTLS_DEMO_MSG_SYNC :
                         {
                         	uint8 srcIndex = instgetuwblistindex(inst, &srcAddr[0], inst->addrByteSize);
-                        	uint8 framelength;
+                        	uint8 largestFramelength;
 							uint64 timeSinceFrameStart_us = 0;
 
-							memcpy(&framelength, &messageData[SYNC_FRAMELENGTH], sizeof(uint8));
+							memcpy(&largestFramelength, &messageData[SYNC_FRAMELENGTH], sizeof(uint8));
 							memcpy(&timeSinceFrameStart_us, &messageData[SYNC_TSFS], 6);
 
 							if(inst->mode == ANCHOR || inst->mode == TAG)
 							{
 								//evaluate our frame synchronization to see if we need to snap to the incoming value
 								//and rebroadcast a SYNC message
-								tdma_handler->frame_sync(tdma_handler, dw_event, framelength, timeSinceFrameStart_us, srcIndex, FS_EVAL);
+								tdma_handler->frame_sync(tdma_handler, dw_event, largestFramelength, timeSinceFrameStart_us, srcIndex, FS_EVAL);
 							}
 
                         	break;
@@ -818,9 +817,9 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                         	uint32 time_now = portGetTickCnt();
 							uint8 srcIndex = instgetuwblistindex(inst, &srcAddr[0], inst->addrByteSize);
 
-							uint8 framelength;
+							uint8 largestFramelength;
 							uint64 timeSinceFrameStart_us = 0;
-							memcpy(&framelength, &messageData[TDMA_FRAMELENGTH], sizeof(uint8));
+							memcpy(&largestFramelength, &messageData[TDMA_LARGEST_FRAMELENGTH], sizeof(uint8));
 							memcpy(&timeSinceFrameStart_us, &messageData[TDMA_TSFS], 6);
 
 							//return to discovery mode if no slots assigned to this UWB
@@ -849,7 +848,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                         		if(tdma_handler->discovery_mode == WAIT_INF_REG) //treat INF_UPDATE and INF_SUG the same
 								{
                         			//synchronize the frames
-                        			tdma_handler->frame_sync(tdma_handler, dw_event, framelength, timeSinceFrameStart_us, srcIndex, FS_ADOPT);
+                        			tdma_handler->frame_sync(tdma_handler, dw_event, largestFramelength, timeSinceFrameStart_us, srcIndex, FS_ADOPT);
                         			//initialize collection of tdma info, clear any previously stored info
                         			tdma_handler->process_inf_msg(tdma_handler, messageData, srcIndex, CLEAR_ALL_COPY);
                         			//set discovery mode to COLLECT_INF_REG
@@ -858,7 +857,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                         		else if(tdma_handler->discovery_mode == COLLECT_INF_REG)
                         		{
                         			//synchronize the frames
-									tdma_handler->frame_sync(tdma_handler, dw_event, framelength, timeSinceFrameStart_us, srcIndex, FS_COLLECT);
+									tdma_handler->frame_sync(tdma_handler, dw_event, largestFramelength, timeSinceFrameStart_us, srcIndex, FS_COLLECT);
 									//collecting tdma info, append to previously stored info
                         			tdma_handler->process_inf_msg(tdma_handler, messageData, srcIndex, COPY);
                         		}
@@ -866,7 +865,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 								{
                         			//process frame sync while waiting to send sug so we maintain syn with selected (sub)network
                         			//also give ourselves the opportunity to detect the need to transmit frame sync rebase messages
-									tdma_handler->frame_sync(tdma_handler, dw_event, framelength, timeSinceFrameStart_us, srcIndex, FS_AVERAGE);
+									tdma_handler->frame_sync(tdma_handler, dw_event, largestFramelength, timeSinceFrameStart_us, srcIndex, FS_AVERAGE);
 								}
                         	}
                         	else if(inst->mode == ANCHOR || inst->mode == TAG)
@@ -876,7 +875,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
                         		//2.) check for and adopt any tdma changes, sending an INF_UPDATE or INF_REG accordingly
 
                         		//synchronize the frames
-								tdma_handler->frame_sync(tdma_handler, dw_event, framelength, timeSinceFrameStart_us, srcIndex, FS_AVERAGE);
+								tdma_handler->frame_sync(tdma_handler, dw_event, largestFramelength, timeSinceFrameStart_us, srcIndex, FS_AVERAGE);
 
 								//collecting tdma info, append to previously stored info
 								bool tdma_modified = tdma_handler->process_inf_msg(tdma_handler, messageData, srcIndex, CLEAR_LISTED_COPY);
@@ -906,13 +905,13 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 							uint32 time_now = portGetTickCnt();
 							uint8 srcIndex = instgetuwblistindex(inst, &srcAddr[0], inst->addrByteSize);
 
-							uint8 framelength;
+							uint8 largestFramelength;
 							uint64 timeSinceFrameStart_us = 0;
-							memcpy(&framelength, &messageData[TDMA_FRAMELENGTH], sizeof(uint8));
+							memcpy(&largestFramelength, &messageData[TDMA_LARGEST_FRAMELENGTH], sizeof(uint8));
 							memcpy(&timeSinceFrameStart_us, &messageData[TDMA_TSFS], 6);
 
 							//synchronize the frames
-							tdma_handler->frame_sync(tdma_handler, dw_event, framelength, timeSinceFrameStart_us, srcIndex, FS_ADOPT);
+							tdma_handler->frame_sync(tdma_handler, dw_event, largestFramelength, timeSinceFrameStart_us, srcIndex, FS_ADOPT);
 							//copy the TDMA network configuration directly
 							tdma_handler->process_inf_msg(tdma_handler, messageData, srcIndex, CLEAR_ALL_COPY);
 							//copy new TDMA configuration into the INF message that this UWB will send out

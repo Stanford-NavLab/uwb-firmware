@@ -14,6 +14,7 @@ struct TDMAInfo
 	uint32 lastRange;			//milliseconds
 	uint64 frameStartTime;		//microseconds
 	uint8 framelength;
+	uint8 largestFramelength;
 	uint8 slotsLength;
 	uint8 *slots;
 };
@@ -77,6 +78,7 @@ struct TDMAHandler
 	uint64 (*update_frame_start)(struct TDMAHandler *this);
 	bool (*tx_sync_msg)(struct TDMAHandler *this);
 	void (*update_inf_tsfs)(struct TDMAHandler *this);
+	uint8 (*get_largest_framelength)(struct TDMAHandler *this);
 	bool (*tx_select)(struct TDMAHandler *this);
     bool (*check_blink)(struct TDMAHandler *this);
     void (*populate_inf_msg)(struct TDMAHandler *this, uint8 inf_msg_type);

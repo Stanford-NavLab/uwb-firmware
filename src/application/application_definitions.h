@@ -102,7 +102,7 @@ enum
 #define RNG_INIT_MSG_LEN					1				// FunctionCode(1)
 #define RNG_REPORT_MSG_LEN_SHORT		    17				// FunctionCode(1), time of flight (6), received signal level (8), short address (2)
 #define RNG_REPORT_MSG_LEN_LONG		    	23				// FunctionCode(1), time of flight (6), received signal level (8), long address (8)
-#define SYNC_MSG_LEN						8				// FunctionCode(1), framelength (1), time since frame start (6)
+#define SYNC_MSG_LEN						8				// FunctionCode(1), largest frame length (1), time since frame start (6)
 
 #define MAX_MAC_MSG_DATA_LEN                (TAG_FINAL_MSG_LEN) //max message len of the above
 
@@ -144,7 +144,7 @@ enum
     #define FINAL_FRAME_LEN_BYTES (TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_L + FRAME_CRC)
 	#define REPORT_FRAME_LEN_BYTES (RNG_REPORT_MSG_LEN_LONG + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
 	#define SYNC_FRAME_LEN_BYTES (SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
-	#define INF_FRAME_LEN_BYTES_MAX (11 + (ADDR_BYTE_SIZE_L + 4)*UWB_LIST_SIZE + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
+	#define INF_FRAME_LEN_BYTES_MAX (12 + (ADDR_BYTE_SIZE_L + 4)*UWB_LIST_SIZE + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
 #else
     #define RNG_INIT_FRAME_LEN_BYTES (RNG_INIT_MSG_LEN + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
     #define POLL_FRAME_LEN_BYTES (TAG_POLL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
@@ -152,7 +152,7 @@ enum
     #define FINAL_FRAME_LEN_BYTES (TAG_FINAL_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
 	#define REPORT_FRAME_LEN_BYTES (RNG_REPORT_MSG_LEN_SHORT + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
 	#define SYNC_FRAME_LEN_BYTES (SYNC_MSG_LEN + FRAME_CRTL_AND_ADDRESS_S + FRAME_CRC)
-	#define INF_FRAME_LEN_BYTES_MAX (11 + (ADDR_BYTE_SIZE_S + 4)*UWB_LIST_SIZE + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
+	#define INF_FRAME_LEN_BYTES_MAX (12 + (ADDR_BYTE_SIZE_S + 4)*UWB_LIST_SIZE + FRAME_CRTL_AND_ADDRESS_LS + FRAME_CRC)
 #endif
 
 #define BLINK_FRAME_CONTROL_BYTES       (1)
@@ -185,8 +185,9 @@ enum
 #define TDMA_TSFS                           1				// offset to put time since TDMA frame start in the INF message
 #define TDMA_NUMN							7				// offset to put the number of this UWB's neighbors in the INF message
 #define TDMA_NUMH							8				// offset to put the number of this UWB's hidden neighbors in the INF message
-#define TDMA_FRAMELENGTH                    9				// offset to put this UWB's TDMA framelength in the INF message
-#define TDMA_NUMS							10				// offset to put the number of this UWB's TDMA slot assignments in the INF message
+#define TDMA_LARGEST_FRAMELENGTH			9				// offset to put the largest TDMA framelength within this UWB's contention area in the INF message
+#define TDMA_FRAMELENGTH                    10				// offset to put this UWB's TDMA framelength in the INF message
+#define TDMA_NUMS							11				// offset to put the number of this UWB's TDMA slot assignments in the INF message
 
 // Final message byte offsets.
 #define PTXT                                1

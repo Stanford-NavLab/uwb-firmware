@@ -35,7 +35,9 @@ static bool slot_transition(struct TDMAHandler *this)
 			//get the slot number and set the start time appropriately
 
 			uint64 timeSinceFrameStart64 = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
-			uint64 frameDuration64 = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
+//			uint64 frameDuration64 = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
+			uint8 largestFramelength = this->get_largest_framelength(this);
+			uint64 frameDuration64 = this->slotDuration_us*largestFramelength;
 			if(timeSinceFrameStart64 >= frameDuration64)
 			{
 				int div = timeSinceFrameStart64/frameDuration64;
@@ -44,11 +46,12 @@ static bool slot_transition(struct TDMAHandler *this)
 			}
 
 			uint8 slot = timeSinceFrameStart64/(this->slotDuration_us); //integer division rounded down
+			uint8 mod_slot = slot%this->uwbListTDMAInfo[0].framelength;
 			this->lastSlotStartTime64 = this->uwbListTDMAInfo[0].frameStartTime + (uint64)(this->slotDuration_us*slot);
 
 			if(inst->mode != DISCOVERY)
 			{
-				if(this->slot_assigned(&this->uwbListTDMAInfo[0], slot) == TRUE)
+				if(this->slot_assigned(&this->uwbListTDMAInfo[0], mod_slot) == TRUE)
 				{
 					inst->mode = TAG;
 					inst->testAppState = TA_TX_SELECT;
@@ -79,10 +82,31 @@ static bool slot_transition(struct TDMAHandler *this)
 	return transition;
 }
 
+static uint8 get_largest_framelength(struct TDMAHandler *this){
+
+	uint8 longest_framelength = 4;
+
+	instance_data_t *inst = instance_get_local_structure_ptr(0);
+	for(int i = 0; i < inst->uwbListLen; i++)
+	{
+		if(this->uwbListTDMAInfo[i].connectionType != UWB_LIST_INACTIVE)
+		{
+			if(this->uwbListTDMAInfo[i].framelength > longest_framelength){
+				longest_framelength = this->uwbListTDMAInfo[i].framelength;
+			}
+		}
+	}
+
+	return longest_framelength;
+}
+
+
 static uint64 update_frame_start(struct TDMAHandler *this){
 
 	uint64 time_now_us = portGetTickCntMicro();
-	uint64 frameDuration_us = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
+//	uint64 frameDuration_us = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength; TODO
+	uint8 largestFramelength = this->get_largest_framelength(this);
+	uint64 frameDuration_us = this->slotDuration_us*largestFramelength;
 	uint64 timeSinceFrameStart_us = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
 
 	if(timeSinceFrameStart_us > 1000000000) //if very large number, assume frame start time accidentally moved ahead of time now
@@ -106,7 +130,154 @@ static uint64 update_frame_start(struct TDMAHandler *this){
 	return timeSinceFrameStart_us;
 }
 
-static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 framelength, uint64 timeSinceFrameStart_us, uint8 srcIndex, FRAME_SYNC_MODE mode)
+//static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 framelength, uint64 timeSinceFrameStart_us, uint8 srcIndex, FRAME_SYNC_MODE mode)
+//{
+//	instance_data_t *inst = instance_get_local_structure_ptr(0);
+//
+//	//do not process erroneous tsfs
+//	//can happen if frame start time is shifted ahead of time_now_us in transmitting UWB
+//	if(timeSinceFrameStart_us > 1000000000 || timeSinceFrameStart_us == 0)
+//	{
+//		return;
+//	}
+//
+//	uint8 sys_time_arr[5] = {0, 0, 0, 0, 0};
+//	dwt_readsystime(sys_time_arr);
+//	uint64 dwt_time_now = 0;
+//	dwt_time_now = (uint64)sys_time_arr[0] + ((uint64)sys_time_arr[1] << 8) + ((uint64)sys_time_arr[2] << 16) + ((uint64)sys_time_arr[3] << 24) + ((uint64)sys_time_arr[4] << 32);
+//	uint64 time_now_us = portGetTickCntMicro();
+//
+//	//time from command tx to tx timestamp
+//	uint64 infCmdToTsDelay_us = TX_CMD_TO_TX_CB_DLY_US + inst->storedPreLen_us;
+//
+//	//tx antenna delay
+//	uint64 tx_antenna_delay = (uint64)inst->defaultAntennaDelay;
+//
+//	//time to propagate
+//	//NOTE: assuming zero since difference for speed of light travel time over 10cm and 100m is negligible for frame sync purposes
+//
+//	//rx antenna delay
+//	//NOTE: antenna delay is captured by the RX timestamp
+//
+//	//time from rx timestamp to now
+//	uint64 rxfs_process_delay = dwt_getdt(dw_event->timeStamp, dwt_time_now);
+//
+//	uint64 txrx_delay =  (uint64)(convertdevicetimetosec(tx_antenna_delay + rxfs_process_delay)*1000000.0) + infCmdToTsDelay_us;
+//
+//	uint64 hisTimeSinceFrameStart_us = timeSinceFrameStart_us + txrx_delay;
+//	this->uwbListTDMAInfo[srcIndex].frameStartTime = timestamp_subtract64(time_now_us, hisTimeSinceFrameStart_us);
+//	uint64 myFrameDuration = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
+//
+//	if(mode == FS_COLLECT)
+//	{
+//		return;
+//	}
+//	else if(mode == FS_ADOPT)
+//	{
+//		this->uwbListTDMAInfo[0].frameStartTime = this->uwbListTDMAInfo[srcIndex].frameStartTime;//NOTE gets processed further at end of function
+//	}
+//	else// if(mode == FS_AVERAGE || mode == FS_EVAL)
+//	{
+//		uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
+//
+//		//SELF VS INCOMING
+//
+//		uint8 min_fl = this->uwbListTDMAInfo[0].framelength;
+//		if(framelength < min_fl)
+//		{
+//			min_fl = framelength;
+//		}
+//
+//		uint64 min_framelengthDuration = min_fl*this->slotDuration_us;
+//		uint64 diff_tsfs = 0;
+//		uint64 diff_tsfs_mod = 0;
+//		uint64 diff_us = 0;
+//
+//		bool diff_add = FALSE;
+//		if(hisTimeSinceFrameStart_us <= myTimeSinceFrameStart_us)
+//		{
+//			diff_tsfs = myTimeSinceFrameStart_us - hisTimeSinceFrameStart_us;
+//			diff_tsfs_mod = diff_tsfs%min_framelengthDuration;
+//
+//			if(diff_tsfs_mod <= 0.5*min_framelengthDuration)
+//			{
+//				diff_us = diff_tsfs_mod;
+//				diff_add = TRUE;
+//			}
+//			else
+//			{
+//				diff_us = min_framelengthDuration - diff_tsfs_mod;
+//			}
+//		}
+//		else
+//		{
+//			diff_tsfs = hisTimeSinceFrameStart_us - myTimeSinceFrameStart_us;
+//			diff_tsfs_mod = diff_tsfs%min_framelengthDuration;
+//
+//			if(diff_tsfs_mod <= 0.5*min_framelengthDuration)
+//			{
+//				diff_us = diff_tsfs_mod;
+//			}
+//			else
+//			{
+//				diff_us = min_framelengthDuration - diff_tsfs_mod;
+//				diff_add = TRUE;
+//			}
+//		}
+//
+//
+//		//check if frame sync out of tolerance (don't xmit sync message in case of 0th slot misalignment)
+//		if(diff_us%(MIN_FRAMELENGTH*this->slotDuration_us) > this->frameSyncThreshold_us){
+//			if(MIN_FRAMELENGTH*this->slotDuration_us - diff_us%(MIN_FRAMELENGTH*this->slotDuration_us) > this->frameSyncThreshold_us){
+//				this->tx_sync_msg(this);
+//			}
+//		}
+//		else if(mode == FS_EVAL)
+//		{
+//			return;
+//		}
+//
+//		uint8 div = 2;
+//		if(mode == FS_EVAL || diff_us > this->frameSyncThreshold_us) //if diff_us > threshold, there is 0th slot misalignment
+//		{
+//			div = 1;
+//		}
+//
+//		if(diff_add == TRUE)
+//		{
+//			this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, diff_us/div);
+//		}
+//		else
+//		{
+//			this->uwbListTDMAInfo[0].frameStartTime = timestamp_subtract64(this->uwbListTDMAInfo[0].frameStartTime, diff_us/div);
+//		}
+//	}
+//
+//	uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
+//	if(myTimeSinceFrameStart_us > 100000000)
+//	{
+//		//if this is a very large number, then the frame start time was likely moved ahead of time_now_us.
+//		while(this->uwbListTDMAInfo[0].frameStartTime > time_now_us)
+//		{
+//			this->uwbListTDMAInfo[0].frameStartTime = timestamp_subtract64(this->uwbListTDMAInfo[0].frameStartTime, myFrameDuration);
+//		}
+//
+//		myTimeSinceFrameStart_us = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
+//	}
+//	else
+//	{
+//		while(myTimeSinceFrameStart_us >= myFrameDuration)
+//		{
+//			this->uwbListTDMAInfo[0].frameStartTime = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, myFrameDuration);
+//			myTimeSinceFrameStart_us -= myFrameDuration;
+//		}
+//	}
+//
+//	uint8 slot = myTimeSinceFrameStart_us/this->slotDuration_us; //integer division rounded down
+//	this->lastSlotStartTime64 = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, (uint64)(this->slotDuration_us*slot));
+//}
+
+static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 hisLargestFramelength, uint64 timeSinceFrameStart_us, uint8 srcIndex, FRAME_SYNC_MODE mode)
 {
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
 
@@ -142,7 +313,11 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 
 	uint64 hisTimeSinceFrameStart_us = timeSinceFrameStart_us + txrx_delay;
 	this->uwbListTDMAInfo[srcIndex].frameStartTime = timestamp_subtract64(time_now_us, hisTimeSinceFrameStart_us);
-	uint64 myFrameDuration = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength;
+	this->uwbListTDMAInfo[srcIndex].largestFramelength = hisLargestFramelength;
+	uint8 myLargestFramelength = this->get_largest_framelength(this);
+	uint64 myFrameDuration = this->slotDuration_us*myLargestFramelength;
+
+	bool txSync = FALSE;
 
 	if(mode == FS_COLLECT)
 	{
@@ -150,7 +325,7 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 	}
 	else if(mode == FS_ADOPT)
 	{
-		this->uwbListTDMAInfo[0].frameStartTime = this->uwbListTDMAInfo[srcIndex].frameStartTime;//NOTE gets processed further at end of function
+		this->uwbListTDMAInfo[0].frameStartTime = this->uwbListTDMAInfo[srcIndex].frameStartTime; //NOTE gets processed further at end of function
 	}
 	else// if(mode == FS_AVERAGE || mode == FS_EVAL)
 	{
@@ -158,10 +333,10 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 
 		//SELF VS INCOMING
 
-		uint8 min_fl = this->uwbListTDMAInfo[0].framelength;
-		if(framelength < min_fl)
+		uint8 min_fl = myLargestFramelength;
+		if(hisLargestFramelength < min_fl)
 		{
-			min_fl = framelength;
+			min_fl = hisLargestFramelength;
 		}
 
 		uint64 min_framelengthDuration = min_fl*this->slotDuration_us;
@@ -202,20 +377,27 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 		}
 
 
+		//TODO
 		//check if frame sync out of tolerance (don't xmit sync message in case of 0th slot misalignment)
-		if(diff_us%(MIN_FRAMELENGTH*this->slotDuration_us) > this->frameSyncThreshold_us){
-			if(MIN_FRAMELENGTH*this->slotDuration_us - diff_us%(MIN_FRAMELENGTH*this->slotDuration_us) > this->frameSyncThreshold_us){
-				this->tx_sync_msg(this);
-			}
-		}
-		else if(mode == FS_EVAL)
+//		if(diff_us%(MIN_FRAMELENGTH*this->slotDuration_us) > this->frameSyncThreshold_us){
+//			if(MIN_FRAMELENGTH*this->slotDuration_us - diff_us%(MIN_FRAMELENGTH*this->slotDuration_us) > this->frameSyncThreshold_us){
+//				this->tx_sync_msg(this);
+//			}
+//		}
+//		else if(mode == FS_EVAL)
+//		{
+//			return;
+//		}
+
+		if(mode == FS_EVAL && diff_us <= this->frameSyncThreshold_us)
 		{
 			return;
 		}
 
 		uint8 div = 2;
-		if(mode == FS_EVAL || diff_us > this->frameSyncThreshold_us) //if diff_us > threshold, there is 0th slot misalignment
+		if(diff_us > this->frameSyncThreshold_us) //if diff_us > threshold, there is 0th slot misalignment
 		{
+			txSync = TRUE;
 			div = 1;
 		}
 
@@ -249,7 +431,14 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 f
 		}
 	}
 
+	if(txSync == TRUE)
+	{
+		this->tx_sync_msg(this);
+	}
+
+	//TODO
 	uint8 slot = myTimeSinceFrameStart_us/this->slotDuration_us; //integer division rounded down
+//	uint8 mod_slot = slot%this->uwbListTDMAInfo[0].framelength;
 	this->lastSlotStartTime64 = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, (uint64)(this->slotDuration_us*slot));
 }
 
@@ -263,7 +452,8 @@ static bool tx_sync_msg(struct TDMAHandler *this)
 
 	uint64 myTimeSinceFrameStart_us = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
 
-	memcpy(&inst->sync_msg.messageData[SYNC_FRAMELENGTH], &this->uwbListTDMAInfo[0].framelength, sizeof(uint8));
+	uint8 largestFramelength = this->get_largest_framelength(this);
+	memcpy(&inst->sync_msg.messageData[SYNC_FRAMELENGTH], &largestFramelength, sizeof(uint8));
 	memcpy(&inst->sync_msg.messageData[SYNC_TSFS], &myTimeSinceFrameStart_us, 6);
 	inst->sync_msg.seqNum = inst->frameSN++;
 
@@ -500,6 +690,12 @@ static void populate_inf_msg(struct TDMAHandler *this, uint8 inf_msg_type)
 	msgDataIndex = TDMA_NUMH;
 	memcpy(&inst->inf_msg.messageData[msgDataIndex], &num_hidden, sizeof(uint8));
 
+	//largest framelength in contention area
+	uint8 longest_framelength =  this->get_largest_framelength(this);
+	msgDataIndex = TDMA_LARGEST_FRAMELENGTH;
+	memcpy(&inst->inf_msg.messageData[msgDataIndex], &longest_framelength, sizeof(uint8));
+
+
 	//self framelength
 	msgDataIndex = TDMA_FRAMELENGTH;
 	memcpy(&inst->inf_msg.messageData[msgDataIndex], &this->uwbListTDMAInfo[0].framelength, sizeof(uint8));
@@ -647,6 +843,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 
 	uint8 numNeighbors;
 	uint8 numHidden;
+	uint8 largestFramelength;
 	uint8 framelength;
 	uint8 numSlots;
 	uint8 slot;
@@ -654,6 +851,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 
 	memcpy(&numNeighbors, &messageData[TDMA_NUMN], sizeof(uint8));
 	memcpy(&numHidden, &messageData[TDMA_NUMH], sizeof(uint8));
+	memcpy(&largestFramelength, &messageData[TDMA_LARGEST_FRAMELENGTH], sizeof(uint8));
 	memcpy(&framelength, &messageData[TDMA_FRAMELENGTH], sizeof(uint8));
 	memcpy(&numSlots, &messageData[TDMA_NUMS], sizeof(uint8));
 
@@ -712,6 +910,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 	}
 
 	info->framelength = MAX(framelength, info->framelength);
+	info->largestFramelength = largestFramelength;
 
 	msgDataIndex = TDMA_NUMS + 1;
 	for(int s = 0; s < numSlots; s++)
@@ -1134,6 +1333,7 @@ static void build_new_network(struct TDMAHandler *this)
 
 	this->uwbListTDMAInfo[0].framelength = (uint8)MIN_FRAMELENGTH;
 	this->uwbListTDMAInfo[inst->uwbToRangeWith].framelength = (uint8)MIN_FRAMELENGTH;
+	this->uwbListTDMAInfo[inst->uwbToRangeWith].largestFramelength = (uint8)MIN_FRAMELENGTH;
 
 	this->assign_slot(&this->uwbListTDMAInfo[0], 1, safeAssign);
 	this->assign_slot(&this->uwbListTDMAInfo[inst->uwbToRangeWith],  2, safeAssign);
@@ -1482,6 +1682,7 @@ static void free_slots(struct TDMAInfo *info)
 
 	info->slotsLength = 0;
 	info->framelength = MIN_FRAMELENGTH;
+	info->largestFramelength = MIN_FRAMELENGTH;
 }
 
 static void uwblist_free_slots(struct TDMAHandler *this, uint8 uwb_index)
@@ -1510,6 +1711,7 @@ static void tdma_free_all_slots(struct TDMAHandler *this)
 
 		this->uwbListTDMAInfo[i].slotsLength = 0;
 		this->uwbListTDMAInfo[i].framelength = MIN_FRAMELENGTH;
+		this->uwbListTDMAInfo[i].largestFramelength = MIN_FRAMELENGTH;
 	}
 
 	return;
@@ -1607,7 +1809,8 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 				{
 					uint64 diff_us = 0;
 
-					uint8 min_fl = info_i->framelength;
+//					uint8 min_fl = info_i->framelength;
+					uint8 min_fl = info_i->largestFramelength;
 					if(sub_network_base_framelength[j] < min_fl)
 					{
 						min_fl = sub_network_base_framelength[j];
@@ -1650,7 +1853,8 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 					{
 						//reached the last listed sub_netowrk, list a new subnetwork.
 						sub_network_members[num_sub_networks] = 1;
-						sub_network_base_framelength[num_sub_networks] = this->uwbListTDMAInfo[i].framelength;
+//						sub_network_base_framelength[num_sub_networks] = this->uwbListTDMAInfo[i].framelength;
+						sub_network_base_framelength[num_sub_networks] = this->uwbListTDMAInfo[i].largestFramelength;
 						sub_network_tsfs[num_sub_networks] = get_dt64(this->uwbListTDMAInfo[i].frameStartTime, time_now_us);
 						sub_network_membership[num_sub_networks] = num_sub_networks;
 						num_sub_networks++;
@@ -1662,7 +1866,8 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 				if(num_sub_networks == 0)
 				{
 					sub_network_members[num_sub_networks] = 1;
-					sub_network_base_framelength[num_sub_networks] = this->uwbListTDMAInfo[i].framelength;
+//					sub_network_base_framelength[num_sub_networks] = this->uwbListTDMAInfo[i].framelength;
+					sub_network_base_framelength[num_sub_networks] = this->uwbListTDMAInfo[i].largestFramelength;
 					sub_network_tsfs[num_sub_networks] = timeSinceFrameStart_us;
 					sub_network_membership[num_sub_networks] = num_sub_networks;
 					num_sub_networks++;
@@ -1694,13 +1899,16 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 					tnext[nidx] = this->uwbListTDMAInfo[i].frameStartTime;
 					while(time_now_us > tnext[nidx])
 					{
-						tnext[nidx] += this->uwbListTDMAInfo[i].framelength*slotDuration_us;
+//						tnext[nidx] += this->uwbListTDMAInfo[i].framelength*slotDuration_us;
+						tnext[nidx] += this->uwbListTDMAInfo[i].largestFramelength*slotDuration_us;
 					}
 					nidx++;
 
-					if(this->uwbListTDMAInfo[i].framelength*slotDuration_us < shortestFrameDuration)
+//					if(this->uwbListTDMAInfo[i].framelength*slotDuration_us < shortestFrameDuration)
+					if(this->uwbListTDMAInfo[i].largestFramelength*slotDuration_us < shortestFrameDuration)
 					{
-						shortestFrameDuration = this->uwbListTDMAInfo[i].framelength*slotDuration_us;
+//						shortestFrameDuration = this->uwbListTDMAInfo[i].framelength*slotDuration_us;
+						shortestFrameDuration = this->uwbListTDMAInfo[i].largestFramelength*slotDuration_us;
 					}
 				}
 			}
@@ -1713,7 +1921,8 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 				converged = TRUE;
 				for(int i = 0; i < nidx; i++)
 				{
-					uint64 frameduration = this->uwbListTDMAInfo[neighborIndices[i]].framelength*slotDuration_us;
+//					uint64 frameduration = this->uwbListTDMAInfo[neighborIndices[i]].framelength*slotDuration_us;
+					uint64 frameduration = this->uwbListTDMAInfo[neighborIndices[i]].largestFramelength*slotDuration_us;
 					while(tnext[i] < tcommon && tcommon - tnext[i] >= frameduration - this->frameSyncThreshold_us)
 					{
 						tnext[i] += frameduration;
@@ -1749,7 +1958,9 @@ static void set_discovery_mode(struct TDMAHandler *this, DISCOVERY_MODE discover
 			//back-track the frame start time so we can inform the need to rebase
 			//and keep in sync with the subnetwork we initially chose to sync with
 			this->uwbListTDMAInfo[0].frameStartTime = latest_tnext;
-			uint64 myFrameDuration = this->uwbListTDMAInfo[0].framelength*this->slotDuration_us;
+//			uint64 myFrameDuration = this->uwbListTDMAInfo[0].framelength*this->slotDuration_us;
+			uint8 largestFramelength = this->get_largest_framelength(this);
+			uint64 myFrameDuration = largestFramelength*this->slotDuration_us;
 			while(this->uwbListTDMAInfo[0].frameStartTime > time_now_us)
 			{
 				this->uwbListTDMAInfo[0].frameStartTime -= myFrameDuration;
@@ -1952,6 +2163,7 @@ static struct TDMAHandler new(uint64 slot_duration){
 	ret.slot_transition = &slot_transition;
 	ret.frame_sync = &frame_sync;
 	ret.update_frame_start = &update_frame_start;
+	ret.get_largest_framelength = &get_largest_framelength;
 	ret.tx_sync_msg = &tx_sync_msg;
 	ret.tx_select  = &tx_select;
 	ret.check_blink  = &check_blink;
@@ -1996,6 +2208,7 @@ static struct TDMAHandler new(uint64 slot_duration){
 	for(int i = 0; i < UWB_LIST_SIZE; i++)
 	{
 		ret.uwbListTDMAInfo[i].framelength = (uint8)MIN_FRAMELENGTH;
+		ret.uwbListTDMAInfo[i].largestFramelength = (uint8)MIN_FRAMELENGTH;
 		ret.uwbListTDMAInfo[i].slots = NULL;
 		ret.uwbListTDMAInfo[i].slotsLength = 0;
 		ret.uwbListTDMAInfo[i].frameStartTime = time_now_us;
