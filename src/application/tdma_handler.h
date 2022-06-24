@@ -17,6 +17,9 @@ struct TDMAInfo
 	uint8 largestFramelength;
 	uint8 slotsLength;
 	uint8 *slots;
+
+	uint8 connected_nodes[UWB_LIST_SIZE];
+	uint8 connected_connection_types[UWB_LIST_SIZE];
 };
 
 typedef enum inf_process_mode
@@ -102,10 +105,11 @@ struct TDMAHandler
 	//run through all uwb pairs
     bool (*deconflict_slot_assignments)(struct TDMAHandler *this);
     //run through each slot of two uwbs
-    bool (*deconflict_uwb_pair)(struct TDMAHandler *this, struct TDMAInfo *info_a, struct TDMAInfo *info_b);
+    bool (*deconflict_uwb_pair)(struct TDMAHandler *this, struct TDMAInfo *info_a, struct TDMAInfo *info_b, uint8 *uwbAddr_a, uint8 *uwbAddr_b);
     //deconflict two specific slots
-    void (*deconflict_slot_pair)(struct TDMAHandler *this, struct TDMAInfo *info_a, struct TDMAInfo *info_b, uint8 slot_idx_a, uint8 slot_idx_b);
+    void (*deconflict_slot_pair)(struct TDMAHandler *this, struct TDMAInfo *info_a, struct TDMAInfo *info_b, uint8 slot_idx_a, uint8 slot_idx_b, uint8 *uwbAddr_a, uint8 *uwbAddr_b);
     bool (*self_conflict)(struct TDMAHandler *this);
+    bool (*check_contention)(struct TDMAHandler *this, struct TDMAInfo *info_a, struct TDMAInfo *info_b);
 };
 
 

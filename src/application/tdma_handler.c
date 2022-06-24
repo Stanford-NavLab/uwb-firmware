@@ -104,7 +104,6 @@ static uint8 get_largest_framelength(struct TDMAHandler *this){
 static uint64 update_frame_start(struct TDMAHandler *this){
 
 	uint64 time_now_us = portGetTickCntMicro();
-//	uint64 frameDuration_us = this->slotDuration_us*this->uwbListTDMAInfo[0].framelength; TODO
 	uint8 largestFramelength = this->get_largest_framelength(this);
 	uint64 frameDuration_us = this->slotDuration_us*largestFramelength;
 	uint64 timeSinceFrameStart_us = get_dt64(this->uwbListTDMAInfo[0].frameStartTime, time_now_us);
@@ -438,7 +437,6 @@ static void frame_sync(struct TDMAHandler *this, event_data_t *dw_event, uint8 h
 
 	//TODO
 	uint8 slot = myTimeSinceFrameStart_us/this->slotDuration_us; //integer division rounded down
-//	uint8 mod_slot = slot%this->uwbListTDMAInfo[0].framelength;
 	this->lastSlotStartTime64 = timestamp_add64(this->uwbListTDMAInfo[0].frameStartTime, (uint64)(this->slotDuration_us*slot));
 }
 
@@ -839,7 +837,9 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 	}
 
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
-	this->uwbListTDMAInfo[srcIndex].connectionType = UWB_LIST_NEIGHBOR;
+//	this->uwbListTDMAInfo[srcIndex].connectionType = UWB_LIST_NEIGHBOR;
+
+
 
 	uint8 numNeighbors;
 	uint8 numHidden;
@@ -847,6 +847,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 	uint8 framelength;
 	uint8 numSlots;
 	uint8 slot;
+	struct TDMAInfo *sourceInfo;
 	struct TDMAInfo *info;
 
 	memcpy(&numNeighbors, &messageData[TDMA_NUMN], sizeof(uint8));
@@ -854,6 +855,21 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 	memcpy(&largestFramelength, &messageData[TDMA_LARGEST_FRAMELENGTH], sizeof(uint8));
 	memcpy(&framelength, &messageData[TDMA_FRAMELENGTH], sizeof(uint8));
 	memcpy(&numSlots, &messageData[TDMA_NUMS], sizeof(uint8));
+
+	sourceInfo = &this->uwbListTDMAInfo[srcIndex];
+	if(sourceInfo->connectionType != UWB_LIST_NEIGHBOR)
+	{
+		tdma_modified = TRUE;
+	}
+	sourceInfo->connectionType = UWB_LIST_NEIGHBOR;
+	for(int i = 0; i < UWB_LIST_SIZE; i++)
+	{
+		sourceInfo->connected_nodes[i] = 255;
+		sourceInfo->connected_connection_types[i] = UWB_LIST_INACTIVE;
+	}
+
+	sourceInfo->connected_nodes[0] = srcIndex;
+	sourceInfo->connected_connection_types[0] = UWB_LIST_SELF;
 
 	int msgDataIndex = TDMA_NUMS + 1;
 
@@ -872,8 +888,8 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 	}
 
 	//copy slot assignments for source UWB
-	info = &this->uwbListTDMAInfo[srcIndex];
-	if(framelength != info->framelength)
+//	info = &this->uwbListTDMAInfo[srcIndex];
+	if(framelength != sourceInfo->framelength)
 	{
 		tdma_modified = TRUE;
 	}
@@ -882,7 +898,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 	if(tdma_modified == FALSE) //dont look for any more differences if we already know one exists
 	{
 		//frist check if same number of slots
-		if(numSlots == info->slotsLength)
+		if(numSlots == sourceInfo->slotsLength)
 		{
 			//then check if each incoming slot is already assigned
 			for(int i = 0; i < numSlots; i++)
@@ -890,7 +906,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 				memcpy(&slot, &messageData[msgDataIndex], sizeof(uint8));
 				msgDataIndex++;
 
-				if(this->slot_assigned(info, slot) == FALSE)
+				if(this->slot_assigned(sourceInfo, slot) == FALSE)
 				{
 					tdma_modified = TRUE;
 					break;
@@ -906,11 +922,11 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 	if(mode == CLEAR_LISTED_COPY)
 	{
 		//do after cheking framelength because framelength will be reset
-		this->free_slots(info);
+		this->free_slots(sourceInfo);
 	}
 
-	info->framelength = MAX(framelength, info->framelength);
-	info->largestFramelength = largestFramelength;
+	sourceInfo->framelength = MAX(framelength, sourceInfo->framelength);
+	sourceInfo->largestFramelength = largestFramelength;
 
 	msgDataIndex = TDMA_NUMS + 1;
 	for(int s = 0; s < numSlots; s++)
@@ -918,7 +934,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 		memcpy(&slot, &messageData[msgDataIndex], sizeof(uint8));
 		msgDataIndex++;
 
-		this->assign_slot(info, slot, safeAssign);
+		this->assign_slot(sourceInfo, slot, safeAssign);
 	}
 
 	for(int i = 0; i < numNeighbors; i++)
@@ -933,10 +949,14 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 			if(this->uwbListTDMAInfo[uwb_index].connectionType == UWB_LIST_INACTIVE || this->uwbListTDMAInfo[uwb_index].connectionType == UWB_LIST_TWICE_HIDDEN)
 			{
 				this->uwbListTDMAInfo[uwb_index].connectionType = UWB_LIST_HIDDEN;
+				tdma_modified = TRUE;
 			}
 
 			this->uwbListTDMAInfo[uwb_index].lastCommHidden = time_now;
 		}
+
+		sourceInfo->connected_nodes[i+1] = uwb_index;
+		sourceInfo->connected_connection_types[i+1] = UWB_LIST_NEIGHBOR;
 
 		info = &this->uwbListTDMAInfo[uwb_index];
 		uwbListInMsg[uwb_index] = TRUE;
@@ -974,6 +994,12 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 
 		if(mode == CLEAR_LISTED_COPY)
 		{
+			//#to help with the cases where data can not make it past a certain number of hops, we will not copy assignments for nodes that are more hops away
+			//#and the incoming info says it has a shorter framelength (node deconflict has no way to do that)
+			if (framelength < info->framelength && info->connectionType == UWB_LIST_SELF){
+				continue;
+			}
+
 			//do after checking framelength because framelength reset
 			this->free_slots(info);
 		}
@@ -1002,10 +1028,14 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 			if(this->uwbListTDMAInfo[uwb_index].connectionType == UWB_LIST_INACTIVE)
 			{
 				this->uwbListTDMAInfo[uwb_index].connectionType = UWB_LIST_TWICE_HIDDEN;
+				tdma_modified = TRUE;
 			}
 
 			this->uwbListTDMAInfo[uwb_index].lastCommTwiceHidden = time_now;
 		}
+
+		sourceInfo->connected_nodes[numNeighbors+i+1] = uwb_index;
+		sourceInfo->connected_connection_types[numNeighbors+i+1] = UWB_LIST_HIDDEN;
 
 		uwbListInMsg[uwb_index] = TRUE;
 		info = &this->uwbListTDMAInfo[uwb_index];
@@ -1041,8 +1071,21 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 			}
 		}
 
+		//#to help with the cases where data can not make it past a certain number of hops, we will not copy assignments for nodes that are more hops away
+		//#and the incoming info says it has a shorter framelength (node deconflict has no way to do that)
+		//if incoming_info.framelength < local_info.framelength:
+		//	if incoming_info.connection_type.value > local_info.connection_type.value:
+		//		continue
+
+
 		if(mode == CLEAR_LISTED_COPY)
 		{
+			//#to help with the cases where data can not make it past a certain number of hops, we will not copy assignments for nodes that are more hops away
+			//#and the incoming info says it has a shorter framelength (node deconflict has no way to do that)
+			if (framelength < info->framelength && (info->connectionType == UWB_LIST_SELF || info->connectionType == UWB_LIST_NEIGHBOR)){
+				continue;
+			}
+
 			//do after checking for difference because will reset framelength as well
 			this->free_slots(info);
 		}
@@ -1060,30 +1103,14 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 
 	if(mode == CLEAR_LISTED_COPY)
 	{
-		//deconflict uncopied against copied. (excluding self)
-		for(int i = 1; i < inst->uwbListLen; i++)
+		if(this->deconflict_slot_assignments(this))
 		{
-			for(int j = i + 1; j < inst->uwbListLen; j++)
-			{
-				if((uwbListInMsg[i] == FALSE && uwbListInMsg[j] == TRUE) || (uwbListInMsg[i] == TRUE && uwbListInMsg[j] == FALSE))
-				{
-					if((this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR && this->uwbListTDMAInfo[j].connectionType == UWB_LIST_NEIGHBOR) ||
-					   (this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR && this->uwbListTDMAInfo[j].connectionType == UWB_LIST_HIDDEN)   ||
-					   (this->uwbListTDMAInfo[j].connectionType == UWB_LIST_NEIGHBOR && this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR) ||
-					   (this->uwbListTDMAInfo[j].connectionType == UWB_LIST_NEIGHBOR && this->uwbListTDMAInfo[i].connectionType == UWB_LIST_HIDDEN))
-					{
-						if(this->deconflict_uwb_pair(this, &this->uwbListTDMAInfo[i], &this->uwbListTDMAInfo[j]) == TRUE)
-						{
-							tdma_modified = TRUE;
-						}
-					}
-				}
-			}
+			tdma_modified = TRUE;
 		}
 
 		if(tdma_modified == TRUE)
 		{
-
+			//TODO reassign_slots_on_tdma_modified logic
 			//if so, release all assignments from self
 			this->free_slots(&this->uwbListTDMAInfo[0]);
 
@@ -1304,7 +1331,7 @@ static void find_assign_slot(struct TDMAHandler *this)
 			uint8 slot;
 			memcpy(&slot, &this->uwbListTDMAInfo[max_uwb_index].slots[0], sizeof(uint8));
 			this->assign_slot(info, slot, TRUE);
-			this->deconflict_uwb_pair(this, info, &this->uwbListTDMAInfo[max_uwb_index]);
+			this->deconflict_uwb_pair(this, info, &this->uwbListTDMAInfo[max_uwb_index], &inst->uwbList[0][0], &inst->uwbList[max_uwb_index][0]);
 			assignment_made = TRUE;
 		}
 
@@ -1340,84 +1367,287 @@ static void build_new_network(struct TDMAHandler *this)
 	this->assign_slot(&this->uwbListTDMAInfo[0], 3, safeAssign);
 }
 
-
 static bool deconflict_slot_assignments(struct TDMAHandler *this)
 {
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
 	bool conflict = FALSE;
 
-	while(TRUE)
+	//TODO decide if using the code below or the commented out code below it.
+
+	//first deconflict slots among neighbor, hidden, and twice hidden nodes
+	for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
 	{
-		bool conflict_this_iter = FALSE;
-		//first deconflict slots in neighbor, hidden, and twice hidden
-		for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
+		if(this->uwbListTDMAInfo[i].connectionType != UWB_LIST_INACTIVE)
 		{
-			if(this->uwbListTDMAInfo[i].connectionType != UWB_LIST_INACTIVE)
+			while(TRUE)
 			{
+				bool conflict_this_iter = FALSE;
+
 				for(int j = i+1; j < inst->uwbListLen; j++)
 				{
-					if(this->uwbListTDMAInfo[j].connectionType != UWB_LIST_INACTIVE && j != i)
+					if(this->uwbListTDMAInfo[j].connectionType != UWB_LIST_INACTIVE)
 					{
-						//first check if their list type requires deconflicting
-						if((this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR && this->uwbListTDMAInfo[j].connectionType == UWB_LIST_TWICE_HIDDEN) ||
-						   (this->uwbListTDMAInfo[j].connectionType == UWB_LIST_NEIGHBOR && this->uwbListTDMAInfo[i].connectionType == UWB_LIST_TWICE_HIDDEN) ||
-						   (this->uwbListTDMAInfo[i].connectionType == UWB_LIST_TWICE_HIDDEN && this->uwbListTDMAInfo[j].connectionType == UWB_LIST_TWICE_HIDDEN) ||
-						   (this->uwbListTDMAInfo[i].connectionType == UWB_LIST_HIDDEN && this->uwbListTDMAInfo[j].connectionType == UWB_LIST_HIDDEN))
+						//first check if the nodes are in each other's contention area
+						if(this->check_contention(this, &this->uwbListTDMAInfo[i], &this->uwbListTDMAInfo[j]))
 						{
-							continue;
-						}
-
-						if(this->deconflict_uwb_pair(this, &this->uwbListTDMAInfo[i],&this->uwbListTDMAInfo[j]))
-						{
-							conflict = TRUE;
-							conflict_this_iter = TRUE;
-							break;
+							//check for and deconflict assignments that are in  conflict
+							if(this->deconflict_uwb_pair(this, &this->uwbListTDMAInfo[i], &this->uwbListTDMAInfo[j], &inst->uwbList[i][0], &inst->uwbList[j][0]))
+							{
+								conflict = TRUE;
+								conflict_this_iter = TRUE;
+								break;
+							}
 						}
 					}
 				}
-			}
 
-			if(conflict_this_iter)
-			{
-				break;
+				if(conflict_this_iter == FALSE)
+				{
+					break;
+				}
 			}
 		}
+	}
 
-		if(conflict_this_iter)
-		{
-			continue;
-		}
+	//next deconflict slots between self and neighbor, hidden, and twice hidden nodes
+	while(TRUE)
+	{
+		bool conflict_this_iter = FALSE;
 
-		//next deconflict slots between self and neighbor, hidden, and twice hidden
-		for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
+		for(int j = 1; j < inst->uwbListLen; j++)
 		{
-			if(this->uwbListTDMAInfo[i].connectionType != UWB_LIST_INACTIVE)
+			if(this->uwbListTDMAInfo[j].connectionType != UWB_LIST_INACTIVE)
 			{
-				if(this->deconflict_uwb_pair(this, &this->uwbListTDMAInfo[0], &this->uwbListTDMAInfo[i]))
+				//check for and deconflict assignments that are in  conflict
+				if(this->deconflict_uwb_pair(this, &this->uwbListTDMAInfo[0], &this->uwbListTDMAInfo[j], &inst->uwbList[0][0], &inst->uwbList[j][0]))
 				{
 					conflict = TRUE;
 					conflict_this_iter = TRUE;
+					break;
 				}
-			}
-			if(conflict_this_iter)
-			{
-				break;
 			}
 		}
 
-		if(conflict_this_iter)
+		if(conflict_this_iter == FALSE)
+		{
+			break;
+		}
+	}
+
+
+	return conflict;
+
+
+	///////////////////////////////////
+	//TODO decide if using the code below or the code above
+	//first deconflict slots among neighbor, hidden, and twice hidden nodes
+//	while(TRUE)
+//	{
+//		bool conflict_this_iter = FALSE;
+//
+//		for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
+//		{
+//			if(this->uwbListTDMAInfo[i].connectionType != UWB_LIST_INACTIVE)
+//			{
+//				for(int j = i+1; j < inst->uwbListLen; j++)
+//				{
+//					if(this->uwbListTDMAInfo[j].connectionType != UWB_LIST_INACTIVE)
+//					{
+//						//first check if their the nodes are in each other's contention area
+//						if(this->check_contention(this, &this->uwbListTDMAInfo[i], &this->uwbListTDMAInfo[j]))
+//						{
+//							//check for and deconflict assignments that are in  conflict
+//							if(this->deconflict_uwb_pair(this, &this->uwbListTDMAInfo[i],&this->uwbListTDMAInfo[j], &inst->uwbList[i][0], &inst->uwbList[j][0]))
+//							{
+//								conflict = TRUE;
+//								conflict_this_iter = TRUE;
+//								break;
+//							}
+//						}
+//					}
+//				}
+//			}
+//
+//			if(conflict_this_iter)
+//			{
+//				break;
+//			}
+//		}
+//
+//		if(conflict_this_iter)
+//		{
+//			continue;
+//		}
+//	}
+//
+//	//next deconflict slots between self and neighbor, hidden, and twice hidden
+//	while(TRUE)
+//	{
+//		bool conflict_this_iter = FALSE;
+//
+//		for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
+//		{
+//			if(this->uwbListTDMAInfo[i].connectionType != UWB_LIST_INACTIVE)
+//			{
+//				if(this->deconflict_uwb_pair(this, &this->uwbListTDMAInfo[0], &this->uwbListTDMAInfo[i], &inst->uwbList[i][0], &inst->uwbList[j][0]))
+//				{
+//					conflict = TRUE;
+//					conflict_this_iter = TRUE;
+//				}
+//			}
+//
+//			if(conflict_this_iter)
+//			{
+//				break;
+//			}
+//		}
+//
+//		if(conflict_this_iter)
+//		{
+//			continue;
+//		}
+//
+//		break; //no conflicts found this iteration, break out of while loop
+//	}
+//
+//	return conflict;
+}
+
+
+static bool check_contention(struct TDMAHandler *this, struct TDMAInfo *info_a, struct TDMAInfo *info_b)
+{
+	//from our perspective  OR if a neighbor has any of the same relationships from their perspectives
+	//S-N
+	//S-H
+	//S-2H
+	//N-N
+	//N-H
+	if(info_a->connectionType == UWB_LIST_SELF && info_b->connectionType == UWB_LIST_NEIGHBOR)
+	{
+		return TRUE;
+	}
+
+	if(info_a->connectionType == UWB_LIST_SELF && info_b->connectionType == UWB_LIST_HIDDEN)
+	{
+		return TRUE;
+	}
+
+	if(info_a->connectionType == UWB_LIST_SELF && info_b->connectionType == UWB_LIST_TWICE_HIDDEN)
+	{
+		return TRUE;
+	}
+
+	if(info_a->connectionType == UWB_LIST_NEIGHBOR && info_b->connectionType == UWB_LIST_NEIGHBOR)
+	{
+		return TRUE;
+	}
+
+	if(info_a->connectionType == UWB_LIST_NEIGHBOR && info_b->connectionType == UWB_LIST_HIDDEN)
+	{
+		return TRUE;
+	}
+
+	if(info_b->connectionType == UWB_LIST_SELF && info_a->connectionType == UWB_LIST_NEIGHBOR)
+	{
+		return TRUE;
+	}
+
+	if(info_b->connectionType == UWB_LIST_SELF && info_a->connectionType == UWB_LIST_HIDDEN)
+	{
+		return TRUE;
+	}
+
+	if(info_b->connectionType == UWB_LIST_SELF && info_a->connectionType == UWB_LIST_TWICE_HIDDEN)
+	{
+		return TRUE;
+	}
+
+	if(info_b->connectionType == UWB_LIST_SELF && info_a->connectionType == UWB_LIST_TWICE_HIDDEN)
+	{
+		return TRUE;
+	}
+
+	if(info_b->connectionType == UWB_LIST_NEIGHBOR && info_a->connectionType == UWB_LIST_HIDDEN)
+	{
+		return TRUE;
+	}
+
+	instance_data_t *inst = instance_get_local_structure_ptr(0);
+
+	//if a neighbor has any of the same relationships from their perspectives (but we dont know nieghbors twice hidden)
+	//S-N
+	//S-H
+	//N-N
+	//N-H
+	for(int n = 1; n < inst->uwbListLen; n++)
+	{
+		struct TDMAInfo *info_n = &this->uwbListTDMAInfo[n];
+		if(info_n->connectionType != UWB_LIST_NEIGHBOR)
 		{
 			continue;
 		}
 
-		break; //no conflicts found this iteration, break out of while loop
+		bool nconnected_a = FALSE;
+		uint8 nconnection_type_a = UWB_LIST_INACTIVE;
+		for(int a = 1; a < inst->uwbListLen; a++)
+		{
+			if(n == info_n->connected_nodes[a])
+			{
+				nconnected_a = TRUE;
+				nconnection_type_a = info_n->connected_connection_types[a];
+			}
+		}
+
+		if(nconnected_a == FALSE)
+		{
+			return FALSE;
+		}
+
+		bool nconnected_b = FALSE;
+		uint8 nconnection_type_b = UWB_LIST_INACTIVE;
+		for(int b = 1; b < inst->uwbListLen; b++)
+		{
+			if(n == info_n->connected_nodes[b])
+			{
+				nconnected_b = TRUE;
+				nconnection_type_b = info_n->connected_connection_types[b];
+			}
+		}
+
+		if(nconnected_b == FALSE)
+		{
+			return FALSE;
+		}
+
+		//at least one needs to be self or neighbor
+		uint8 nconnection_type_s_or_n = UWB_LIST_INACTIVE;
+		uint8 nconnection_type_other = UWB_LIST_INACTIVE;
+		if(nconnection_type_a == UWB_LIST_SELF || nconnection_type_a == UWB_LIST_NEIGHBOR)
+		{
+			nconnection_type_s_or_n = nconnection_type_a;
+			nconnection_type_other = nconnection_type_b;
+		}
+		else if(nconnection_type_b == UWB_LIST_SELF || nconnection_type_b == UWB_LIST_NEIGHBOR)
+		{
+			nconnection_type_s_or_n = nconnection_type_b;
+			nconnection_type_other = nconnection_type_a;
+		}
+
+		if(nconnection_type_s_or_n != UWB_LIST_INACTIVE)
+		{
+			if(nconnection_type_other == UWB_LIST_NEIGHBOR || nconnection_type_other == UWB_LIST_NEIGHBOR)
+			{
+				return TRUE;
+			}
+		}
+
 	}
 
-	return conflict;
+	return FALSE;
 }
 
 //return true if a conflict was found
-static bool deconflict_uwb_pair(struct TDMAHandler *this, struct TDMAInfo *info_a, struct TDMAInfo *info_b)
+static bool deconflict_uwb_pair(struct TDMAHandler *this, struct TDMAInfo *info_a, struct TDMAInfo *info_b, uint8 *uwbAddr_a, uint8 *uwbAddr_b)
 {
 	bool conflict = FALSE;
 
@@ -1443,7 +1673,7 @@ static bool deconflict_uwb_pair(struct TDMAHandler *this, struct TDMAInfo *info_
 					if(mod_slot_sa == slot_sb)
 					{
 						//slot already assigned, deconflict!
-						this->deconflict_slot_pair(this, info_a, info_b, sa, sb);
+						this->deconflict_slot_pair(this, info_a, info_b, sa, sb, uwbAddr_a, uwbAddr_b);
 						conflict = TRUE;
 						conflict_this_iter = TRUE;
 						break;
@@ -1455,7 +1685,7 @@ static bool deconflict_uwb_pair(struct TDMAHandler *this, struct TDMAInfo *info_
 					if(mod_slot_sb == slot_sa)
 					{
 						//slot already assigned, deconflict!
-						this->deconflict_slot_pair(this, info_a, info_b, sa, sb);
+						this->deconflict_slot_pair(this, info_a, info_b, sa, sb, uwbAddr_a, uwbAddr_b);
 						conflict = TRUE;
 						conflict_this_iter = TRUE;
 						break;
@@ -1466,7 +1696,7 @@ static bool deconflict_uwb_pair(struct TDMAHandler *this, struct TDMAInfo *info_
 					if(slot_sa == slot_sb)
 					{
 						//slot already assigned, deconflict!
-						this->deconflict_slot_pair(this, info_a, info_b, sa, sb);
+						this->deconflict_slot_pair(this, info_a, info_b, sa, sb, uwbAddr_a, uwbAddr_b);
 						conflict = TRUE;
 						conflict_this_iter = TRUE;
 						break;
@@ -1491,7 +1721,7 @@ static bool deconflict_uwb_pair(struct TDMAHandler *this, struct TDMAInfo *info_
 	return conflict;
 }
 
-static void deconflict_slot_pair(struct TDMAHandler *this, struct TDMAInfo *info_a, struct TDMAInfo *info_b, uint8 slot_idx_a, uint8 slot_idx_b)
+static void deconflict_slot_pair(struct TDMAHandler *this, struct TDMAInfo *info_a, struct TDMAInfo *info_b, uint8 slot_idx_a, uint8 slot_idx_b, uint8 *uwbAddr_a, uint8 *uwbAddr_b)
 {
 	//procedure for deconflicting slots (PDS)
 	//1.) delete a conflicting slot
@@ -1531,10 +1761,22 @@ static void deconflict_slot_pair(struct TDMAHandler *this, struct TDMAInfo *info
 	//double the frame and divide the assignment
 	if(info_a->framelength == info_b->framelength)
 	{
-		uint8 slot_b;
-		memcpy(&slot_b, &info_b->slots[slot_idx_b], sizeof(uint8));
-		slot_b += info_b->framelength;
-		memcpy(&info_b->slots[slot_idx_b], &slot_b, sizeof(uint8));
+		instance_data_t *inst = instance_get_local_structure_ptr(0);
+		if(memcmp(uwbAddr_a, uwbAddr_b, inst->addrByteSize) > 0) //a > b
+		{
+			uint8 slot_a;
+			memcpy(&slot_a, &info_a->slots[slot_idx_a], sizeof(uint8));
+			slot_a += info_a->framelength;
+			memcpy(&info_a->slots[slot_idx_a], &slot_a, sizeof(uint8));
+		}
+		else //b <= a
+		{
+			uint8 slot_b;
+			memcpy(&slot_b, &info_b->slots[slot_idx_b], sizeof(uint8));
+			slot_b += info_b->framelength;
+			memcpy(&info_b->slots[slot_idx_b], &slot_b, sizeof(uint8));
+		}
+
 		info_a->framelength *= 2;
 		info_b->framelength *= 2;
 	}
@@ -2192,6 +2434,7 @@ static struct TDMAHandler new(uint64 slot_duration){
 	ret.deconflict_uwb_pair = &deconflict_uwb_pair;
 	ret.deconflict_slot_pair = &deconflict_slot_pair;
 	ret.self_conflict = &self_conflict;
+	ret.check_contention = &check_contention;
 
 	ret.slotDuration_us = slot_duration;
 	ret.slotDuration_ms = slot_duration/1000 + (slot_duration%1000 == 0 ? 0 : 1);
@@ -2217,6 +2460,12 @@ static struct TDMAHandler new(uint64 slot_duration){
 		ret.uwbListTDMAInfo[i].lastCommHidden = 0;
 		ret.uwbListTDMAInfo[i].lastCommTwiceHidden = 0;
 		ret.uwbListTDMAInfo[i].lastRange = time_now;
+
+		for(int j = 0; j < UWB_LIST_SIZE; j++)
+		{
+			ret.uwbListTDMAInfo[i].connected_nodes[i] = 255;
+			ret.uwbListTDMAInfo[i].connected_connection_types[i] = UWB_LIST_INACTIVE;
+		}
 	}
 	ret.uwbListTDMAInfo[0].connectionType = UWB_LIST_SELF;
 
