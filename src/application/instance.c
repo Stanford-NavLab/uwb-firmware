@@ -560,8 +560,6 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 			inst->msg.messageData[FCODE] = RTLS_DEMO_MSG_TAG_POLL; //message function code (specifies if message is a poll, response or other...)
 			memcpy(&inst->msg.destAddr[0], &inst->uwbList[inst->uwbToRangeWith], inst->addrByteSize);
 
-			tdma_handler->nthOldest++;
-
             inst->wait4ack = 0;
 
 			dwt_writetxdata(psduLength, (uint8 *)  &inst->msg, 0) ; // write the frame data
@@ -1053,7 +1051,7 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 							if(tag_index == 0)
 							{
-								tdma_handler->nthOldest = 1;
+								tdma_handler->nthOldest = 2;
 								tdma_handler->uwbListTDMAInfo[inst->uwbToRangeWith].lastRange = portGetTickCnt();
 								tdma_handler->firstPollComplete = TRUE;
 								inst->testAppState = TA_TX_SELECT;

@@ -541,6 +541,8 @@ static bool tx_select(struct TDMAHandler *this)
 			uint32 timeSinceRange[UWB_LIST_SIZE] = {0}; //0th entry unused
 			uint32 numNeighbors = 0;
 			uint32 time_now = portGetTickCnt();
+			uint8 oldestIndex = 1;
+
 
 			//get time since range for each neighbor
 			for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
@@ -552,12 +554,16 @@ static bool tx_select(struct TDMAHandler *this)
 				}
 			}
 
-			if(this->nthOldest > numNeighbors)
+			if(numNeighbors == 1)
 			{
 				this->nthOldest = 1;
 			}
+			else if(this->nthOldest > numNeighbors)
+			{
+				this->nthOldest = 2;
+			}
 
-			//get the nth oldest
+			//get the oldest and nth oldest
 			for(int i = 1; i < inst->uwbListLen; i++)//0 reserved for self
 			{
 				if(this->uwbListTDMAInfo[i].connectionType == UWB_LIST_NEIGHBOR)
@@ -577,12 +583,26 @@ static bool tx_select(struct TDMAHandler *this)
 						}
 					}
 
-					if(numOlder + 1 == this->nthOldest)
+					if(numOlder == 0)
 					{
-						uwb_index = i;
-						break;
+						oldestIndex = i;
+					}
+
+					if(this->firstPollSentThisSlot == TRUE)
+					{
+						if(numOlder + 1 == this->nthOldest)
+						{
+							this->nthOldest++;
+							uwb_index = i;
+							break;
+						}
 					}
 				}
+			}
+
+			if(this->firstPollSentThisSlot == FALSE)
+			{
+				uwb_index = oldestIndex;
 			}
 
 			if(uwb_index == 255 && inst->uwbListLen > 1)
@@ -2476,8 +2496,8 @@ static struct TDMAHandler new(uint64 slot_duration){
     ret.firstPollResponse = FALSE;
     ret.firstPollComplete = FALSE;
     ret.secondPollSentThisSlot = FALSE;
-    ret.nthOldest = 1;
-    ret.nthOldestPlus = 2;
+    ret.nthOldest = 2;
+//    ret.nthOldestPlus = 2; TODO
     ret.slotStartDelay_us = SLOT_START_BUFFER_US;
     ret.frameSyncThreshold_us = ret.slotStartDelay_us;
     ret.infMessageLength = 0;

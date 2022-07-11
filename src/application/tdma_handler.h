@@ -56,7 +56,7 @@ struct TDMAHandler
 	bool firstPollComplete;
 	bool secondPollSentThisSlot;
 	uint8 nthOldest;
-	uint8 nthOldestPlus;
+//	uint8 nthOldestPlus; TODO
 	bool reassignOnModifiedTDMA;
 	bool reassigSlots;
 	bool tdmaIsDirty;
