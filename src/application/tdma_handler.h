@@ -57,6 +57,9 @@ struct TDMAHandler
 	bool secondPollSentThisSlot;
 	uint8 nthOldest;
 	uint8 nthOldestPlus;
+	bool reassignOnModifiedTDMA;
+	bool reassigSlots;
+	bool tdmaIsDirty;
 
 	uint64 slotStartDelay_us; //time between slot start and transmission within that slot
 	uint64 frameSyncThreshold_us;

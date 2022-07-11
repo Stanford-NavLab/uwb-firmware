@@ -791,6 +791,7 @@ static void update_inf_tsfs(struct TDMAHandler *this)
 }
 
 
+//TODO update the procedure wording below
 //General procedure for processing INF SUG, INF REG, and INF UPDATE (NOTE: slightly different for each INF_PROCESS_MODE)
 //1. Check for differences with stored assignments
 //		(a) exit if none exist
@@ -810,7 +811,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 
 	uint32 time_now = portGetTickCnt();
 
-	if((mode != CLEAR_ALL_COPY)     && //happens when we creat a new network
+	if((mode != CLEAR_ALL_COPY)     && //happens when we create a new network
 	   (mode != CLEAR_LISTED_COPY)	&& //happens most of the time while processing
 	   (mode != COPY))				   //happens when collecting inf messages
 	{
@@ -838,7 +839,6 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 
 	instance_data_t *inst = instance_get_local_structure_ptr(0);
 //	this->uwbListTDMAInfo[srcIndex].connectionType = UWB_LIST_NEIGHBOR;
-
 
 
 	uint8 numNeighbors;
@@ -873,12 +873,13 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 
 	int msgDataIndex = TDMA_NUMS + 1;
 
-	bool uwbListInMsg[UWB_LIST_SIZE];
-	for(int i = 0; i < inst->uwbListLen; i++)
-	{
-		uwbListInMsg[i] = FALSE;
-	}
-	uwbListInMsg[srcIndex] = TRUE;
+	//TODO
+//	bool uwbListInMsg[UWB_LIST_SIZE];
+//	for(int i = 0; i < inst->uwbListLen; i++)
+//	{
+//		uwbListInMsg[i] = FALSE;
+//	}
+//	uwbListInMsg[srcIndex] = TRUE;
 
 	if(mode == CLEAR_ALL_COPY)
 	{
@@ -897,7 +898,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 	//check if the tdma has been modified
 	if(tdma_modified == FALSE) //dont look for any more differences if we already know one exists
 	{
-		//frist check if same number of slots
+		//first check if same number of slots
 		if(numSlots == sourceInfo->slotsLength)
 		{
 			//then check if each incoming slot is already assigned
@@ -921,7 +922,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 
 	if(mode == CLEAR_LISTED_COPY)
 	{
-		//do after cheking framelength because framelength will be reset
+		//do after checking frame length because frame length will be reset
 		this->free_slots(sourceInfo);
 	}
 
@@ -959,7 +960,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 		sourceInfo->connected_connection_types[i+1] = UWB_LIST_NEIGHBOR;
 
 		info = &this->uwbListTDMAInfo[uwb_index];
-		uwbListInMsg[uwb_index] = TRUE;
+//		uwbListInMsg[uwb_index] = TRUE; TODO
 
 		memcpy(&framelength, &messageData[msgDataIndex], sizeof(uint8));
 		msgDataIndex++;
@@ -968,9 +969,9 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 		int msgDataIndexSave = msgDataIndex;
 
 		//check if the tdma has been modified
-		if(tdma_modified == FALSE) //dont look for any more differences if we already know one exists
+		if(tdma_modified == FALSE) //don't look for any more differences if we already know one exists
 		{
-			//frist check if same framelength and number of slots
+			//first check if same frame length and number of slots
 			if(framelength == info->framelength && numSlots == info->slotsLength)
 			{
 				//then check if each incoming slot is already assigned
@@ -1037,7 +1038,7 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 		sourceInfo->connected_nodes[numNeighbors+i+1] = uwb_index;
 		sourceInfo->connected_connection_types[numNeighbors+i+1] = UWB_LIST_HIDDEN;
 
-		uwbListInMsg[uwb_index] = TRUE;
+//		uwbListInMsg[uwb_index] = TRUE; TODO
 		info = &this->uwbListTDMAInfo[uwb_index];
 
 		memcpy(&framelength, &messageData[msgDataIndex], sizeof(uint8));
@@ -1108,16 +1109,13 @@ static bool process_inf_msg(struct TDMAHandler *this, uint8 *messageData, uint8 
 			tdma_modified = TRUE;
 		}
 
-		if(tdma_modified == TRUE)
+		if(tdma_modified == TRUE && this->reassignOnModifiedTDMA == TRUE)
 		{
-			//TODO reassign_slots_on_tdma_modified logic
-			//if so, release all assignments from self
-			this->free_slots(&this->uwbListTDMAInfo[0]);
-
-			//find self a new slot assignment
-			this->find_assign_slot(this);
+			this->reassigSlots = TRUE;
 		}
 	}
+
+
 
 	return tdma_modified;
 }
@@ -2372,14 +2370,17 @@ static bool check_timeouts(struct TDMAHandler *this)
 	//re-optimize our TDMA assignments and repopulate the inf message
 	if(setInactive == TRUE)
 	{
-		this->free_slots(&this->uwbListTDMAInfo[0]);
-		this->find_assign_slot(this);
+		//TODO
+//		this->free_slots(&this->uwbListTDMAInfo[0]);
+//		this->find_assign_slot(this);
+		this->reassigSlots = TRUE;
 	}
 
 	//adjust the INF message to reflect any changes
 	if(updateINF == TRUE)
 	{
-		this->populate_inf_msg(this, RTLS_DEMO_MSG_INF_UPDATE);
+		this->tdmaIsDirty = TRUE;
+//		this->populate_inf_msg(this, RTLS_DEMO_MSG_INF_UPDATE);
 	}
 
 	if(rangingUWBTimeout == TRUE)
@@ -2480,6 +2481,9 @@ static struct TDMAHandler new(uint64 slot_duration){
     ret.slotStartDelay_us = SLOT_START_BUFFER_US;
     ret.frameSyncThreshold_us = ret.slotStartDelay_us;
     ret.infMessageLength = 0;
+    ret.reassignOnModifiedTDMA = FALSE;
+    ret.reassigSlots = FALSE;
+    ret.tdmaIsDirty = FALSE;
 
     ret.enter_discovery_mode(&ret);
     ret.collectInfDuration = ret.maxFramelength*ret.slotDuration_ms;

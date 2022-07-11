@@ -503,6 +503,20 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 			inst->inf_msg.seqNum = inst->frameSN++;
 			//update time since frame start!
 			tdma_handler->update_inf_tsfs(tdma_handler);
+			//update slot assignment
+			if(tdma_handler->reassigSlots == TRUE)
+			{
+				tdma_handler->free_slots(&tdma_handler->uwbListTDMAInfo[0]);
+				tdma_handler->find_assign_slot(tdma_handler);
+				tdma_handler->reassigSlots = FALSE;
+				tdma_handler->tdmaIsDirty = TRUE;
+			}
+
+			if(tdma_handler->tdmaIsDirty == TRUE)
+			{
+				tdma_handler->tdmaIsDirty = FALSE;
+				tdma_handler->populate_inf_msg(tdma_handler, RTLS_DEMO_MSG_INF_UPDATE);
+			}
 
 			inst->wait4ack = 0;
 
@@ -882,8 +896,10 @@ int testapprun(instance_data_t *inst, struct TDMAHandler *tdma_handler, int mess
 
 								if(tdma_modified)
 								{
+									tdma_handler->tdmaIsDirty = TRUE;
+									//TODO
 									//only repopulate the INF message if there was a modification to the TDMA configuration
-									tdma_handler->populate_inf_msg(tdma_handler, RTLS_DEMO_MSG_INF_UPDATE);
+//									tdma_handler->populate_inf_msg(tdma_handler, RTLS_DEMO_MSG_INF_UPDATE);
 								}
                         	}
 
