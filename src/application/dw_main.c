@@ -486,10 +486,12 @@ int dw_main(void)
 				}
 
 
-
+				uint64 time_now_us = portGetTickCntMicro();
+				struct TDMAHandler* tdma_handler =  tdma_get_local_structure_ptr();
+				uint64 myTimeSinceFrameStart_us = get_dt64(tdma_handler->uwbListTDMAInfo[0].frameStartTime, time_now_us);
 
 //				n = sprintf((char*)&dataseq[0], "%08i, %08i, %08i, %08f", rng_rng, rng_rsl, rng_raw, rsl/1000.0);
-				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X %08X %08X", saddr, aaddr, taddr, rng_rng, rng_rsl, rng_raw, rsl);
+				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X %08X %08X %016llX", saddr, aaddr, taddr, rng_rng, rng_rsl, rng_raw, rsl, myTimeSinceFrameStart_us);
 
 				send_usbmessage(&dataseq[0], n);
 				usb_run();
