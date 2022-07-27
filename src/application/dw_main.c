@@ -486,13 +486,89 @@ int dw_main(void)
 				}
 
 
-
+				struct TDMAHandler* tdma_handler =  tdma_get_local_structure_ptr();
+				//struct TDMAInfo uwbListTDMAInfo[UWB_LIST_SIZE];
+				// struct TDMAInfo
+				// {
+				// 	uint8 connectionType;       //UWB_LIST_SELF, UWB_LIST_NEIGHBOR, UWB_LIST_HIDDEN, UWB_LIST_INACTIVE
+				// 	uint32 lastCommNeighbor;	//milliseconds
+				// 	uint32 lastCommHidden;		//milliseconds
+				// 	uint32 lastCommTwiceHidden;		//milliseconds
+				// 	uint32 lastRange;			//milliseconds
+				// 	uint64 frameStartTime;		//microseconds
+				// 	uint8 framelength;
+				// 	uint8 slotsLength;
+				// 	uint8 *slots;
+				// };
+				//outout number of infos
+				//for each info that isnt INACTIVE,
+				//   address!
+				//   connection type!
+				//	 framelength
+				//   num slots
+				//   slots
 
 //				n = sprintf((char*)&dataseq[0], "%08i, %08i, %08i, %08f", rng_rng, rng_rsl, rng_raw, rsl/1000.0);
-				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X %08X %08X", saddr, aaddr, taddr, rng_rng, rng_rsl, rng_raw, rsl);
+				n = sprintf((char*)&dataseq[0], "%04llX %04llX %04llX %08X %08X %08X %08X", saddr, aaddr, taddr, rng_rng, rng_rsl, rng_raw, rsl);
+				int n2 = n;
+				uint8 num_info = 0;
+				for(int a=0; a<inst->uwbListLen; a++)// 0 reserved for self, cant be neighbor
+				{
+					if(tdma_handler->uwbListTDMAInfo[a].connectionType != UWB_LIST_INACTIVE)
+					{
+						num_info++;
+					}
+				}
 
-				send_usbmessage(&dataseq[0], n);
+				n = sprintf((char*)&dataseq[n2], " %03u", num_info);
+				n2 += n;
+
+				for(int a=0; a<inst->uwbListLen; a++)// 0 reserved for self, cant be neighbor
+				{
+					if(tdma_handler->uwbListTDMAInfo[a].connectionType == UWB_LIST_INACTIVE)
+					{
+						continue;
+					}
+					struct TDMAInfo info = tdma_handler->uwbListTDMAInfo[a];
+					uint64 address = 0;
+						address |= (uint64) inst->uwbList[a][0];
+						address |= (uint64) inst->uwbList[a][1] << 8;
+					#if (USING_64BIT_ADDR == 1)
+						address |= (uint64) inst->uwbList[a][2] << 16;
+						address |= (uint64) inst->uwbList[a][3] << 24;
+						address |= (uint64) inst->uwbList[a][4] << 32;
+						address |= (uint64) inst->uwbList[a][5] << 40;
+						address |= (uint64) inst->uwbList[a][6] << 48;
+						address |= (uint64) inst->uwbList[a][7] << 56;
+					#endif
+
+//					uint64  = inst->uwbList[a];
+					uint8 connection_type = info.connectionType;
+					uint8 framelength = info.framelength;
+					uint8 slots_length = info.slotsLength;
+
+					n = sprintf((char*)&dataseq[n2], " %04llX %03u %03u %03u", address, connection_type, framelength, slots_length);
+					n2 += n;
+
+					for(int b=0; b < slots_length; b++)
+					{
+						uint8 slot = info.slots[b];
+						n = sprintf((char*)&dataseq[n2], " %03u", slot);
+						n2 += n;
+					}
+				}
+
+//				send_usbmessage(&dataseq[0], n);
+				send_usbmessage(&dataseq[0], n2);
 				usb_run();
+
+
+
+////				n = sprintf((char*)&dataseq[0], "%08i, %08i, %08i, %08f", rng_rng, rng_rsl, rng_raw, rsl/1000.0);
+//				n = sprintf((char*)&dataseq[0], "%016llX %016llX %016llX %08X %08X %08X %08X", saddr, aaddr, taddr, rng_rng, rng_rsl, rng_raw, rsl);
+//
+//				send_usbmessage(&dataseq[0], n);
+//				usb_run();
 			}
         }
 
