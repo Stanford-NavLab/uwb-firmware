@@ -113,6 +113,7 @@ struct TDMAHandler
     void (*deconflict_slot_pair)(struct TDMAHandler *this, struct TDMAInfo *info_a, struct TDMAInfo *info_b, uint8 slot_idx_a, uint8 slot_idx_b, uint8 *uwbAddr_a, uint8 *uwbAddr_b);
     bool (*self_conflict)(struct TDMAHandler *this);
     bool (*check_contention)(struct TDMAHandler *this, struct TDMAInfo *info_a, struct TDMAInfo *info_b);
+    bool (*check_conflict_slot_pair)(uint8 slot_a, uint8 framelength_a, uint8 slot_b, uint8 framelength_b);
 };
 
 

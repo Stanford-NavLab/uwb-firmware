@@ -1321,35 +1321,105 @@ static void find_assign_slot(struct TDMAHandler *this)
 		}
 
 		//RMA
-		//find UWB with greatest number of slot assignments
-		uint8 max_assignments = 0;
-		uint8 max_uwb_index = 255;
+		//find UWB with greatest number of slot assignments, select one to release and assign to this node
+		//use the number of affected nodes to decide which slot to release, or break ties when multiple nodes have the greatest number of slot assignments
+		uint8 selectedSlot = -1;
+		uint8 selectedSlotsLength = 0;
+		uint8 selectedNodesAffected = 255;
 		for(uint8 u = 1; u < inst->uwbListLen; u++)//0 reserved for self
 		{
-			if(info->framelength < this->uwbListTDMAInfo[u].framelength)
+			struct TDMAInfo *info_u = &this->uwbListTDMAInfo[u];
+
+			if(info->framelength < info_u->framelength)
 			{
 				continue;
 			}
 
-			uint8 slotsLength = this->uwbListTDMAInfo[u].slotsLength;
-			if(info->framelength > this->uwbListTDMAInfo[u].framelength && this->uwbListTDMAInfo[u].slotsLength != 0)
+			uint8 slotsLength_u = info_u->slotsLength;
+			if(info->framelength > info_u->framelength)
 			{
-				slotsLength *= info->framelength/this->uwbListTDMAInfo[u].framelength;
+				slotsLength_u *= info->framelength/info_u->framelength;
 			}
 
-			if(slotsLength > max_assignments)
+			if(slotsLength_u < 2)
 			{
-				max_assignments = slotsLength;
-				max_uwb_index = u;
+				continue;
+			}
+
+			if(slotsLength_u >= selectedSlotsLength)
+			{
+				//check if taking one of these assignments is safe for this node (not safe if it will it lead to conflicts with other nodes that don't have multiple slots to release)
+				bool rmaSafe = TRUE;
+				for(uint8 su = 0; su < info_u->slotsLength; su++ )
+				{
+					uint8 slot_su;
+					memcpy(&slot_su, &info_u->slots[su], sizeof(uint8));
+					uint8 nodesAffected = 1;
+
+					for(uint8 v = 1; v < inst->uwbListLen; v++)//0 reserved for self
+					{
+						if(u == v)
+						{
+							continue;
+						}
+
+						struct TDMAInfo *info_v = &this->uwbListTDMAInfo[v];
+
+						//check for conflict
+						for(uint8 sv = 0; sv < info_v->slotsLength; sv++ )
+						{
+							uint8 slot_sv;
+							memcpy(&slot_sv, &info_v->slots[sv], sizeof(uint8));
+
+							if(this->check_conflict_slot_pair(slot_su, info_u->framelength, slot_sv, info_v->framelength)){
+
+								uint8 slotsLength_v = info_v->slotsLength;
+								slotsLength_v *= info->framelength/info_v->framelength;
+
+								if(slotsLength_v < 2)
+								{
+									rmaSafe = FALSE;
+									break;
+								}
+								else
+								{
+									nodesAffected++;
+								}
+							}
+						}
+					}
+
+					if(rmaSafe == TRUE)
+					{
+						bool accept = FALSE;
+						if (slotsLength_u > selectedSlotsLength)
+						{
+							accept = true;
+						}
+						else if (slotsLength_u == selectedSlotsLength)
+						{
+							if(nodesAffected < selectedNodesAffected)
+							{
+								accept = TRUE;
+							}
+						}
+
+						if(accept == TRUE)
+						{
+							selectedSlotsLength = slotsLength_u;
+							selectedNodesAffected = nodesAffected;
+							selectedSlot = slot_su;
+						}
+					}
+				}
 			}
 		}
 
-		if(max_uwb_index != 255 && max_assignments > 1)
+		if(selectedSlot != -1)
 		{
-			uint8 slot;
-			memcpy(&slot, &this->uwbListTDMAInfo[max_uwb_index].slots[0], sizeof(uint8));
-			this->assign_slot(info, slot, TRUE);
-			this->deconflict_uwb_pair(this, info, &this->uwbListTDMAInfo[max_uwb_index], &inst->uwbList[0][0], &inst->uwbList[max_uwb_index][0]);
+			this->assign_slot(info, selectedSlot, TRUE);
+			//NOTE this could be more efficient by only deconflicting among the affected nodes
+			this->deconflict_slot_assignments(this);
 			assignment_made = TRUE;
 		}
 
@@ -1663,6 +1733,36 @@ static bool check_contention(struct TDMAHandler *this, struct TDMAInfo *info_a, 
 
 	return FALSE;
 }
+
+
+static bool check_conflict_slot_pair(uint8 slot_a, uint8 framelength_a, uint8 slot_b, uint8 framelength_b)
+{
+	if(slot_a >= framelength_b)
+	{
+		uint8 mod_slot_a = slot_a % framelength_b;
+		if(mod_slot_a == slot_b)
+		{
+			return TRUE;
+		}
+	}
+	else if(slot_b >= framelength_a)
+	{
+		uint8 mod_slot_b = slot_b % framelength_a;
+		if(mod_slot_b == slot_a)
+		{
+			return TRUE;
+		}
+	}
+	else if(slot_a == slot_b)
+	{
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+
+
 
 //return true if a conflict was found
 static bool deconflict_uwb_pair(struct TDMAHandler *this, struct TDMAInfo *info_a, struct TDMAInfo *info_b, uint8 *uwbAddr_a, uint8 *uwbAddr_b)
@@ -2456,6 +2556,7 @@ static struct TDMAHandler new(uint64 slot_duration){
 	ret.deconflict_slot_pair = &deconflict_slot_pair;
 	ret.self_conflict = &self_conflict;
 	ret.check_contention = &check_contention;
+	ret.check_conflict_slot_pair = &check_conflict_slot_pair;
 
 	ret.slotDuration_us = slot_duration;
 	ret.slotDuration_ms = slot_duration/1000 + (slot_duration%1000 == 0 ? 0 : 1);
